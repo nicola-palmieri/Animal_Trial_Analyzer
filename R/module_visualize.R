@@ -83,6 +83,20 @@ visualize_server <- function(id, filtered_data, model_fit) {
       }
     })
     
+    # ---- Update labels when analysis type changes ----
+    observe({
+      type <- active_analysis_type()
+      if (is.null(type)) return()
+      
+      if (identical(type, "ggpairs")) {
+        updateNumericInput(session, "subplot_width", label = "Plot width (px)")
+        updateNumericInput(session, "subplot_height", label = "Plot height (px)")
+      } else {
+        updateNumericInput(session, "subplot_width", label = "Subplot width (px)")
+        updateNumericInput(session, "subplot_height", label = "Subplot height (px)")
+      }
+    })
+    
     compute_layout <- function(n_items, rows_input, cols_input) {
       # Safely handle nulls
       if (is.null(n_items) || length(n_items) == 0 || is.na(n_items) || n_items <= 0) {

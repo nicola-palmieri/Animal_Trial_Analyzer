@@ -1,5 +1,5 @@
 # ===============================================================
-# 🧪 Animal Trial Analyzer — Standalone App 
+# 🧪 Animal Trial Analyzer — Standalone App
 # ===============================================================
 
 library(bslib)
@@ -12,6 +12,7 @@ library(lmerTest)
 library(officer)
 library(patchwork)
 library(shiny)
+library(tidyr)
 
 source("R/module_upload.R")
 source("R/module_filter.R")

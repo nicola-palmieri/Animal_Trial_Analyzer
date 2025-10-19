@@ -110,6 +110,7 @@ upload_server <- function(id) {
     }, ignoreInit = TRUE)
     
     # ---- Load selected sheet ----
+    # ---- Load selected sheet ----
     observeEvent(list(input$sheet, input$file$datapath, input$layout_type), {
       req(input$file, input$sheet)
       
@@ -118,23 +119,33 @@ upload_server <- function(id) {
         error = function(e) e
       )
       if (inherits(tmp, "error")) {
-        output$validation_msg <- renderText(paste("❌ Error loading sheet:", conditionMessage(tmp)))
+        output$validation_msg <- renderText(paste("❌ Error loading sheet —", conditionMessage(tmp)))
         return()
       }
       
+      # ---- Detect likely wide-format pattern ----
+      first_row <- suppressMessages(readxl::read_excel(input$file$datapath, sheet = input$sheet, n_max = 1))
+      if (any(duplicated(unlist(first_row))) && input$layout_type == "long") {
+        output$validation_msg <- renderText(
+          "❌ Wide-format structure detected — please select 'Wide format' before proceeding."
+        )
+        output$preview <- renderDT(data.frame(), options = list(scrollX = TRUE))
+        return()
+      }
+      
+      # ---- Convert or validate ----
       if (input$layout_type == "wide") {
-        # 🧩 Handle wide format with two header rows
         tmp <- tryCatch(
           convert_wide_to_long(input$file$datapath, sheet = input$sheet, replicate_col = "Replicate"),
           error = function(e) e
         )
         if (inherits(tmp, "error")) {
-          output$validation_msg <- renderText(paste("❌ Error converting wide format:", conditionMessage(tmp)))
+          output$validation_msg <- renderText(paste("❌ Error converting wide format —", conditionMessage(tmp)))
           return()
         }
-        output$validation_msg <- renderText("✅ Wide format recognized and reshaped successfully.")
+        output$validation_msg <- renderText("✅ Wide format detected and reshaped successfully.")
       } else {
-        output$validation_msg <- renderText("✅ Long format loaded successfully.")
+        output$validation_msg <- renderText("✅ Long format detected and loaded successfully.")
       }
       
       tmp <- janitor::clean_names(tmp)
@@ -142,6 +153,8 @@ upload_server <- function(id) {
       
       output$preview <- renderDT(tmp, options = list(scrollX = TRUE, pageLength = 5))
     })
+    
+    
     
     return(df)
   })
