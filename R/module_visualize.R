@@ -72,7 +72,7 @@ visualize_server <- function(id, filtered_data, model_fit) {
       if (!identical(active_analysis_type(), current_type)) {
         active_analysis_type(current_type)
 
-        defaults <- if (identical(current_type, "ggpairs")) {
+        defaults <- if (identical(current_type, "ggpairs") || identical(current_type, "pca")) {
           list(width = 800, height = 600)
         } else {
           list(width = 300, height = 200)
@@ -88,7 +88,7 @@ visualize_server <- function(id, filtered_data, model_fit) {
       type <- active_analysis_type()
       if (is.null(type)) return()
       
-      if (identical(type, "ggpairs")) {
+      if (identical(type, "ggpairs") || identical(type, "pca")) {
         updateNumericInput(session, "subplot_width", label = "Plot width (px)")
         updateNumericInput(session, "subplot_height", label = "Plot height (px)")
       } else {
@@ -97,44 +97,7 @@ visualize_server <- function(id, filtered_data, model_fit) {
       }
     })
     
-    compute_layout <- function(n_items, rows_input, cols_input) {
-      # Safely handle nulls
-      if (is.null(n_items) || length(n_items) == 0 || is.na(n_items) || n_items <= 0) {
-        return(list(nrow = 1, ncol = 1))
-      }
-      
-      # Replace NULL or NA inputs with 0
-      if (is.null(rows_input) || is.na(rows_input)) rows_input <- 0
-      if (is.null(cols_input) || is.na(cols_input)) cols_input <- 0
-      
-      n_row_input <- suppressWarnings(as.numeric(rows_input))
-      n_col_input <- suppressWarnings(as.numeric(cols_input))
-      
-      # Handle invalid inputs
-      if (is.na(n_row_input)) n_row_input <- 0
-      if (is.na(n_col_input)) n_col_input <- 0
-      
-      if (n_row_input > 0) {
-        n_row_final <- n_row_input
-        if (n_col_input > 0) {
-          n_col_final <- max(n_col_input, ceiling(n_items / max(1, n_row_final)))
-        } else {
-          n_col_final <- ceiling(n_items / max(1, n_row_final))
-        }
-      } else if (n_col_input > 0) {
-        n_col_final <- n_col_input
-        n_row_final <- ceiling(n_items / max(1, n_col_final))
-      } else {
-        # Default heuristic: single row if <=5 items, otherwise two
-        n_row_final <- ifelse(n_items <= 5, 1, 2)
-        n_col_final <- ceiling(n_items / n_row_final)
-      }
-      
-      list(
-        nrow = max(1, as.integer(n_row_final)),
-        ncol = max(1, as.integer(n_col_final))
-      )
-    }
+    
     
     layout_overrides <- reactiveValues(
       strata_rows = 0,
@@ -189,83 +152,22 @@ visualize_server <- function(id, filtered_data, model_fit) {
     output$layout_controls <- renderUI({
       info <- model_info()
       if (is.null(info)) return(NULL)
-
+      
       current_type <- if (!is.null(info$type)) info$type else "anova"
+      
       if (identical(current_type, "ggpairs")) {
-        return(tagList(
-          h4("Layout Controls"),
-          helpText("Pairwise correlation plots do not support layout controls. Adjust the plot size inputs below to resize the matrix.")
-        ))
-      }
-
-      has_strata <- !is.null(info$strata) && !is.null(info$strata$var)
-      n_responses <- if (!is.null(info$responses)) length(info$responses) else 0
-      
-      strata_inputs <- if (has_strata) {
-        tagList(
-          h5("Across strata:"),
-          fluidRow(
-            column(
-              width = 6,
-              numericInput(
-                ns("strata_rows"),
-                "Grid rows",
-                value = isolate(default_ui_value(input$strata_rows)),
-                min = 0,
-                step = 1
-              )
-            ),
-            column(
-              width = 6,
-              numericInput(
-                ns("strata_cols"),
-                "Grid columns",
-                value = isolate(default_ui_value(input$strata_cols)),
-                min = 0,
-                step = 1
-              )
-            )
-          )
-        )
-      } else {
-        NULL
+        return(build_anova_layout_controls(ns, input, info, default_ui_value))
       }
       
-      response_inputs <- if (!is.null(n_responses) && n_responses > 1) {
-        tagList(
-          h5("Across responses:"),
-          fluidRow(
-            column(
-              width = 6,
-              numericInput(
-                ns("resp_rows"),
-                "Grid rows",
-                value = isolate(default_ui_value(input$resp_rows)),
-                min = 0,
-                step = 1
-              )
-            ),
-            column(
-              width = 6,
-              numericInput(
-                ns("resp_cols"),
-                "Grid columns",
-                value = isolate(default_ui_value(input$resp_cols)),
-                min = 0,
-                step = 1
-              )
-            )
-          )
-        )
-      } else {
-        NULL
+      if (identical(current_type, "ggpairs")) {
+        return(build_ggpairs_layout_controls())
       }
       
-      tagList(
-        h4("Layout Controls"),
-        strata_inputs,
-        response_inputs
-      )
+      if (identical(current_type, "pca")) {
+        data <- df()
+        return(build_pca_layout_controls(ns, data))
+      }
+      
     })
     
     plot_obj_info <- reactive({
@@ -534,13 +436,27 @@ visualize_server <- function(id, filtered_data, model_fit) {
       info <- model_info()
       req(info)
       
-      if (!is.null(info$type) && info$type == "ggpairs") {
-        validate(need(ncol(info$data) >= 2, "Need at least two numeric columns for ggpairs."))
-        build_ggpairs_plot(info$data)
-      } else {
-        req(plot_obj())
-        plot_obj()
+      if (!is.null(info$type)) {
+        if (info$type == "ggpairs") {
+          validate(need(ncol(info$data) >= 2, "Need at least two numeric columns for ggpairs."))
+          return(build_ggpairs_plot(info$data))
+        }
+        
+        if (info$type == "pca") {
+          validate(need(!is.null(info$model), "Run PCA first."))
+          pca_obj <- info$model
+          
+          color_var <- if (!is.null(input$pca_color) && input$pca_color != "None") input$pca_color else NULL
+          shape_var <- if (!is.null(input$pca_shape) && input$pca_shape != "None") input$pca_shape else NULL
+          
+          return(build_pca_biplot(pca_obj, info$data, color_var = color_var, shape_var = shape_var))
+        }
+        
       }
+      
+      req(plot_obj())
+      plot_obj()
+      
     },
     width = function() plot_size()$w,
     height = function() plot_size()$h,
@@ -548,32 +464,55 @@ visualize_server <- function(id, filtered_data, model_fit) {
     
     
     # ---- Download Plot ----
-    # ---- Download Plot ----
     output$download_plot <- downloadHandler(
       filename = function() {
-        paste0("plot", Sys.Date(), ".png")
+        paste0("plot_", Sys.Date(), ".png")
       },
       content = function(file) {
         info <- model_info()
+        req(info)
         s <- plot_size()
         width_in  <- s$w / 96
         height_in <- s$h / 96
         
-        if (!is.null(info$type) && info$type == "ggpairs") {
-          g <- build_ggpairs_plot(info$data)
-        } else {
+        # Decide which plot to build
+        g <- NULL
+        
+        if (!is.null(info$type)) {
+          if (info$type == "ggpairs") {
+            validate(need(ncol(info$data) >= 2, "Need at least two numeric columns for ggpairs."))
+            g <- build_ggpairs_plot(info$data)
+          } else if (info$type == "pca") {
+            validate(need(!is.null(info$model), "Run PCA first."))
+            pca_obj <- info$model
+            
+            # Include the color/shape options from inputs
+            color_var <- if (!is.null(input$pca_color) && input$pca_color != "None") input$pca_color else NULL
+            shape_var <- if (!is.null(input$pca_shape) && input$pca_shape != "None") input$pca_shape else NULL
+            
+            g <- build_pca_biplot(pca_obj, info$data, color_var = color_var, shape_var = shape_var)
+          }
+        }
+        
+        # Default (anova, lm, lmm, etc.)
+        if (is.null(g)) {
           req(plot_obj())
           g <- plot_obj()
         }
         
         ggsave(
-          file, g,
-          device = "png", dpi = 300,
-          width = width_in, height = height_in,
-          units = "in", limitsize = FALSE
+          filename = file,
+          plot = g,
+          device = "png",
+          dpi = 300,
+          width = width_in,
+          height = height_in,
+          units = "in",
+          limitsize = FALSE
         )
       }
     )
+    
     
   })
 }

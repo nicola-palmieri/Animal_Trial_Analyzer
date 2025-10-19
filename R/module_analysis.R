@@ -7,6 +7,7 @@ source("R/module_analysis_two-way_anova.R")
 source("R/module_analysis_lm.R")
 source("R/module_analysis_lmm.R")
 source("R/module_analysis_pairwise_correlation.R")
+source("R/module_analysis_pca.R")
 
 analysis_ui <- function(id) {
   ns <- NS(id)
@@ -28,7 +29,8 @@ analysis_ui <- function(id) {
             "Linear Mixed Model (LMM)" = "Linear Mixed Model (LMM)"
           ),
           "Multivariate" = c(
-            "Pairwise Correlation" = "Pairwise Correlation"
+            "Pairwise Correlation" = "Pairwise Correlation",
+            "Principal Component Analysis (PCA)" = "PCA"
           )
         ),
         selected = ""
@@ -80,6 +82,12 @@ analysis_server <- function(id, filtered_data) {
         ui = ggpairs_ui,
         server = ggpairs_server,
         type = "ggpairs"
+      ),
+      "PCA" = list(
+        id = "pca",
+        ui = pca_ui,
+        server = pca_server,
+        type = "pca"
       )
     )
     

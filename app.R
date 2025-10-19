@@ -41,7 +41,6 @@ ui <- navbarPage(
       .section { margin-top: 18px; }
       .card { border-radius: 16px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
       .nav-tabs > li > a { font-weight: 500; }
-      footer { margin-top: 20px; color: #777; text-align: center; }
     "))
   ),
   
@@ -61,9 +60,6 @@ ui <- navbarPage(
     "4️⃣ Visualize",
     fluidPage(visualize_ui("visualize"))
   ),
-  
-  # ---- Footer ----
-  footer = tags$footer("© 2025 Dr. Nicola Palmieri — Built with R Shiny")
 )
 
 # ---------------------------------------------------------------
