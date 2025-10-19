@@ -18,8 +18,8 @@ visualize_ui <- function(id) {
         column(
           width = 6,
           numericInput(
-            ns("subplot_width"),
-            label = "Subplot width (px)",
+            ns("plot_width"),
+            label = "Plot width (px)",
             value = 300,
             min = 200,
             max = 1200,
@@ -29,8 +29,8 @@ visualize_ui <- function(id) {
         column(
           width = 6,
           numericInput(
-            ns("subplot_height"),
-            label = "Subplot height (px)",
+            ns("plot_height"),
+            label = "Plot height (px)",
             value = 200,
             min = 200,
             max = 1200,
@@ -78,8 +78,8 @@ visualize_server <- function(id, filtered_data, model_fit) {
           list(width = 300, height = 200)
         }
 
-        updateNumericInput(session, "subplot_width", value = defaults$width)
-        updateNumericInput(session, "subplot_height", value = defaults$height)
+        updateNumericInput(session, "plot_width", value = defaults$width)
+        updateNumericInput(session, "plot_height", value = defaults$height)
       }
     })
     
@@ -89,11 +89,11 @@ visualize_server <- function(id, filtered_data, model_fit) {
       if (is.null(type)) return()
       
       if (identical(type, "ggpairs") || identical(type, "pca")) {
-        updateNumericInput(session, "subplot_width", label = "Plot width (px)")
-        updateNumericInput(session, "subplot_height", label = "Plot height (px)")
+        updateNumericInput(session, "plot_width", label = "Plot width (px)")
+        updateNumericInput(session, "plot_height", label = "Plot height (px)")
       } else {
-        updateNumericInput(session, "subplot_width", label = "Subplot width (px)")
-        updateNumericInput(session, "subplot_height", label = "Subplot height (px)")
+        updateNumericInput(session, "plot_width", label = "Subplot width (px)")
+        updateNumericInput(session, "plot_height", label = "Subplot height (px)")
       }
     })
     
@@ -407,8 +407,8 @@ visualize_server <- function(id, filtered_data, model_fit) {
     # ---- Dynamic sizing logic (pixels) ----
     plot_size <- reactive({
       info <- plot_obj_info()
-      w_sub <- input$subplot_width
-      h_sub <- input$subplot_height
+      w_sub <- input$plot_width
+      h_sub <- input$plot_height
       
       if (is.null(w_sub) || is.na(w_sub)) w_sub <- 300
       if (is.null(h_sub) || is.na(h_sub)) h_sub <- 200

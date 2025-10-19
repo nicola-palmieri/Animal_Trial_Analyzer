@@ -1,7 +1,7 @@
 ---
 output:
-  pdf_document: default
   html_document: default
+  pdf_document: default
 ---
 
 # 🧪 Animal Trial Analyzer — Veterinarian Guide
@@ -68,9 +68,9 @@ Pick the statistical tool that fits your study design:
 
 | Tool | When to use it | Outputs |
 | --- | --- | --- |
-| **One-way ANOVA** | One categorical factor (e.g., treatment group) | Type II ANOVA table, Tukey post-hoc comparisons, stratified results if desired |
-| **Two-way ANOVA** | Two categorical factors (e.g., treatment × time) | Type II ANOVA table, interactions, optional stratification |
-| **Linear Model (LM)** | Continuous covariates or multiple fixed effects | Model summary, Type II ANOVA table, residual & Q-Q plots |
+| **One-way ANOVA** | One categorical factor (e.g., treatment group) | Type III ANOVA table, Tukey post-hoc comparisons, stratified results if desired |
+| **Two-way ANOVA** | Two categorical factors (e.g., treatment × time) | Type III ANOVA table, interactions, optional stratification |
+| **Linear Model (LM)** | Continuous covariates or multiple fixed effects | Model summary, Type III ANOVA table, residual & Q-Q plots |
 | **Linear Mixed Model (LMM)** | Random intercept for clustered data (e.g., repeated measures per animal) | Type III ANOVA, intraclass correlation, diagnostics, DOCX export |
 | **Pairwise Correlation** | Explore relationships among multiple numeric outcomes | `GGally::ggpairs` matrix with scatter plots, correlation coefficients, and density curves |
 
