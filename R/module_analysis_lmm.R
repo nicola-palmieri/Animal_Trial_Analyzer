@@ -15,7 +15,7 @@ lmm_ui <- function(id) {
       uiOutput(ns("formula_preview")),
       br(),
       fluidRow(
-        column(6, actionButton(ns("run"), "Run Linear Mixed Model", width = "100%")),
+        column(6, actionButton(ns("run"), "Run", width = "100%")),
         column(6, downloadButton(ns("download_model"), "Download All Results", width = "100%"))
       )
     ),

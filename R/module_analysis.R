@@ -17,6 +17,13 @@ analysis_ui <- function(id) {
       h4("Step 3 — Analyze Results"),
       p("Choose the statistical approach that fits your trial design, then inspect the summaries on the right."),
       hr(),
+      tags$style(HTML(sprintf("
+        /* Make only this input's dropdown tall enough to show all items */
+        #%s + .selectize-control .selectize-dropdown,
+        #%s + .selectize-control .selectize-dropdown .selectize-dropdown-content {
+          max-height: none !important;   /* show everything, no internal scroll */
+        }
+      ", ns("analysis_type"), ns("analysis_type")))),
       selectInput(
         ns("analysis_type"),
         "Select analysis type:",

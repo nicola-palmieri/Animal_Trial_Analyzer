@@ -13,7 +13,7 @@ one_way_anova_ui <- function(id) {
       uiOutput(ns("advanced_options")),
       br(),
       fluidRow(
-        column(6, actionButton(ns("run"), "Run One-way ANOVA", width = "100%")),
+        column(6, actionButton(ns("run"), "Run", width = "100%")),
         column(6, downloadButton(ns("download_all"), "Download All Results", width = "100%"))
       )
     ),

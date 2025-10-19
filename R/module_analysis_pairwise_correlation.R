@@ -8,7 +8,10 @@ ggpairs_ui <- function(id) {
     config = tagList(
       uiOutput(ns("inputs")),
       br(),
-      actionButton(ns("run"), "Run Pairwise Correlation", width = "100%")
+      fluidRow(
+        column(6, actionButton(ns("run"), "Run", width = "100%")),
+        column(6, downloadButton(ns("download_model"), "Download All Results", width = "100%"))
+      )
     ),
     results = tagList(
       verbatimTextOutput(ns("summary"))
