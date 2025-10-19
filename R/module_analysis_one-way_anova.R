@@ -3,6 +3,8 @@
 # ===============================================================
 
 source("R/module_analysis_anova_shared.R")
+source("R/module_analysis_multiple_responses.R")
+
 
 one_way_anova_ui <- function(id) {
   ns <- NS(id)
@@ -45,8 +47,7 @@ one_way_anova_server <- function(id, filtered_data) {
       cat_cols <- names(data)[sapply(data, function(x) is.character(x) || is.factor(x))]
       
       tagList(
-        checkboxInput(ns("multi_resp"), "Enable multiple response variables", value = FALSE),
-        uiOutput(ns("response_selector")),
+        uiOutput(ns("response_inputs")),
         selectInput(
           ns("group"),
           "Categorical predictor:",
@@ -56,8 +57,8 @@ one_way_anova_server <- function(id, filtered_data) {
       )
     })
     
-    output$response_selector <- renderUI({
-      render_response_selector(ns, df, input)
+    output$response_inputs <- renderUI({
+      render_response_inputs(ns, df(), input)
     })
     
     output$advanced_options <- renderUI({
@@ -111,9 +112,7 @@ one_way_anova_server <- function(id, filtered_data) {
     # -----------------------------------------------------------
     models <- eventReactive(input$run, {
       req(df(), input$response, input$group, input$order)
-      responses <- input$response
-      if (!isTRUE(input$multi_resp)) responses <- responses[1]
-      responses <- unique(responses)
+      responses <- get_selected_responses(input)
       req(length(responses) > 0)
       
       prepare_stratified_models(

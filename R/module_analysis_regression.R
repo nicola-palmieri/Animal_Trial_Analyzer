@@ -8,7 +8,10 @@ regression_ui <- function(id, engine = c("lm", "lmm")) {
 
   list(
     config = tagList(
-      uiOutput(ns("variable_selectors")),
+      uiOutput(ns("response_selector")),        
+      uiOutput(ns("fixed_selector")),      
+      uiOutput(ns("level_order")),         
+      uiOutput(ns("covar_selector")),       
       uiOutput(ns("interaction_select")),
       hr(),
       uiOutput(ns("formula_preview")),
@@ -36,11 +39,66 @@ regression_server <- function(id, data, engine = c("lm", "lmm")) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
-    output$variable_selectors <- renderUI({
+    output$response_selector <- renderUI({
       req(data())
       types <- reg_detect_types(data())
-      reg_variable_selectors_ui(ns, types, allow_random = (engine == "lmm"))
+      selectInput(ns("dep"), "Response variable (numeric):", choices = types$num)
     })
+    
+    output$fixed_selector <- renderUI({
+      req(data())
+      types <- reg_detect_types(data())
+      selectInput(
+        ns("fixed"),
+        "Categorical predictors:",
+        choices = types$fac,
+        multiple = TRUE
+      )
+    })
+    
+    output$level_order <- renderUI({
+      req(data())
+      req(input$fixed)
+      
+      df <- data()
+      fac_vars <- input$fixed
+      if (engine == "lmm" && !is.null(input$random) && nzchar(input$random)) {
+        fac_vars <- unique(c(fac_vars, input$random))
+      }
+      
+      if (length(fac_vars) == 0) return(NULL)
+      
+      tagList(
+        lapply(fac_vars, function(var) {
+          values <- df[[var]]
+          if (is.factor(values)) lvls <- levels(values)
+          else {
+            values <- values[!is.na(values)]
+            lvls <- unique(as.character(values))
+          }
+          selectInput(
+            ns(paste0("order_", var)),
+            paste("Order of levels for", var, "(first = reference):"),
+            choices = lvls,
+            selected = lvls,
+            multiple = TRUE
+          )
+        })
+      )
+    })
+    
+    output$covar_selector <- renderUI({
+      req(data())
+      types <- reg_detect_types(data())
+      selectInput(
+        ns("covar"),
+        "Numeric predictors:",
+        choices = types$num,
+        multiple = TRUE
+      )
+    })
+    
+    
     
     output$interaction_select <- renderUI({
       req(data())
