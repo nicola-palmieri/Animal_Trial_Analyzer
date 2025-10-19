@@ -5,22 +5,27 @@
 regression_ui <- function(id, engine = c("lm", "lmm")) {
   ns <- NS(id)
   engine <- match.arg(engine)
-  tagList(
-    uiOutput(ns("variable_selectors")),
-    uiOutput(ns("interaction_select")),
-    hr(),
-    uiOutput(ns("formula_preview")),
-    br(),
-    fluidRow(
-      column(6, actionButton(ns("run"), "Run", width = "100%")),
-      column(6, downloadButton(ns("download_model"), "Download All Results", width = "100%"))
+
+  list(
+    config = tagList(
+      uiOutput(ns("variable_selectors")),
+      uiOutput(ns("interaction_select")),
+      hr(),
+      uiOutput(ns("formula_preview")),
+      br(),
+      fluidRow(
+        column(6, actionButton(ns("run"), "Run", width = "100%")),
+        column(6, downloadButton(ns("download_model"), "Download All Results", width = "100%"))
+      )
     ),
-    verbatimTextOutput(ns("fit_error")),
-    verbatimTextOutput(ns("full_summary")),
-    h5("Diagnostics"),
-    fluidRow(
-      column(6, plotOutput(ns("resid_plot"))),
-      column(6, plotOutput(ns("qq_plot")))
+    results = tagList(
+      verbatimTextOutput(ns("fit_error")),
+      verbatimTextOutput(ns("full_summary")),
+      h5("Diagnostics"),
+      fluidRow(
+        column(6, plotOutput(ns("resid_plot"))),
+        column(6, plotOutput(ns("qq_plot")))
+      )
     )
   )
 }
