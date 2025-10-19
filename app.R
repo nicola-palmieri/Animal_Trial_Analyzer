@@ -7,6 +7,8 @@ library(bslib)
 library(ggplot2)
 library(dplyr)
 library(DT)
+library(officer)
+library(flextable)
 
 source("R/module_upload.R")
 source("R/module_filter.R")
