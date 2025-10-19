@@ -73,3 +73,46 @@ reg_fit_model <- function(dep, rhs, data, engine = c("lm","lmm")) {
     lmerTest::lmer(form, data = data)
   }
 }
+
+# --- LM summary output ---
+reg_display_lm_summary <- function(m) {
+  aout <- capture.output(car::Anova(m, type = 3))
+  signif_idx <- grep("^Signif\\. codes", aout)
+  if (length(signif_idx) > 0) {
+    remove_idx <- c(signif_idx - 1, signif_idx)
+    aout <- aout[-remove_idx]
+  }
+  cat(paste(aout, collapse = "\n"), "\n\n")
+  
+  sout <- capture.output(summary(m))
+  start <- grep("^Residuals:", sout)[1]
+  stop  <- grep("^Signif\\. codes", sout)[1]
+  if (!is.na(start)) {
+    if (!is.na(stop)) sout <- sout[start:(stop - 2)]
+    else sout <- sout[start:length(sout)]
+  }
+  cat(paste(sout, collapse = "\n"))
+}
+
+# --- LMM summary output ---
+reg_display_lmm_summary <- function(m) {
+  aout <- capture.output(anova(m, type = 3))
+  cat(paste(aout, collapse = "\n"), "\n\n")
+  
+  sout <- capture.output(summary(m))
+  start <- grep("^Scaled residuals:", sout)[1]
+  stop  <- grep("^Correlation of Fixed Effects:", sout)[1]
+  if (!is.na(start)) {
+    if (!is.na(stop)) sout <- sout[start:(stop - 1)]
+    else sout <- sout[start:length(sout)]
+  }
+  
+  icc_df <- compute_icc(m)
+  if (!is.null(icc_df) && nrow(icc_df) > 0) {
+    icc_line <- paste(paste0("ICC (", icc_df$Group, "): ", icc_df$ICC), collapse = "; ")
+    random_idx <- grep("^Random effects:", sout)[1]
+    if (!is.na(random_idx)) sout <- append(sout, paste0("\n", icc_line), after = random_idx + 4)
+    else sout <- c(sout, icc_line)
+  }
+  cat(paste(sout, collapse = "\n"))
+}

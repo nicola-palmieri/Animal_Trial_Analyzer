@@ -4,6 +4,7 @@
 source("R/module_analysis_utils.R")
 source("R/module_analysis_one-way_anova.R")
 source("R/module_analysis_two-way_anova.R")
+source("R/module_analysis_regression.R")  
 source("R/module_analysis_lm.R")
 source("R/module_analysis_lmm.R")
 source("R/module_analysis_pairwise_correlation.R")
