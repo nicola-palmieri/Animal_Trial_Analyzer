@@ -309,7 +309,7 @@ visualize_server <- function(id, filtered_data, model_fit) {
       
       build_plot <- function(stats_df, title_text, y_limits) {
         if (is.null(factor2)) {
-          p <- ggplot(stats_df, aes_string(x = factor1, y = "mean")) +
+          p <- ggplot(stats_df, aes(x = !!sym(factor1), y = mean)) +
             geom_line(aes(group = 1), color = "steelblue", linewidth = 1) +
             geom_point(size = 3, color = "steelblue") +
             geom_errorbar(aes(ymin = mean - se, ymax = mean + se),
@@ -321,11 +321,11 @@ visualize_server <- function(id, filtered_data, model_fit) {
               panel.grid.major.x = element_blank()
             )
         } else {
-          p <- ggplot(stats_df, aes_string(
-            x = factor1,
-            y = "mean",
-            color = factor2,
-            group = factor2
+          p <- ggplot(stats_df, aes(
+            x = !!sym(factor1),
+            y = mean,
+            color = !!sym(factor2),
+            group = !!sym(factor2)
           )) +
             geom_line(linewidth = 1) +
             geom_point(size = 3) +

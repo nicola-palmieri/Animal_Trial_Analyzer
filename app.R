@@ -1,17 +1,24 @@
 # ===============================================================
-# 🧪 Animal Trial Analyzer — Standalone App (Styled)
+# 🧪 Animal Trial Analyzer — Standalone App 
 # ===============================================================
 
-library(shiny)
 library(bslib)
-library(ggplot2)
 library(dplyr)
 library(DT)
+library(flextable)
+library(GGally)
+library(ggplot2)
+library(lmerTest)
+library(officer)
+library(patchwork)
+library(shiny)
 
 source("R/module_upload.R")
 source("R/module_filter.R")
 source("R/module_analysis.R")
 source("R/module_visualize.R")
+
+options(shiny.autoreload = TRUE)
 
 # ---------------------------------------------------------------
 # UI
