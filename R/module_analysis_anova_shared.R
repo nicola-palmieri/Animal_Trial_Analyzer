@@ -388,7 +388,7 @@ prepare_anova_outputs <- function(model_obj, factor_names) {
 
     res <- tryCatch({
       emm <- emmeans::emmeans(model_obj, specs = factor_nm)
-      contrasts <- emmeans::contrast(emm, method = "pairwise", adjust = "tukey")
+      contrasts <- emmeans::contrast(emm, method = "revpairwise", adjust = "tukey")
       as.data.frame(summary(contrasts))
     }, error = function(e) list(error = e$message))
 
