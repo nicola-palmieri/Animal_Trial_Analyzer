@@ -1,7 +1,6 @@
 # ===============================================================
 # 🧪 Animal Trial Analyzer — Analysis Coordinator (fixed + cleaned)
 # ===============================================================
-source("R/module_analysis_utils.R")
 source("R/module_analysis_anova_one-way.R")
 source("R/module_analysis_anova_two-way.R")
 source("R/module_analysis_regression.R")  
