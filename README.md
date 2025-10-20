@@ -1,4 +1,4 @@
-# 🧪 Animal Trial Analyzer — Veterinarian Guide
+# 🧪 Animal Trial Analyzer
 
 The **Animal Trial Analyzer** is a point-and-click Shiny application that helps veterinarians interpret intervention trials without having to write R code. Upload routine monitoring spreadsheets, focus on the animals of interest, and produce shareable summaries, statistical reports, and publication-ready graphics in minutes.
 
