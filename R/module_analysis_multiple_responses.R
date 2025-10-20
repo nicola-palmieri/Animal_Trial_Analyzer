@@ -4,8 +4,14 @@
 
 # --- UI builder for the checkbox and response selector
 render_response_inputs <- function(ns, data, input) {
-  req(data())
-  num_vars <- names(data)[sapply(data, is.numeric)]
+  df <- if (is.function(data)) data() else data
+  req(df)
+  num_vars <- names(df)[sapply(df, is.numeric)]
+  
+  current_selection <- input$response
+  if (is.null(current_selection) || !all(current_selection %in% num_vars)) {
+    current_selection <- if (length(num_vars) > 0) num_vars[1] else NULL
+  }
   
   tagList(
     checkboxInput(
@@ -17,7 +23,7 @@ render_response_inputs <- function(ns, data, input) {
       ns("response"),
       if (isTRUE(input$multi_resp)) "Select response variables:" else "Select response variable:",
       choices = num_vars,
-      selected = if (length(num_vars) > 0) num_vars[1],
+      selected = current_selection,
       multiple = isTRUE(input$multi_resp)
     )
   )

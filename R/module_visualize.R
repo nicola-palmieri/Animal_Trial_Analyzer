@@ -175,6 +175,11 @@ visualize_server <- function(id, filtered_data, model_fit) {
       if (is.null(info) || is.null(info$models) || length(info$models) == 0) {
         return(NULL)
       }
+
+      current_type <- if (!is.null(info$type)) info$type else "anova"
+      if (!identical(current_type, "anova")) {
+        return(NULL)
+      }
       
       data <- df()
       req(data)
