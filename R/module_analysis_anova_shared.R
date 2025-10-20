@@ -160,7 +160,53 @@ render_anova_results <- function(ns, model_info, module_label = "ANOVA") {
 # ---------------------------------------------------------------
 # 6  Bind result renderers (summaries + downloads)
 #     Shared server-side wiring for both ANOVA modules
+#     Refactored into smaller helpers for clarity
 # ---------------------------------------------------------------
+
+# Print ANOVA summary and post-hoc results to the output
+print_anova_summary_and_posthoc <- function(model_obj, factors) {
+  results <- prepare_anova_outputs(model_obj, factors)
+  print(results$anova_object)
+
+  if (length(results$posthoc_details) == 0) {
+    cat("\nNo post-hoc Tukey comparisons were generated.\n")
+  } else {
+    for (factor_nm in names(results$posthoc_details)) {
+      details <- results$posthoc_details[[factor_nm]]
+      if (!is.null(details$error)) {
+        cat("\nPost-hoc Tukey comparisons for", factor_nm, "failed:", details$error, "\n")
+      } else if (!is.null(details$table)) {
+        cat("\nPost-hoc Tukey comparisons for", factor_nm, ":\n")
+        print(details$table)
+      }
+    }
+  }
+  invisible(results)
+}
+
+# Helper to bind a single model's outputs (summary + download)
+.bind_single_model_outputs <- function(output, summary_id, download_id,
+                                      model_obj, response_name, factors,
+                                      stratum_label = NULL) {
+  output[[summary_id]] <- renderPrint({
+    print_anova_summary_and_posthoc(model_obj, factors)
+  })
+
+  output[[download_id]] <- downloadHandler(
+    filename = function() {
+      base <- paste0("anova_results_", sanitize_name(response_name))
+      if (!is.null(stratum_label)) {
+        base <- paste0(base, "_stratum_", sanitize_name(stratum_label))
+      }
+      paste0(base, "_", Sys.Date(), ".docx")
+    },
+    content = function(file) {
+      results <- prepare_anova_outputs(model_obj, factors)
+      write_anova_docx(file, results, model_obj, response_name, stratum_label)
+    }
+  )
+}
+
 bind_anova_outputs <- function(ns, output, models_reactive) {
   observeEvent(models_reactive(), {
     model_info <- models_reactive()
@@ -178,35 +224,13 @@ bind_anova_outputs <- function(ns, output, models_reactive) {
           idx <- i
           response_name <- responses[i]
           model_obj <- model_list[[response_name]]
-
-          output[[paste0("summary_", idx)]] <- renderPrint({
-            results <- prepare_anova_outputs(model_obj, factors)
-            print(results$anova_object)
-
-            if (length(results$posthoc_details) == 0) {
-              cat("\nNo post-hoc Tukey comparisons were generated.\n")
-            } else {
-              for (factor_nm in names(results$posthoc_details)) {
-                details <- results$posthoc_details[[factor_nm]]
-                if (!is.null(details$error)) {
-                  cat("\nPost-hoc Tukey comparisons for", factor_nm, "failed:", details$error, "\n")
-                } else if (!is.null(details$table)) {
-                  cat("\nPost-hoc Tukey comparisons for", factor_nm, ":\n")
-                  print(details$table)
-                }
-              }
-            }
-          })
-
-          output[[paste0("download_", idx)]] <- downloadHandler(
-            filename = function() {
-              safe_resp <- sanitize_name(response_name)
-              paste0("anova_results_", safe_resp, "_", Sys.Date(), ".docx")
-            },
-            content = function(file) {
-              results <- prepare_anova_outputs(model_obj, factors)
-              write_anova_docx(file, results, model_obj, response_name)
-            }
+          .bind_single_model_outputs(
+            output,
+            summary_id = paste0("summary_", idx),
+            download_id = paste0("download_", idx),
+            model_obj = model_obj,
+            response_name = response_name,
+            factors = factors
           )
         })
       }
@@ -223,42 +247,14 @@ bind_anova_outputs <- function(ns, output, models_reactive) {
           response_name <- responses[i]
           stratum_label <- strata_levels[j]
           model_obj <- model_list[[stratum_label]][[response_name]]
-
-          output[[paste0("summary_", idx, "_", stratum_idx)]] <- renderPrint({
-            results <- prepare_anova_outputs(model_obj, factors)
-            print(results$anova_object)
-
-            if (length(results$posthoc_details) == 0) {
-              cat("\nNo post-hoc Tukey comparisons were generated.\n")
-            } else {
-              for (factor_nm in names(results$posthoc_details)) {
-                details <- results$posthoc_details[[factor_nm]]
-                if (!is.null(details$error)) {
-                  cat("\nPost-hoc Tukey comparisons for", factor_nm, "failed:", details$error, "\n")
-                } else if (!is.null(details$table)) {
-                  cat("\nPost-hoc Tukey comparisons for", factor_nm, ":\n")
-                  print(details$table)
-                }
-              }
-            }
-          })
-
-          output[[paste0("download_", idx, "_", stratum_idx)]] <- downloadHandler(
-            filename = function() {
-              paste0(
-                "anova_results_",
-                sanitize_name(response_name),
-                "_stratum_",
-                sanitize_name(stratum_label),
-                "_",
-                Sys.Date(),
-                ".docx"
-              )
-            },
-            content = function(file) {
-              results <- prepare_anova_outputs(model_obj, factors)
-              write_anova_docx(file, results, model_obj, response_name, stratum_label)
-            }
+          .bind_single_model_outputs(
+            output,
+            summary_id = paste0("summary_", idx, "_", stratum_idx),
+            download_id = paste0("download_", idx, "_", stratum_idx),
+            model_obj = model_obj,
+            response_name = response_name,
+            factors = factors,
+            stratum_label = stratum_label
           )
         })
       }
