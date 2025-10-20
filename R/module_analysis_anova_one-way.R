@@ -107,12 +107,17 @@ one_way_anova_server <- function(id, filtered_data) {
     # Download all results as one combined DOCX
     # -----------------------------------------------------------
     output$download_all <- downloadHandler(
-      
       filename = function() {
-        paste0("anova_all_results_", Sys.Date(), ".docx")
+        model_info <- models()
+        n_resp <- length(model_info$responses)
+        n_strata <- if (is.null(model_info$strata)) 0 else length(model_info$strata$levels)
+        strata_label <- ifelse(n_strata == 0, "nostratum", paste0(n_strata, "strata"))
+        timestamp <- format(Sys.time(), "%Y%m%d-%H%M")
+        sprintf("anova_results_%sresp_%s_%s.docx", n_resp, strata_label, timestamp)
       },
       content = function(file) {
         model_info <- models()
+        if (is.null(model_info)) stop("Please run the ANOVA first.")
         download_all_anova_results(model_info, file)
       }
     )

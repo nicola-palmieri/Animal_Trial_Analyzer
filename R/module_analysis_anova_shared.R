@@ -270,37 +270,41 @@ download_all_anova_results <- function(models_info, file) {
     stop("No models found to export.")
   }
   
-  main_doc <- officer::read_docx()
-  
-  add_result_to_doc <- function(model_obj, response, stratum_label = NULL, model_info) {
-    # Prepare and write a temporary file for each ANOVA result
-    tmpfile <- tempfile(fileext = ".docx")
-    results <- prepare_anova_outputs(model_obj, unlist(model_info$factors, use.names = FALSE))
-    write_anova_docx(tmpfile, results, model_obj, response, stratum_label)
-    # Append it to the main document
-    main_doc <<- officer::body_add_docx(main_doc, src = tmpfile)
-    main_doc <<- officer::body_add_par(main_doc, "", style = "Normal")
-    main_doc <<- officer::body_add_par(main_doc, "", style = "Normal")
-    
-  }
+  combined_results <- list()
   
   # --- Case 1: no stratification
   if (is.null(models_info$strata)) {
     for (resp in models_info$responses) {
       model_obj <- models_info$models[[resp]]
-      add_result_to_doc(model_obj, resp, NULL, models_info)
+      anova_obj <- car::Anova(model_obj, type = 3)
+      tbl <- as.data.frame(anova_obj)
+      tbl$Response <- resp
+      tbl$Stratum <- "None"
+      tbl$Term <- rownames(tbl)
+      rownames(tbl) <- NULL
+      names(tbl) <- sub(" ", "", names(tbl))
+      tbl$PrF <- tbl[, grep("^Pr", names(tbl))[1]]
+      combined_results[[length(combined_results) + 1]] <- tbl
     }
   } else {
     # --- Case 2: stratified
     for (stratum in models_info$strata$levels) {
       for (resp in models_info$responses) {
         model_obj <- models_info$models[[stratum]][[resp]]
-        add_result_to_doc(model_obj, resp, stratum, models_info)
+        anova_obj <- car::Anova(model_obj, type = 3)
+        tbl <- as.data.frame(anova_obj)
+        tbl$Response <- resp
+        tbl$Stratum <- stratum
+        tbl$Term <- rownames(tbl)
+        rownames(tbl) <- NULL
+        names(tbl) <- sub(" ", "", names(tbl))
+        tbl$PrF <- tbl[, grep("^Pr", names(tbl))[1]]
+        combined_results[[length(combined_results) + 1]] <- tbl
       }
     }
   }
   
-  print(main_doc, target = file)
+  write_anova_docx(combined_results, file)
 }
 
 # ---------------------------------------------------------------
@@ -430,101 +434,107 @@ prepare_anova_outputs <- function(model_obj, factor_names) {
   )
 }
 
-write_anova_docx <- function(doc_or_file, results, model_obj, response_name, stratum_label = NULL) {
-  if (inherits(doc_or_file, "rdocx")) {
-    doc <- doc_or_file
-    file <- tempfile(fileext = ".docx")
+# ===============================================================
+# 🧪 Animal Trial Analyzer — Publication-ready DOCX Export for ANOVA
+# ===============================================================
+write_anova_docx <- function(results, file) {
+  library(dplyr)
+  library(flextable)
+  library(officer)
+  
+  if (is.null(results) || length(results) == 0) stop("No ANOVA results available to export.")
+  combined <- bind_rows(results)
+  
+  required_cols <- c("Response", "Stratum", "Term", "SumSq", "Df", "Fvalue", "PrF")
+  if (!all(required_cols %in% names(combined))) stop("Missing required columns in ANOVA results.")
+  
+  # Format and sort
+  combined <- combined %>%
+    mutate(
+      SumSq = round(SumSq, 3),
+      Fvalue = round(Fvalue, 3),
+      PrF_label = ifelse(PrF < 0.001, "<0.001", sprintf("%.3f", PrF)),
+      sig = PrF < 0.05
+    ) %>%
+    arrange(Response, Stratum, Term)
+  
+  # Hide Stratum column if it's all "None"
+  if (length(unique(combined$Stratum)) == 1 && unique(combined$Stratum) == "None") {
+    combined$Stratum <- NULL
+    visible_cols <- c("Response", "Term", "SumSq", "Df", "Fvalue", "PrF_label")
+    merge_cols <- c("Response")
   } else {
-    doc <- officer::read_docx()
-    file <- doc_or_file
+    visible_cols <- c("Response", "Stratum", "Term", "SumSq", "Df", "Fvalue", "PrF_label")
+    merge_cols <- c("Response", "Stratum")
   }
   
-  doc <- officer::read_docx()
+  # Build flextable
+  ft <- flextable(combined[, visible_cols])
   
-  # ---- Title ----
-  doc <- officer::body_add_fpar(
-    doc,
-    officer::fpar(officer::ftext(paste("ANOVA results —", response_name),
-                                 prop = officer::fp_text(bold = TRUE, font.size = 12)))
-  )
-  if (!is.null(stratum_label)) {
-    doc <- officer::body_add_fpar(
-      doc,
-      officer::fpar(officer::ftext(paste("Subset:", stratum_label),
-                                   prop = officer::fp_text(bold = TRUE)))
-    )
-  }
-  
-  # Add some spacing before the ANOVA section
-  doc <- officer::body_add_par(doc, "", style = "Normal")
-  
-  # ---- ANOVA table ----
-  doc <- officer::body_add_fpar(
-    doc,
-    officer::fpar(officer::ftext("Summary of effects",
-                                 prop = officer::fp_text(bold = TRUE)))
+  # Clean header names
+  ft <- set_header_labels(
+    ft,
+    Response = "Response",
+    Stratum = if ("Stratum" %in% visible_cols) "Stratum" else NULL,
+    Term = "Term",
+    SumSq = "Sum Sq",
+    Df = "Df",
+    Fvalue = "F value",
+    PrF_label = "Pr(>F)"
   )
   
-  doc <- officer::body_add_par(doc, "", style = "Normal")
+  # Merge identical group labels
+  ft <- merge_v(ft, j = intersect(merge_cols, ft$col_keys))
   
-  anova_tbl <- results$anova_table
-  keep_cols <- c("Effect", "Sum Sq", "Df", "F value", "p.value")
-  keep_cols <- intersect(keep_cols, names(anova_tbl))
-  anova_tbl <- anova_tbl[, keep_cols, drop = FALSE]
+  # Styling
+  ft <- fontsize(ft, part = "all", size = 10)
+  ft <- bold(ft, part = "header", bold = TRUE)
+  ft <- color(ft, part = "header", color = "black")
+  ft <- align(ft, align = "center", part = "all")
   
-  for (col in names(anova_tbl)) {
-    if (is.numeric(anova_tbl[[col]])) anova_tbl[[col]] <- round(anova_tbl[[col]], 3)
-  }
-  
-  ft_anova <- flextable::flextable(anova_tbl)
-  ft_anova <- flextable::bold(ft_anova, part = "header")
-  if (nrow(anova_tbl) > 0 && "p.value" %in% names(anova_tbl)) {
-    ft_anova <- flextable::bold(ft_anova, i = which(results$anova_significant), j = "p.value", bold = TRUE)
-  }
-  ft_anova <- flextable::set_table_properties(ft_anova, width = .9, layout = "autofit")
-  ft_anova <- flextable::theme_vanilla(ft_anova)
-  ft_anova <- flextable::fontsize(ft_anova, size = 10, part = "all")
-  doc <- flextable::body_add_flextable(doc, ft_anova)
-  
-  # Add spacing before next section
-  doc <- officer::body_add_par(doc, "", style = "Normal")
-  
-  # ---- Post-hoc results ----
-  doc <- officer::body_add_fpar(
-    doc,
-    officer::fpar(officer::ftext("Pairwise Tukey comparisons",
-                                 prop = officer::fp_text(bold = TRUE)))
-  )
-  
-  doc <- officer::body_add_par(doc, "", style = "Normal")
-  
-  if (is.null(results$posthoc_table) || nrow(results$posthoc_table) == 0) {
-    doc <- officer::body_add_par(doc, "No significant pairwise differences detected.", style = "Normal")
-  } else {
-    post_tbl <- results$posthoc_table
-    keep_cols <- c("Factor", "contrast", "estimate", "SE", "df", "t.ratio", "p.value")
-    keep_cols <- intersect(keep_cols, names(post_tbl))
-    post_tbl <- post_tbl[, keep_cols, drop = FALSE]
-    for (col in names(post_tbl)) {
-      if (is.numeric(post_tbl[[col]])) post_tbl[[col]] <- round(post_tbl[[col]], 3)
+  # Bold significant p-values (< 0.05)
+  if ("sig" %in% names(combined)) {
+    sig_rows <- which(combined$sig)
+    if (length(sig_rows) > 0 && "PrF_label" %in% ft$col_keys) {
+      ft <- bold(ft, i = sig_rows, j = "PrF_label", bold = TRUE)
     }
-    
-    ft_post <- flextable::flextable(post_tbl)
-    ft_post <- flextable::bold(ft_post, part = "header")
-    if ("p.value" %in% names(post_tbl)) {
-      ft_post <- flextable::bold(ft_post, i = which(results$posthoc_significant), j = "p.value", bold = TRUE)
-    }
-    ft_post <- flextable::set_table_properties(ft_post, width = .9, layout = "autofit")
-    ft_post <- flextable::theme_vanilla(ft_post)
-    ft_post <- flextable::fontsize(ft_post, size = 10, part = "all")
-    doc <- flextable::body_add_flextable(doc, ft_post)
   }
   
-  # Add spacing before footer
-  doc <- officer::body_add_par(doc, "", style = "Normal")
+  # ===== Journal-style borders =====
+  ft <- border_remove(ft)
+  black <- fp_border(color = "black", width = 1)
+  thin <- fp_border(color = "black", width = 0.5)
   
-  # ---- Footer ----
-  doc <- officer::body_add_par(doc, "Significance level: p < 0.05 (bold values).", style = "Normal")
+  # 1) Top line above header
+  ft <- border(ft, part = "header", border.top = black)
+  # 2) Line below header
+  ft <- border(ft, part = "header", border.bottom = black)
   
+  # 3) Thin horizontal lines between different responses
+  if ("Response" %in% names(combined)) {
+    resp_index <- which(diff(as.numeric(factor(combined$Response))) != 0)
+    if (length(resp_index) > 0) {
+      ft <- border(ft, i = resp_index, part = "body", border.bottom = thin)
+    }
+  }
+  
+  # 4) Final bottom border (last line)
+  if (nrow(combined) > 0) {
+    ft <- border(ft, i = nrow(combined), part = "body", border.bottom = black)
+  }
+  
+  
+  # No side or inner borders
+  ft <- set_table_properties(ft, layout = "autofit", width = 0.9)
+  ft <- padding(ft, padding.top = 2, padding.bottom = 2, padding.left = 2, padding.right = 2)
+  
+  # Write to DOCX
+  doc <- read_docx()
+  doc <- body_add_flextable(doc, ft)
+  doc <- body_add_par(doc, "")
+  doc <- body_add_par(doc, sprintf("Generated by Animal Trial Analyzer on %s", Sys.Date()))
+  doc <- body_add_par(doc, "Significant p-values (< 0.05) in bold.", style = "Normal")
   print(doc, target = file)
 }
+
+
