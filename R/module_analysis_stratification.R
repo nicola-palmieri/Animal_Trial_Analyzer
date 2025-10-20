@@ -12,7 +12,7 @@
 # ---------------------------------------------------------------
 render_stratification_controls <- function(ns, data, input,
                                            section_title = "Advanced options",
-                                           stratify_label = "Stratify analysis by:",
+                                           stratify_label = "Stratify by:",
                                            none_label = "None") {
   df <- .resolve_data(data)
   req(df)
