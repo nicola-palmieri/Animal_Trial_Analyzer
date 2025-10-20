@@ -117,37 +117,75 @@ reg_display_lmm_summary <- function(m) {
   cat(paste(sout, collapse = "\n"))
 }
 
-write_lm_docx <- function(model, file) {
+# ===============================================================
+# 🧾 Publication-ready DOCX Export for LM and LMM
+# ===============================================================
 
-  # Create new document
-  doc <- read_docx()
+write_lm_docx <- function(model, file) {
+  library(flextable)
+  library(officer)
+  library(dplyr)
+  library(car)
+  library(lme4)
+
+  # Determine model type
   is_lmm <- inherits(model, "merMod")
+  dep_var <- all.vars(formula(model))[1]
+
+  # Helper for consistent table formatting
+  format_table <- function(df, bold_p = TRUE) {
+    ft <- flextable(df)
+    ft <- fontsize(ft, part = "all", size = 10)
+    ft <- bold(ft, part = "header", bold = TRUE)
+    ft <- color(ft, part = "header", color = "black")
+    ft <- align(ft, align = "center", part = "all")
+    ft <- border_remove(ft)
+    black <- fp_border(color = "black", width = 1)
+    ft <- border(ft, part = "header", border.top = black)
+    ft <- border(ft, part = "header", border.bottom = black)
+    if (nrow(df) > 0) {
+      ft <- border(ft, i = nrow(df), part = "body", border.bottom = black)
+    }
+
+    # Bold significant p-values
+    if (bold_p) {
+      p_cols <- names(df)[grepl("Pr", names(df), fixed = TRUE)]
+      for (pcol in p_cols) {
+        if (is.numeric(df[[pcol]]) || all(grepl("^[0-9.<]+$", df[[pcol]]))) {
+          sig_rows <- suppressWarnings(which(as.numeric(df[[pcol]]) < 0.05))
+          if (length(sig_rows) == 0) {
+            # handle formatted p-values like "<0.001"
+            sig_rows <- grep("<0\\.0*1", df[[pcol]])
+          }
+          if (length(sig_rows) > 0 && pcol %in% ft$col_keys) {
+            ft <- bold(ft, i = sig_rows, j = pcol, bold = TRUE)
+          }
+        }
+      }
+    }
+
+    ft <- set_table_properties(ft, layout = "autofit", width = 0.9)
+    ft <- padding(ft, padding.top = 2, padding.bottom = 2, padding.left = 2, padding.right = 2)
+    ft
+  }
+
+  # Create new Word document
+  doc <- read_docx()
 
   # ---- Title ----
-  dep_var <- all.vars(formula(model))[1]
   title_text <- sprintf(
     "%s Results — %s",
     if (is_lmm) "Linear Mixed Model" else "Linear Model",
     dep_var
   )
-  doc <- body_add_fpar(
-    doc,
-    fpar(ftext(title_text, prop = fp_text(bold = TRUE, font.size = 12)))
-  )
-  
-  # Add spacing
-  doc <- body_add_par(doc, "", style = "Normal")
-  
+  doc <- body_add_fpar(doc, fpar(ftext(title_text, prop = fp_text(bold = TRUE, font.size = 12))))
+  doc <- body_add_par(doc, "")
+
   # ==========================================================
   # 🔹 ANOVA (Type III)
   # ==========================================================
-  
-  doc <- body_add_fpar(
-    doc,
-    fpar(ftext("ANOVA (Type III)", prop = fp_text(bold = TRUE)))
-  )
-  
-  doc <- body_add_par(doc, "", style = "Normal")
+  doc <- body_add_fpar(doc, fpar(ftext("ANOVA (Type III)", prop = fp_text(bold = TRUE))))
+  doc <- body_add_par(doc, "")
 
   if (is_lmm) {
     anova_tbl <- as.data.frame(anova(model, type = 3))
@@ -155,108 +193,117 @@ write_lm_docx <- function(model, file) {
     anova_tbl <- as.data.frame(car::Anova(model, type = 3))
   }
   anova_tbl <- tibble::rownames_to_column(anova_tbl, "Effect")
-  
-  # Round numeric columns
+
+  # Round numeric columns and format p-values
   for (col in names(anova_tbl)) {
     if (is.numeric(anova_tbl[[col]])) anova_tbl[[col]] <- round(anova_tbl[[col]], 3)
   }
-  
-  ft_anova <- flextable(anova_tbl)
-  ft_anova <- bold(ft_anova, part = "header")
-  ft_anova <- set_table_properties(ft_anova, width = .9, layout = "autofit")
-  ft_anova <- theme_vanilla(ft_anova)
-  ft_anova <- fontsize(ft_anova, size = 10, part = "all")
+  p_col <- grep("^Pr", names(anova_tbl), value = TRUE)
+  if (length(p_col) > 0) {
+    colnames(anova_tbl)[colnames(anova_tbl) == p_col[1]] <- "Pr(>F)"
+  }
+
+  ft_anova <- format_table(anova_tbl)
   doc <- body_add_flextable(doc, ft_anova)
-  
-  # Add spacing
-  doc <- body_add_par(doc, "", style = "Normal")
+  doc <- body_add_par(doc, "")
 
   # ==========================================================
-  # 🔹 Random effects & ICC (LMM only)
+  # 🔹 Random Effects & ICC (LMM only)
   # ==========================================================
   if (is_lmm) {
-    doc <- body_add_fpar(
-      doc,
-      fpar(ftext("Random Effects", prop = fp_text(bold = TRUE)))
-    )
-    doc <- body_add_par(doc, "", style = "Normal")
-    
+    # ---- Random Effects ----
+    doc <- body_add_fpar(doc, fpar(ftext("Random Effects", prop = fp_text(bold = TRUE))))
+    doc <- body_add_par(doc, "")
+
     rand_df <- as.data.frame(lme4::VarCorr(model))
     if (nrow(rand_df) > 0) {
       rand_df <- rand_df[, c("grp", "var1", "var2", "vcov", "sdcor"), drop = FALSE]
       rand_df$var2 <- ifelse(is.na(rand_df$var2), "-", rand_df$var2)
       names(rand_df) <- c("Grouping", "Effect 1", "Effect 2", "Variance", "Std. Dev.")
-      for (col in c("Variance", "Std. Dev.")) {
-        rand_df[[col]] <- round(rand_df[[col]], 3)
-      }
-      ft_rand <- flextable(rand_df)
-      ft_rand <- bold(ft_rand, part = "header")
-      ft_rand <- set_table_properties(ft_rand, width = .9, layout = "autofit")
-      ft_rand <- theme_vanilla(ft_rand)
-      ft_rand <- fontsize(ft_rand, size = 10, part = "all")
+      rand_df$Variance <- round(rand_df$Variance, 3)
+      rand_df$`Std. Dev.` <- round(rand_df$`Std. Dev.`, 3)
+      ft_rand <- format_table(rand_df, bold_p = FALSE)
       doc <- body_add_flextable(doc, ft_rand)
     } else {
       doc <- body_add_par(doc, "No random-effect variance components were estimated.", style = "Normal")
     }
-    
+
+    # ---- ICC ----
     if (exists("compute_icc") && is.function(compute_icc)) {
       icc_df <- compute_icc(model)
     } else {
       icc_df <- NULL
     }
     if (!is.null(icc_df) && nrow(icc_df) > 0) {
-      doc <- body_add_par(doc, "", style = "Normal")
-      doc <- body_add_fpar(
-        doc,
-        fpar(ftext("Intraclass Correlation (ICC)", prop = fp_text(bold = TRUE)))
-      )
-      doc <- body_add_par(doc, "", style = "Normal")
+      doc <- body_add_par(doc, "")
+      doc <- body_add_fpar(doc, fpar(ftext("Intraclass Correlation (ICC)", prop = fp_text(bold = TRUE))))
+      doc <- body_add_par(doc, "")
       icc_df$ICC <- round(icc_df$ICC, 3)
-      icc_ft <- flextable(icc_df)
-      icc_ft <- bold(icc_ft, part = "header")
-      icc_ft <- set_table_properties(icc_ft, width = .5, layout = "autofit")
-      icc_ft <- theme_vanilla(icc_ft)
-      icc_ft <- fontsize(icc_ft, size = 10, part = "all")
-      doc <- body_add_flextable(doc, icc_ft)
+      ft_icc <- format_table(icc_df, bold_p = FALSE)
+      doc <- body_add_flextable(doc, ft_icc)
     }
-    
-    doc <- body_add_par(doc, "", style = "Normal")
+
+    doc <- body_add_par(doc, "")
   }
-  
+
   # ==========================================================
   # 🔹 Model Coefficients
   # ==========================================================
-  
-  doc <- body_add_fpar(
-    doc,
-    fpar(ftext("Model Coefficients", prop = fp_text(bold = TRUE)))
-  )
-  
-  doc <- body_add_par(doc, "", style = "Normal")
-  
+  doc <- body_add_fpar(doc, fpar(ftext("Model Coefficients", prop = fp_text(bold = TRUE))))
+  doc <- body_add_par(doc, "")
+
   coef_tbl <- as.data.frame(summary(model)$coefficients)
   coef_tbl <- tibble::rownames_to_column(coef_tbl, "Term")
   names(coef_tbl)[1] <- "Term"
   names(coef_tbl) <- gsub("Pr\\(>\\|t\\|\\)", "Pr(>|t|)", names(coef_tbl))
-  
+
   for (col in names(coef_tbl)) {
     if (is.numeric(coef_tbl[[col]])) coef_tbl[[col]] <- round(coef_tbl[[col]], 4)
   }
-  
-  ft_coef <- flextable(coef_tbl)
-  ft_coef <- bold(ft_coef, part = "header")
-  ft_coef <- set_table_properties(ft_coef, width = .9, layout = "autofit")
-  ft_coef <- theme_vanilla(ft_coef)
-  ft_coef <- fontsize(ft_coef, size = 10, part = "all")
+
+  ft_coef <- format_table(coef_tbl)
   doc <- body_add_flextable(doc, ft_coef)
-  
+
   # ==========================================================
   # 🔹 Footer
   # ==========================================================
-  
-  doc <- body_add_par(doc, "", style = "Normal")
+  doc <- body_add_par(doc, "")
   doc <- body_add_par(doc, "Significance level: p < 0.05 (bold values).", style = "Normal")
-  
-  # Write file
+  doc <- body_add_par(doc, sprintf("Generated by Animal Trial Analyzer on %s", Sys.Date()))
+
+  # Save file
   print(doc, target = file)
+}
+
+# ===============================================================
+# 🧾 Helper: format regression table in journal style
+# ===============================================================
+format_regression_table <- function(df, bold_p = TRUE) {
+  
+  ft <- flextable(df)
+  ft <- fontsize(ft, part = "all", size = 10)
+  ft <- bold(ft, part = "header", bold = TRUE)
+  ft <- color(ft, part = "header", color = "black")
+  ft <- align(ft, align = "center", part = "all")
+  ft <- border_remove(ft)
+  
+  black <- fp_border(color = "black", width = 1)
+  ft <- border(ft, part = "header", border.top = black)
+  ft <- border(ft, part = "header", border.bottom = black)
+  if (nrow(df) > 0) {
+    ft <- border(ft, i = nrow(df), part = "body", border.bottom = black)
+  }
+
+  if (bold_p && "Pr(>F)" %in% names(df)) {
+    sig_rows <- which(df[["Pr(>F)"]] < 0.05)
+    if (length(sig_rows) > 0) ft <- bold(ft, i = sig_rows, j = "Pr(>F)", bold = TRUE)
+  }
+  if (bold_p && "Pr(>|t|)" %in% names(df)) {
+    sig_rows <- which(df[["Pr(>|t|)"]] < 0.05)
+    if (length(sig_rows) > 0) ft <- bold(ft, i = sig_rows, j = "Pr(>|t|)", bold = TRUE)
+  }
+
+  ft <- set_table_properties(ft, layout = "autofit", width = 0.9)
+  ft <- padding(ft, padding.top = 2, padding.bottom = 2, padding.left = 2, padding.right = 2)
+  ft
 }

@@ -123,8 +123,7 @@ render_anova_results <- function(ns, model_info, module_label = "ANOVA") {
       tabPanel(
         title = responses[i],
         tags$div(
-          verbatimTextOutput(ns(paste0("summary_", i))),
-          downloadButton(ns(paste0("download_", i)), "Download Results")
+          verbatimTextOutput(ns(paste0("summary_", i)))
         )
       )
     })
@@ -140,12 +139,7 @@ render_anova_results <- function(ns, model_info, module_label = "ANOVA") {
       tabPanel(
         title = stratum_name,
         tags$div(
-          verbatimTextOutput(ns(paste0("summary_", i, "_", j))),
-          h4("Download Results"),
-          downloadButton(
-            ns(paste0("download_", i, "_", j)),
-            "Download Results"
-          )
+          verbatimTextOutput(ns(paste0("summary_", i, "_", j)))
         )
       )
     })
