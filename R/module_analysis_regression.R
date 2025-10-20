@@ -11,7 +11,8 @@ regression_ui <- function(id, engine = c("lm", "lmm")) {
       uiOutput(ns("response_selector")),        
       uiOutput(ns("fixed_selector")),      
       uiOutput(ns("level_order")),         
-      uiOutput(ns("covar_selector")),       
+      uiOutput(ns("covar_selector")),
+      if (engine == "lmm") uiOutput(ns("random_selector")),
       uiOutput(ns("interaction_select")),
       hr(),
       uiOutput(ns("formula_preview")),
@@ -98,6 +99,19 @@ regression_server <- function(id, data, engine = c("lm", "lmm")) {
       )
     })
     
+    # --- Random effect (only for LMM)
+    if (engine == "lmm") {
+      output$random_selector <- renderUI({
+        req(data())
+        types <- reg_detect_types(data())
+        selectInput(
+          ns("random"),
+          "Random effect (categorical):",
+          choices = types$fac,
+          selected = NULL
+        )
+      })
+    }
     
     
     output$interaction_select <- renderUI({
