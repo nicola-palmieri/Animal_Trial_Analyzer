@@ -2,6 +2,8 @@
 # 🧠 Animal Trial Analyzer — Shared ANOVA Module Helpers
 # ===============================================================
 
+source("R/module_analysis_stratification.R")
+
 # ---------------------------------------------------------------
 # 1️⃣ Response selector UI (single / multi)
 # ---------------------------------------------------------------
@@ -30,28 +32,7 @@ render_response_selector <- function(ns, df, input) {
 }
 
 # ---------------------------------------------------------------
-# 2️⃣ Advanced options for stratification
-# ---------------------------------------------------------------
-render_advanced_options <- function(ns, df, input) {
-  req(df())
-  data <- df()
-  cat_cols <- names(data)[sapply(data, function(x) is.character(x) || is.factor(x))]
-  choices <- c("None", setdiff(unique(cat_cols), "None"))
-  
-  tags$details(
-    tags$summary(strong("Advanced options")),
-    selectInput(
-      ns("stratify_var"),
-      "Stratify analysis by:",
-      choices = choices,
-      selected = "None"
-    ),
-    uiOutput(ns("strata_order_ui"))
-  )
-}
-
-# ---------------------------------------------------------------
-# 3️⃣ Helper to fit ANOVA models (handles stratification)
+# 2️⃣ Helper to fit ANOVA models (handles stratification)
 # ---------------------------------------------------------------
 prepare_stratified_models <- function(df, responses, strat_var, factor1, factor2, orders, formula_builder) {
   req(df, responses)

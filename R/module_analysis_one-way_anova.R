@@ -62,34 +62,11 @@ one_way_anova_server <- function(id, filtered_data) {
     })
     
     output$advanced_options <- renderUI({
-      render_advanced_options(ns, df, input)
+      render_stratification_controls(ns, df, input)
     })
     
     output$strata_order_ui <- renderUI({
-      req(df())
-      strat_var <- input$stratify_var
-      if (is.null(strat_var) || identical(strat_var, "None")) return(NULL)
-      
-      data <- df()
-      values <- data[[strat_var]]
-      if (is.null(values)) return(NULL)
-      
-      if (is.factor(values)) {
-        strata_levels <- levels(values)
-      } else {
-        values <- values[!is.na(values)]
-        strata_levels <- unique(as.character(values))
-      }
-      
-      if (length(strata_levels) == 0) return(NULL)
-      
-      selectInput(
-        ns("strata_order"),
-        paste("Order of levels for", strat_var, "(strata):"),
-        choices = strata_levels,
-        selected = strata_levels,
-        multiple = TRUE
-      )
+      render_strata_order_input(ns, df, input$stratify_var)
     })
     
     # -----------------------------------------------------------
