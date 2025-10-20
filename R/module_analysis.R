@@ -1,6 +1,7 @@
 # ===============================================================
 # 🧪 Animal Trial Analyzer — Analysis Coordinator (fixed + cleaned)
 # ===============================================================
+source("R/module_analysis_descriptive.R")
 source("R/module_analysis_anova_one-way.R")
 source("R/module_analysis_anova_two-way.R")
 source("R/module_analysis_regression.R")  
@@ -29,6 +30,7 @@ analysis_ui <- function(id) {
         "Select analysis type:",
         choices = list(
           " " = "",
+          "Descriptive" = c("Descriptive Statistics" = "Descriptive Statistics"),
           "Univariate" = c(
             "One-way ANOVA" = "One-way ANOVA",
             "Two-way ANOVA" = "Two-way ANOVA",
@@ -60,6 +62,12 @@ analysis_server <- function(id, filtered_data) {
     
     # --- Mapping between analysis type and submodules ---
     submodules <- list(
+      "Descriptive Statistics" = list(
+        id = "descriptive",
+        ui = descriptive_ui,
+        server = descriptive_server,
+        type = "descriptive"
+      ),
       "One-way ANOVA" = list(
         id = "anova_one",
         ui = one_way_anova_ui,

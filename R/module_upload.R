@@ -59,7 +59,7 @@ upload_server <- function(id) {
         toy <- readxl::read_excel(long_path, n_max = 5)
         caption_txt <- paste(
           "Long format — one row per measurement.",
-          "Each measurement is a separate row; responses (FAMACHA, BCS, EPG) each have their own column."
+          "Each measurement is a separate row; responses (e.g. Cortisol, Glucose, FeedIntake) each have their own column."
         )
       } else {
         toy <- readxl::read_excel(wide_path, n_max = 5)
@@ -70,7 +70,7 @@ upload_server <- function(id) {
         
         caption_txt <- paste(
           "Wide format — two header rows.",
-          "Top row: responses (e.g., FAMACHA, BCS, EPG).",
+          "Top row: responses (e.g. FAMACHA, BCS, EPG).",
           "Bottom row: replicate numbers (1, 2, 3...)."
         )
       }

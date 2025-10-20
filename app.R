@@ -13,6 +13,7 @@ library(officer)
 library(patchwork)
 library(shiny)
 library(shinyjqui)
+library(skimr)
 library(tidyr)
 
 source("R/module_upload.R")
