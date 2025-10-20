@@ -140,11 +140,7 @@ render_anova_results <- function(ns, model_info, module_label = "ANOVA") {
       tabPanel(
         title = stratum_name,
         tags$div(
-          tags$details(
-            open = FALSE,
-            tags$summary(strong("R Output")),
-            verbatimTextOutput(ns(paste0("summary_", i, "_", j)))
-          ),
+          verbatimTextOutput(ns(paste0("summary_", i, "_", j))),
           h4("Download Results"),
           downloadButton(
             ns(paste0("download_", i, "_", j)),
