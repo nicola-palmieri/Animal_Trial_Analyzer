@@ -185,7 +185,7 @@ print_anova_summary_and_posthoc <- function(model_obj, factors) {
 }
 
 # Helper to bind a single model's outputs (summary + download)
-.bind_single_model_outputs <- function(output, summary_id, download_id,
+bind_single_model_outputs <- function(output, summary_id, download_id,
                                       model_obj, response_name, factors,
                                       stratum_label = NULL) {
   output[[summary_id]] <- renderPrint({
@@ -224,7 +224,7 @@ bind_anova_outputs <- function(ns, output, models_reactive) {
           idx <- i
           response_name <- responses[i]
           model_obj <- model_list[[response_name]]
-          .bind_single_model_outputs(
+          bind_single_model_outputs(
             output,
             summary_id = paste0("summary_", idx),
             download_id = paste0("download_", idx),
