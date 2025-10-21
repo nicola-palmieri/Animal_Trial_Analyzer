@@ -155,7 +155,7 @@ visualize_server <- function(id, filtered_data, model_fit) {
       
       current_type <- if (!is.null(info$type)) info$type else "anova"
       
-      if (identical(current_type, "ggpairs")) {
+      if (identical(current_type, "anova") || identical(current_type, "two_way_anova")) {
         return(build_anova_layout_controls(ns, input, info, default_ui_value))
       }
       
@@ -168,7 +168,10 @@ visualize_server <- function(id, filtered_data, model_fit) {
         return(build_pca_layout_controls(ns, data))
       }
       
+      return(NULL)
     })
+    
+    
     
     plot_obj_info <- reactive({
       info <- model_info()
