@@ -16,14 +16,7 @@ build_pca_biplot <- function(pca_obj, data, color_var = NULL, shape_var = NULL,
   }
 
   if (!is.null(label_var) && !identical(label_var, "") && !is.null(plot_data[[label_var]])) {
-    label_values <- as.character(plot_data[[label_var]])
-    label_values[is.na(label_values) | trimws(label_values) == ""] <- NA_character_
-
-    if (any(!is.na(label_values))) {
-      plot_data$label_value <- label_values
-    } else {
-      label_var <- NULL
-    }
+    plot_data$`..label..` <- as.character(plot_data[[label_var]])
   } else {
     label_var <- NULL
   }
@@ -35,7 +28,7 @@ build_pca_biplot <- function(pca_obj, data, color_var = NULL, shape_var = NULL,
   g <- ggplot(plot_data, aes_mapping) +
     geom_point(
       size = 3,
-      shape = if (is.null(shape_var)) 16 else NULL,
+      shape = if (is.null(shape_var)) "\U0001F413" else NULL,
       color = if (is.null(color_var)) "black" else NULL
     ) +
     theme_minimal(base_size = 14) +
@@ -53,14 +46,13 @@ build_pca_biplot <- function(pca_obj, data, color_var = NULL, shape_var = NULL,
 
   if (!is.null(label_var)) {
     g <- g + ggrepel::geom_text_repel(
-      aes(label = label_value),
+      aes(label = `..label..`),
       size = label_size,
       max.overlaps = Inf,
       min.segment.length = 0,
       box.padding = 0.3,
       point.padding = 0.2,
-      segment.size = 0.2,
-      na.rm = TRUE
+      segment.size = 0.2
     )
   }
 
