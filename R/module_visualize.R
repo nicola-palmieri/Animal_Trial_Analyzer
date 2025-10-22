@@ -118,19 +118,28 @@ visualize_server <- function(id, filtered_data, model_fit) {
 
     plot_obj_info <- reactive({
       info <- model_info()
-      if (is.null(info) || is.null(info$models) || length(info$models) == 0) {
+      if (is.null(info)) {
         return(NULL)
       }
 
       current_type <- if (!is.null(info$type)) info$type else "anova"
-      if (!identical(current_type, "anova")) {
-        return(NULL)
+
+      if (identical(current_type, "descriptive")) {
+        return(build_descriptive_plot_info(info, layout_state$effective_input))
       }
 
-      data <- df()
-      req(data)
+      if (identical(current_type, "anova")) {
+        if (is.null(info$models) || length(info$models) == 0) {
+          return(NULL)
+        }
 
-      build_anova_plot_info(data, info, layout_state$effective_input)
+        data <- df()
+        req(data)
+
+        return(build_anova_plot_info(data, info, layout_state$effective_input))
+      }
+
+      NULL
     })
 
     observe_layout_synchronization(plot_obj_info, layout_state, session)
@@ -210,6 +219,10 @@ visualize_server <- function(id, filtered_data, model_fit) {
         }
 
       }
+
+      req(plot_obj())
+      plot_obj()
+
     },
     width = function() plot_size()$w,
     height = function() plot_size()$h,
