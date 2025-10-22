@@ -183,8 +183,19 @@ visualize_server <- function(id, filtered_data, model_fit) {
 
           color_var <- if (!is.null(input$pca_color) && input$pca_color != "None") input$pca_color else NULL
           shape_var <- if (!is.null(input$pca_shape) && input$pca_shape != "None") input$pca_shape else NULL
+          label_var <- if (!is.null(input$pca_label) && input$pca_label != "None") input$pca_label else NULL
+          label_size <- if (!is.null(input$pca_label_size) && !is.na(input$pca_label_size)) input$pca_label_size else 2
 
-          return(build_pca_biplot(pca_obj, info$data, color_var = color_var, shape_var = shape_var))
+          return(
+            build_pca_biplot(
+              pca_obj,
+              info$data,
+              color_var = color_var,
+              shape_var = shape_var,
+              label_var = label_var,
+              label_size = label_size
+            )
+          )
         }
 
       }
@@ -220,8 +231,17 @@ visualize_server <- function(id, filtered_data, model_fit) {
 
             color_var <- if (!is.null(input$pca_color) && input$pca_color != "None") input$pca_color else NULL
             shape_var <- if (!is.null(input$pca_shape) && input$pca_shape != "None") input$pca_shape else NULL
+            label_var <- if (!is.null(input$pca_label) && input$pca_label != "None") input$pca_label else NULL
+            label_size <- if (!is.null(input$pca_label_size) && !is.na(input$pca_label_size)) input$pca_label_size else 2
 
-            g <- build_pca_biplot(pca_obj, info$data, color_var = color_var, shape_var = shape_var)
+            g <- build_pca_biplot(
+              pca_obj,
+              info$data,
+              color_var = color_var,
+              shape_var = shape_var,
+              label_var = label_var,
+              label_size = label_size
+            )
           }
         }
 
