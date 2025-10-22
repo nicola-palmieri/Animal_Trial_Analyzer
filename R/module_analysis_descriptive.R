@@ -27,10 +27,7 @@ descriptive_server <- function(id, filtered_data) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
-    df <- reactive({
-      req(filtered_data())
-      filtered_data()
-    })
+    df <- use_filtered_df(filtered_data)
     
     observe({
       data <- df()

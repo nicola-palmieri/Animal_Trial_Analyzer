@@ -16,6 +16,7 @@ library(shinyjqui)
 library(skimr)
 library(tidyr)
 
+source("R/reactive_helpers.R")
 source("R/module_upload.R")
 source("R/module_filter.R")
 source("R/module_analysis.R")

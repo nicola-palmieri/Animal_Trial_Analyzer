@@ -32,10 +32,7 @@ one_way_anova_server <- function(id, filtered_data) {
     # -----------------------------------------------------------
     # Reactive data
     # -----------------------------------------------------------
-    df <- reactive({
-      req(filtered_data())
-      filtered_data()
-    })
+    df <- use_filtered_df(filtered_data)
     
     # -----------------------------------------------------------
     # Dynamic inputs
