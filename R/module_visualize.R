@@ -118,28 +118,19 @@ visualize_server <- function(id, filtered_data, model_fit) {
 
     plot_obj_info <- reactive({
       info <- model_info()
-      if (is.null(info)) {
+      if (is.null(info) || is.null(info$models) || length(info$models) == 0) {
         return(NULL)
       }
 
       current_type <- if (!is.null(info$type)) info$type else "anova"
-
-      if (identical(current_type, "descriptive")) {
-        return(build_descriptive_plot_info(info, layout_state$effective_input))
+      if (!identical(current_type, "anova")) {
+        return(NULL)
       }
 
-      if (identical(current_type, "anova")) {
-        if (is.null(info$models) || length(info$models) == 0) {
-          return(NULL)
-        }
+      data <- df()
+      req(data)
 
-        data <- df()
-        req(data)
-
-        return(build_anova_plot_info(data, info, layout_state$effective_input))
-      }
-
-      NULL
+      build_anova_plot_info(data, info, layout_state$effective_input)
     })
 
     observe_layout_synchronization(plot_obj_info, layout_state, session)
@@ -207,27 +198,10 @@ visualize_server <- function(id, filtered_data, model_fit) {
           )
         }
 
-        if (info$type == "descriptive") {
-          plot_data <- info$data_for_plots
-          validate(need(!is.null(plot_data), "Run Descriptive Statistics to generate plots."))
-          validate(need(nrow(plot_data) > 0, "Filtered data has no rows to plot."))
-          numeric_vars <- info$numeric_vars
-          if (is.null(numeric_vars)) numeric_vars <- character(0)
-          validate(need(length(numeric_vars) > 0, "No numeric variables available for plotting."))
-        }
       }
 
-      plot_val <- plot_obj()
-
-      if (is.null(plot_val)) {
-        if (!is.null(info$type) && info$type == "descriptive") {
-          validate(need(FALSE, "No valid numeric data available for plotting."))
-        } else {
-          validate(need(FALSE, "Run the selected analysis to generate plots."))
-        }
-      }
-
-      plot_val
+      req(plot_obj())
+      plot_obj()
 
     },
     width = function() plot_size()$w,
