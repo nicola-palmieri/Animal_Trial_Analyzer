@@ -68,6 +68,13 @@ descriptive_server <- function(id, filtered_data) {
       }
     )
     
-    return(summary_data)
+    return(reactive({
+      list(
+        type = "descriptive",
+        data = df(),
+        summary = summary_data
+      )
+    }))
+    
   })
 }

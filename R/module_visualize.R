@@ -172,6 +172,17 @@ visualize_server <- function(id, filtered_data, model_fit) {
       req(info)
 
       if (!is.null(info$type)) {
+        
+        if (info$type == "descriptive") {
+          validate(need(!is.null(info$summary), "Run summary first."))
+          return(build_descriptive_plots(info$summary))
+        }
+        
+        if (info$type %in% c("anova", "lm", "lmm")) {
+          req(plot_obj())
+          return(plot_obj())
+        }
+        
         if (info$type == "ggpairs") {
           validate(need(ncol(info$data) >= 2, "Need at least two numeric columns for ggpairs."))
           return(build_ggpairs_plot(info$data))
@@ -199,10 +210,6 @@ visualize_server <- function(id, filtered_data, model_fit) {
         }
 
       }
-
-      req(plot_obj())
-      plot_obj()
-
     },
     width = function() plot_size()$w,
     height = function() plot_size()$h,

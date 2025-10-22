@@ -2,6 +2,66 @@
 # 🎨 Visualization Plot Builders
 # ===============================================================
 
+build_descriptive_plots <- function(summary_info) {
+  # summary_info is a list containing elements like skim, cv, outliers, shapiro, missing
+  data <- summary_info()
+  
+  plots <- list()
+  
+  # Example 1 — CV% barplot
+  if (!is.null(data$cv)) {
+    cv_long <- data$cv |> tidyr::pivot_longer(
+      cols = -1,
+      names_to = "variable",
+      values_to = "cv"
+    )
+    cv_long$variable <- gsub("^cv_", "", cv_long$variable)
+    p_cv <- ggplot(cv_long, aes(x = variable, y = cv, fill = .data[[1]])) +
+      geom_col(position = position_dodge()) +
+      theme_minimal(base_size = 14) +
+      labs(y = "CV (%)", x = NULL, fill = names(data$cv)[1]) +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1))
+    plots[["cv"]] <- p_cv
+  }
+  
+  # Example 2 — Outlier counts
+  if (!is.null(data$outliers)) {
+    out_long <- data$outliers |> tidyr::pivot_longer(
+      cols = -1,
+      names_to = "variable",
+      values_to = "count"
+    )
+    out_long$variable <- gsub("^outliers_", "", out_long$variable)
+    p_out <- ggplot(out_long, aes(x = variable, y = count, fill = .data[[1]])) +
+      geom_col(position = position_dodge()) +
+      theme_minimal(base_size = 14) +
+      labs(y = "Outlier Count", x = NULL, fill = names(data$outliers)[1]) +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1))
+    plots[["outliers"]] <- p_out
+  }
+  
+  # Example 3 — Missingness
+  if (!is.null(data$missing)) {
+    miss_long <- data$missing |> tidyr::pivot_longer(
+      cols = -1,
+      names_to = "variable",
+      values_to = "missing"
+    )
+    miss_long$variable <- gsub("^missing_", "", miss_long$variable)
+    p_miss <- ggplot(miss_long, aes(x = variable, y = missing, fill = .data[[1]])) +
+      geom_col(position = position_dodge()) +
+      theme_minimal(base_size = 14) +
+      labs(y = "Missing (%)", x = NULL, fill = names(data$missing)[1]) +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1))
+    plots[["missing"]] <- p_miss
+  }
+  
+  if (length(plots) == 0) return(NULL)
+  
+  patchwork::wrap_plots(plots, ncol = 1)
+}
+
+
 build_anova_plot_info <- function(data, info, effective_input) {
   factor1 <- info$factors$factor1
   factor2 <- info$factors$factor2
@@ -189,4 +249,96 @@ build_anova_plot_info <- function(data, info, effective_input) {
     has_strata = has_strata,
     n_responses = length(response_plots)
   )
+}
+
+# Styled version of ggpairs matching ANOVA plot aesthetics
+build_ggpairs_plot <- function(data) {
+  GGally::ggpairs(
+    data,
+    progress = FALSE,
+    upper = list(
+      continuous = GGally::wrap("cor", size = 4, color = "steelblue")
+    ),
+    lower = list(
+      continuous = GGally::wrap("points", alpha = 0.6, color = "steelblue", size = 1.5)
+    ),
+    diag = list(
+      continuous = GGally::wrap("densityDiag", fill = "steelblue", alpha = 0.4)
+    )
+  ) +
+    theme_minimal(base_size = 11) +
+    theme(
+      strip.background = element_rect(fill = "gray95", color = NA),
+      strip.text = element_text(face = "bold", size = 9),
+      panel.grid.minor = element_blank(),
+      panel.grid.major.x = element_blank(),
+      panel.grid.major.y = element_blank(),
+      plot.title = element_text(size = 12, face = "bold"),
+      axis.text = element_text(color = "black")
+    )
+}
+
+build_pca_biplot <- function(pca_obj, data, color_var = NULL, shape_var = NULL,
+                             label_var = NULL, label_size = 2) {
+  stopifnot(!is.null(pca_obj$x))
+  
+  scores <- as.data.frame(pca_obj$x[, 1:2])
+  names(scores)[1:2] <- c("PC1", "PC2")
+  
+  if (!is.null(data) && nrow(data) == nrow(scores)) {
+    plot_data <- cbind(scores, data)
+  } else {
+    plot_data <- scores
+  }
+  
+  if (!is.null(label_var) && !identical(label_var, "") && !is.null(plot_data[[label_var]])) {
+    label_values <- as.character(plot_data[[label_var]])
+    label_values[is.na(label_values) | trimws(label_values) == ""] <- NA_character_
+    
+    if (any(!is.na(label_values))) {
+      plot_data$label_value <- label_values
+    } else {
+      label_var <- NULL
+    }
+  } else {
+    label_var <- NULL
+  }
+  
+  aes_mapping <- aes(x = PC1, y = PC2)
+  if (!is.null(color_var)) aes_mapping <- modifyList(aes_mapping, aes(color = .data[[color_var]]))
+  if (!is.null(shape_var)) aes_mapping <- modifyList(aes_mapping, aes(shape = .data[[shape_var]]))
+  
+  g <- ggplot(plot_data, aes_mapping) +
+    geom_point(
+      size = 3,
+      shape = if (is.null(shape_var)) 16 else NULL,
+      color = if (is.null(color_var)) "black" else NULL
+    ) +
+    theme_minimal(base_size = 14) +
+    labs(
+      title = "PCA Biplot",
+      x = "PC1",
+      y = "PC2",
+      color = if (!is.null(color_var)) color_var else NULL,
+      shape = if (!is.null(shape_var)) shape_var else NULL
+    ) +
+    theme(
+      plot.title = element_text(size = 16, face = "bold"),
+      legend.position = "right"
+    )
+  
+  if (!is.null(label_var)) {
+    g <- g + ggrepel::geom_text_repel(
+      aes(label = label_value),
+      size = label_size,
+      max.overlaps = Inf,
+      min.segment.length = 0,
+      box.padding = 0.3,
+      point.padding = 0.2,
+      segment.size = 0.2,
+      na.rm = TRUE
+    )
+  }
+  
+  g
 }

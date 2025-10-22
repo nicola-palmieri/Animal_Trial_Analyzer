@@ -2,8 +2,6 @@
 # 🧪 Animal Trial Analyzer — PCA Module (analysis side only)
 # ===============================================================
 
-source("R/module_analysis_pca_helpers.R")
-
 pca_ui <- function(id) {
   ns <- NS(id)
   list(
