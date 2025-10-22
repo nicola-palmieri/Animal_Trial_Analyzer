@@ -1,34 +1,82 @@
 # 🧪 Animal Trial Analyzer
 
-The **Animal Trial Analyzer** is a point-and-click Shiny application that helps veterinarians interpret intervention trials without having to write R code. Upload routine monitoring spreadsheets, focus on the animals of interest, and produce shareable summaries, statistical reports, and publication-ready graphics in minutes.
+The **Animal Trial Analyzer** is a Shiny dashboard that guides veterinary teams from raw monitoring spreadsheets to exploratory statistics, downloadable model summaries, and publication-ready visualisations. The code in this repository reflects the current production app and is ready to run locally in R.
 
 ---
 
-## 🐾 Key capabilities
+## 📌 Project status
 
-- Accepts **Excel workbooks** in either long or wide format and converts them automatically for analysis.
-- Filters cohorts by **species, treatment, time point, health status, or any other column** before modelling.
-- Runs core analyses used in veterinary field trials:
-  - One-way or two-way ANOVA with optional Tukey post-hoc comparisons.
-  - Linear models for continuous covariates.
-  - Linear mixed models with a random intercept (e.g., repeated measures within animal or pen).
-  - Pairwise correlation matrices for multivariate biomarker panels.
-- Generates mean ± standard error plots that respect the model structure and stratification you choose.
-- Exports results to **DOCX reports** and high-resolution **PNG figures** for case files or publications.
+- **Maturity:** Stable for routine use in-house. Feature work is ongoing, but the current UI/UX mirrors the deployed tool.
+- **Deployment:** No hosted instance is shipped in this repository—run locally via `app.R` or publish to your own Shiny Server / Posit Connect deployment.
+- **Maintenance:** Issues and feature requests are handled on a rolling basis. Contributions are welcome through pull requests.
 
 ---
 
-## 🚀 Getting started
+## 🚀 Quick start
 
-1. **Open the app**
-   - If you received a hosted link, open it in a modern browser (Chrome, Firefox, Edge, or Safari).
-   - To run locally, open `app.R` in RStudio and click **Run App** (requires R 4.2+ and the packages listed in `app.R`).
-2. **Review the example templates** in `data/toy_animal_trial_data_long.xlsx` and `data/toy_animal_trial_data_wide.xlsx` to see the expected structure.
-3. Keep your workbook handy—the app guides you through four numbered tabs.
+### Requirements
+
+- R 4.2 or newer.
+- The CRAN packages loaded in [`app.R`](app.R): `bslib`, `dplyr`, `DT`, `flextable`, `GGally`, `ggplot2`, `lmerTest`, `officer`, `patchwork`, `shiny`, `shinyjqui`, `skimr`, and `tidyr`.
+
+Install any missing packages with:
+
+```r
+install.packages(c(
+  "bslib", "dplyr", "DT", "flextable", "GGally", "ggplot2", "lmerTest",
+  "officer", "patchwork", "shiny", "shinyjqui", "skimr", "tidyr"
+))
+```
+
+### Run the app locally
+
+1. Open the project in RStudio or start an R session in the repository root.
+2. Source `app.R` or click **Run App** in RStudio.
+3. Navigate the four guided tabs (`Upload → Filter → Analyze → Visualize`).
+
+Sample workbooks in [`data/`](data) demonstrate the expected long- and wide-format inputs.
 
 ---
 
-## 📋 Prepare your workbook
+## 🧭 Guided workflow
+
+### 1️⃣ Upload
+
+- Supports Excel workbooks (`.xlsx`, `.xls`, `.xlsm`).
+- Provides templates for long and two-row wide layouts before you upload.
+- Displays a 5-row preview with detected column types so you can verify the import.
+
+### 2️⃣ Filter
+
+- Filter by any column (categorical, numeric, logical).
+- Apply range filters, include/exclude factor levels, and keep notes columns for context.
+- The filtered dataset is shared with every downstream analysis module.
+
+### 3️⃣ Analyze
+
+Select from the following analysis modules—each ships with bespoke configuration inputs and downloadable reports:
+
+| Module | Typical use case | Key outputs |
+| --- | --- | --- |
+| **Descriptive Statistics** | Quick cohort summaries before modelling | Flextable summary tables, missingness and distribution diagnostics |
+| **One-way ANOVA** | Compare one categorical factor | Type III ANOVA, Tukey post-hoc tests, per-response DOCX exports |
+| **Two-way ANOVA** | Factorial designs (e.g. treatment × time) | Type III ANOVA, interaction plots, combined DOCX exports |
+| **Linear Model (LM)** | Continuous covariates or additive fixed effects | Model summary, ANOVA table, diagnostic plots |
+| **Linear Mixed Model (LMM)** | Repeated measures or clustered designs | `lmerTest` fit, intraclass correlation, diagnostics, Word export |
+| **Pairwise Correlation** | Explore multivariate biomarker panels | `GGally::ggpairs` matrix with scatter, density, and correlation cells |
+| **Principal Component Analysis (PCA)** | Dimensionality reduction and outlier checks | Scree plots, loadings tables, biplots |
+
+Advanced options allow response batching, stratified analyses (up to 10 strata), manual factor ordering, and templated report downloads for each response/stratum combination.
+
+### 4️⃣ Visualize
+
+- Generates mean ± standard error plots that respect the selected model structure and strata.
+- Automatically adapts layout controls for ANOVA grids, correlation matrices, and PCA biplots.
+- Lets you override panel dimensions and grid arrangements before downloading high-resolution PNG files.
+
+---
+
+## 📋 Preparing your workbook
 
 | Column | Purpose | Example |
 | --- | --- | --- |
@@ -36,85 +84,49 @@ The **Animal Trial Analyzer** is a point-and-click Shiny application that helps 
 | `treatment_group` | Allocation or protocol | `Vaccine A` |
 | `time_point` | Sampling moment | `Day 14` |
 | `outcome_measure` | Primary outcome | `EPG` |
-| Additional outcomes | Any numeric measurements (e.g., FAMACHA, weight, serology) | `3.5` |
+| Additional outcomes | Numeric measurements (e.g., FAMACHA, weight, serology) | `3.5` |
 | Optional notes | Clinical observations | `Mild swelling at injection site` |
 
-- **Long format**: each row is one measurement for one animal at one time.
-- **Wide format**: two header rows (outcome name + replicate). The app reshapes to long format automatically.
-- Use concise column names (underscores instead of spaces) and consistent spelling for factor levels (e.g., `TreatmentA`, not `tmt A`).
+- **Long format:** one row per measurement, per animal, per time point.
+- **Wide format:** two header rows (outcome name + replicate); the app reshapes to long format for you.
+- Use consistent naming (underscores over spaces) and harmonise factor levels to avoid filtering mismatches.
 
 ---
 
-## 🧭 Guided workflow
+## 📦 Outputs
 
-### 1️⃣ Upload
-- Choose **Long** or **Wide** layout to see the corresponding template preview.
-- Upload an Excel workbook (`.xlsx`, `.xls`, or `.xlsm`) and pick the worksheet to analyse.
-- The app validates the file and shows a 5-row preview so you can confirm column names and data types.
-
-### 2️⃣ Filter
-- Select the columns you want to filter (e.g., `species`, `treatment_group`, `time_point`).
-- For numeric fields, set minimum/maximum ranges; for factors or logical fields, tick the levels to keep.
-- The filtered table updates instantly and is passed to every analysis tab.
-
-### 3️⃣ Analyze
-Pick the statistical tool that fits your study design:
-
-| Tool | When to use it | Outputs |
-| --- | --- | --- |
-| **One-way ANOVA** | One categorical factor (e.g., treatment group) | Type III ANOVA table, Tukey post-hoc comparisons, stratified results if desired |
-| **Two-way ANOVA** | Two categorical factors (e.g., treatment × time) | Type III ANOVA table, interactions, optional stratification |
-| **Linear Model (LM)** | Continuous covariates or multiple fixed effects | Model summary, Type III ANOVA table, residual & Q-Q plots |
-| **Linear Mixed Model (LMM)** | Random intercept for clustered data (e.g., repeated measures per animal) | Type III ANOVA, intraclass correlation, diagnostics, DOCX export |
-| **Pairwise Correlation** | Explore relationships among multiple numeric outcomes | `GGally::ggpairs` matrix with scatter plots, correlation coefficients, and density curves |
-
-Common features:
-- Select one or multiple response variables. If multiple are chosen, the app automatically loops through them.
-- **Advanced options** let you stratify the analysis (e.g., run separate models per herd). Up to 10 strata are supported.
-- Each response (and each stratum, if used) gets its own tab with the model output and a **Download Results** button that saves a Word (`.docx`) report.
-- ANOVA modules also provide a **Download All Results** button to bundle every response/stratum into a single document.
-
-### 4️⃣ Visualize
-- Produces mean ± standard error plots that mirror the model structure (factors, responses, and strata).
-- Adjust subplot dimensions, grid rows, and columns to organise multiple responses or strata.
-- For correlation analyses, the visualization tab displays the full pairwise matrix and allows resizing.
-- Export the final figure as a **300 dpi PNG** ready for inclusion in clinical reports.
+- **Word reports (`.docx`)** for every model tab, capturing statistical tables, diagnostics, and stratified summaries.
+- **PNG figures** sized according to your chosen layout (300 dpi by default) for inclusion in reports or presentations.
+- Auto-generated filenames include the analysis type, response variable, and date stamp for easy archiving.
 
 ---
 
-## 📦 Exports and reporting
-
-- **Model reports**: Every analysis tab has download buttons that generate Word documents with ANOVA tables, post-hoc comparisons, model summaries, and diagnostics.
-- **Figures**: The visualization tab saves PNG images sized according to your layout settings (default 300 × 200 px per panel).
-- File names automatically include the date so you can archive runs by trial or cohort.
-
----
-
-## 🛠 Troubleshooting
+## 🛠 Troubleshooting & tips
 
 | Issue | What to check | Suggested fix |
 | --- | --- | --- |
-| Upload fails | File is not Excel or has hidden password protection | Save as `.xlsx` without protection and retry |
-| Columns missing | Header spelling differs between sheets or includes trailing spaces | Standardise headings before upload; use `janitor::clean_names()` style naming |
-| Filters remove all rows | Selected ranges or levels exclude every record | Reset filters or widen numeric bounds |
-| Model errors | Not enough observations per group or singular random-effects structure | Reduce model complexity, ensure each level has data |
-| Flat plots | Identical values across all animals or strata | Verify data entry and consider transforming the outcome |
+| Upload fails | File is not Excel or is password protected | Save as `.xlsx` without protection and retry |
+| Columns missing | Header spelling differs or trailing spaces exist | Normalise headers (e.g., `janitor::clean_names()`) |
+| Filters remove all rows | Filters exclude every record | Reset filters or widen numeric bounds |
+| Model errors | Groups have too few observations or random effects are singular | Simplify the model or collect more data per level |
+| Flat plots | Little variation in the selected outcome | Verify data entry or consider transformations |
+
+- Pair quantitative outputs with clinical notes to interpret biological relevance.
+- Confirm random-effect identifiers (e.g., `animal_id`) match the true grouping structure before running LMMs.
+- Save exported documents to your case management system for audit trails.
 
 ---
 
-## ✅ Best practices for veterinary teams
+## 🤝 Contributing
 
-- Pair quantitative outputs with **clinical notes** to interpret biological relevance.
-- Ensure each treatment group has sufficient sample size before running post-hoc tests.
-- When using mixed models, confirm the random effect (e.g., `animal_id`) reflects the actual grouping in your protocol.
-- Save exported DOCX and PNG files to your case management system to maintain a clear audit trail.
-- Collaborate with a statistician for complex designs (e.g., repeated measures with unequal spacing or non-normal outcomes).
+1. Fork the repository and create a feature branch.
+2. Update or add tests if you modify analysis logic.
+3. Open a pull request describing the change and attach screenshots when altering UI elements.
 
 ---
 
-## 💬 Need help?
+## 💬 Support
 
-- Reach out to the project maintainer with questions or feature requests.
-- The full R source code lives in this repository—feel free to review or adapt it for your clinic’s SOPs.
+Open an issue if you encounter bugs or would like to propose enhancements. For deployment questions, mention your target environment (e.g., Shiny Server, Posit Connect) so we can point you toward the relevant configuration notes.
 
 Thank you for using the **Animal Trial Analyzer** to support evidence-based animal health decisions!
