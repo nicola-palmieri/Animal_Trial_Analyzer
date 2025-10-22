@@ -8,7 +8,7 @@ library(skimr)
 # ---- Main computation wrapper ----
 compute_descriptive_summary <- function(data, group_var = NULL) {
   numeric_vars <- names(data)[sapply(data, is.numeric)]
-
+  
   group_data <- if (!is.null(group_var)) group_by(data, .data[[group_var]]) else data
   
   skim_out <- if (!is.null(group_var)) {
@@ -49,26 +49,12 @@ compute_descriptive_summary <- function(data, group_var = NULL) {
       .names = "shapiro_{.col}"
     ), .groups = "drop")
   
-  selected_cols <- numeric_vars
-  if (!is.null(group_var)) {
-    selected_cols <- unique(c(group_var, numeric_vars))
-  }
-
-  plot_data <- if (length(selected_cols) > 0) {
-    as.data.frame(data[, selected_cols, drop = FALSE])
-  } else {
-    NULL
-  }
-
   list(
     skim = skim_out,
     cv = cv_out,
     outliers = outlier_out,
     missing = missing_out,
-    shapiro = shapiro_out,
-    group_var = group_var,
-    numeric_vars = numeric_vars,
-    data_for_plots = plot_data
+    shapiro = shapiro_out
   )
 }
 
