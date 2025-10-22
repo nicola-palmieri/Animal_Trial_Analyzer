@@ -3,61 +3,81 @@
 # ===============================================================
 
 build_descriptive_plots <- function(summary_info) {
-  # summary_info is a list containing elements like skim, cv, outliers, shapiro, missing
   data <- summary_info()
-  
-  plots <- list()
-  
-  # Example 1 — CV% barplot
-  if (!is.null(data$cv)) {
-    cv_long <- data$cv |> tidyr::pivot_longer(
-      cols = -1,
-      names_to = "variable",
-      values_to = "cv"
+
+  tidy_metric <- function(df, prefix) {
+    if (is.null(df) || nrow(df) == 0) return(NULL)
+
+    metric_cols <- grep(paste0("^", prefix, "_"), names(df), value = TRUE)
+    if (length(metric_cols) == 0) return(NULL)
+
+    group_cols <- setdiff(names(df), metric_cols)
+    has_group <- length(group_cols) > 0
+    group_label <- if (has_group) paste(group_cols, collapse = " / ") else NULL
+
+    if (!has_group) {
+      df <- df |> dplyr::mutate(.group = "Overall")
+      group_cols <- ".group"
+    }
+
+    tidy <- df |>
+      tidyr::unite(".group", dplyr::all_of(group_cols), sep = " / ", remove = FALSE) |>
+      tidyr::pivot_longer(
+        cols = dplyr::all_of(metric_cols),
+        names_to = "variable",
+        values_to = "value"
+      ) |>
+      dplyr::mutate(
+        variable = gsub(paste0("^", prefix, "_"), "", .data$variable),
+        value = ifelse(is.finite(.data$value), .data$value, NA_real_),
+        .group = factor(.data$.group, levels = unique(.data$.group))
+      ) |>
+      tidyr::drop_na("value")
+
+    if (nrow(tidy) == 0) return(NULL)
+
+    list(
+      data = tidy,
+      has_group = has_group,
+      group_label = group_label
     )
-    cv_long$variable <- gsub("^cv_", "", cv_long$variable)
-    p_cv <- ggplot(cv_long, aes(x = variable, y = cv, fill = .data[[1]])) +
-      geom_col(position = position_dodge()) +
-      theme_minimal(base_size = 14) +
-      labs(y = "CV (%)", x = NULL, fill = names(data$cv)[1]) +
-      theme(axis.text.x = element_text(angle = 45, hjust = 1))
-    plots[["cv"]] <- p_cv
   }
-  
-  # Example 2 — Outlier counts
-  if (!is.null(data$outliers)) {
-    out_long <- data$outliers |> tidyr::pivot_longer(
-      cols = -1,
-      names_to = "variable",
-      values_to = "count"
-    )
-    out_long$variable <- gsub("^outliers_", "", out_long$variable)
-    p_out <- ggplot(out_long, aes(x = variable, y = count, fill = .data[[1]])) +
-      geom_col(position = position_dodge()) +
-      theme_minimal(base_size = 14) +
-      labs(y = "Outlier Count", x = NULL, fill = names(data$outliers)[1]) +
-      theme(axis.text.x = element_text(angle = 45, hjust = 1))
-    plots[["outliers"]] <- p_out
+
+  build_bar_plot <- function(info, y_label) {
+    if (is.null(info)) return(NULL)
+
+    df <- info$data
+    has_multiple_groups <- length(unique(df$.group)) > 1
+
+    p <- ggplot(df, aes(x = variable, y = value))
+
+    if (has_multiple_groups) {
+      legend_title <- if (!is.null(info$group_label)) info$group_label else "Group"
+      p <- p +
+        geom_col(aes(fill = .group), position = position_dodge(width = 0.75), width = 0.65) +
+        labs(fill = legend_title)
+    } else {
+      p <- p + geom_col(fill = "#2C7FB8", width = 0.65)
+    }
+
+    p +
+      theme_minimal(base_size = 13) +
+      labs(x = NULL, y = y_label) +
+      theme(
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        panel.grid.major.x = element_blank()
+      )
   }
-  
-  # Example 3 — Missingness
-  if (!is.null(data$missing)) {
-    miss_long <- data$missing |> tidyr::pivot_longer(
-      cols = -1,
-      names_to = "variable",
-      values_to = "missing"
-    )
-    miss_long$variable <- gsub("^missing_", "", miss_long$variable)
-    p_miss <- ggplot(miss_long, aes(x = variable, y = missing, fill = .data[[1]])) +
-      geom_col(position = position_dodge()) +
-      theme_minimal(base_size = 14) +
-      labs(y = "Missing (%)", x = NULL, fill = names(data$missing)[1]) +
-      theme(axis.text.x = element_text(angle = 45, hjust = 1))
-    plots[["missing"]] <- p_miss
-  }
-  
+
+  plots <- list(
+    cv = build_bar_plot(tidy_metric(data$cv, "cv"), "CV (%)"),
+    outliers = build_bar_plot(tidy_metric(data$outliers, "outliers"), "Outlier Count"),
+    missing = build_bar_plot(tidy_metric(data$missing, "missing"), "Missing (%)")
+  )
+
+  plots <- Filter(Negate(is.null), plots)
   if (length(plots) == 0) return(NULL)
-  
+
   patchwork::wrap_plots(plots, ncol = 1)
 }
 
