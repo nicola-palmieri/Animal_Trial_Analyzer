@@ -141,3 +141,21 @@ compute_layout <- function(n_items, rows_input, cols_input) {
   )
 }
 
+build_layout_controls_for_type <- function(ns, input, info, default_ui_value, data_for_pca = NULL) {
+  current_type <- if (!is.null(info$type)) info$type else "anova"
+
+  if (identical(current_type, "anova") || identical(current_type, "two_way_anova")) {
+    return(build_anova_layout_controls(ns, input, info, default_ui_value))
+  }
+
+  if (identical(current_type, "ggpairs")) {
+    return(build_ggpairs_layout_controls())
+  }
+
+  if (identical(current_type, "pca")) {
+    return(build_pca_layout_controls(ns, data_for_pca))
+  }
+
+  NULL
+}
+
