@@ -87,6 +87,7 @@ build_pca_layout_controls <- function(ns, data) {
   if (is.null(data)) return(NULL)
   
   cat_vars <- names(data)[sapply(data, function(x) is.factor(x) || is.character(x))]
+  all_vars <- names(data)
   
   tagList(
     h4("PCA Plot Controls"),
@@ -97,7 +98,9 @@ build_pca_layout_controls <- function(ns, data) {
       )
     } else {
       helpText("No categorical variables available for coloring or shaping.")
-    }
+    },
+    selectInput(ns("pca_label"), "Label points with:", choices = c("None", all_vars), selected = "None"),
+    sliderInput(ns("pca_label_size"), "Label size", min = 1, max = 5, step = 0.2, value = 2)
   )
 }
 
