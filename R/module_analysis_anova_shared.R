@@ -11,7 +11,7 @@ render_response_selector <- function(ns, df, input) {
   req(df())
   data <- df()
   num_cols <- names(data)[sapply(data, is.numeric)]
-  
+
   if (isTRUE(input$multi_resp)) {
     selectizeInput(
       ns("response"),
@@ -29,6 +29,29 @@ render_response_selector <- function(ns, df, input) {
       selected = if (length(num_cols) > 0) num_cols[1] else NULL
     )
   }
+}
+
+# ---------------------------------------------------------------
+# 1b️⃣ Shared stratification wiring for ANOVA modules
+# ---------------------------------------------------------------
+bind_anova_stratification_ui <- function(ns, output, df, input,
+                                         controls_id = "advanced_options",
+                                         order_ui_id = "strata_order_ui",
+                                         order_input_id = "strata_order",
+                                         order_label = NULL) {
+  output[[controls_id]] <- renderUI({
+    render_stratification_controls(ns, df, input)
+  })
+
+  output[[order_ui_id]] <- renderUI({
+    render_strata_order_input(
+      ns = ns,
+      data = df,
+      strat_var = input$stratify_var,
+      input_id = order_input_id,
+      order_label = order_label
+    )
+  })
 }
 
 # ---------------------------------------------------------------

@@ -32,10 +32,7 @@ one_way_anova_server <- function(id, filtered_data) {
     # -----------------------------------------------------------
     # Reactive data
     # -----------------------------------------------------------
-    df <- reactive({
-      req(filtered_data())
-      filtered_data()
-    })
+    df <- use_filtered_df(filtered_data)
     
     # -----------------------------------------------------------
     # Dynamic inputs
@@ -61,13 +58,7 @@ one_way_anova_server <- function(id, filtered_data) {
       render_response_inputs(ns, df(), input)
     })
     
-    output$advanced_options <- renderUI({
-      render_stratification_controls(ns, df, input)
-    })
-    
-    output$strata_order_ui <- renderUI({
-      render_strata_order_input(ns, df, input$stratify_var)
-    })
+    bind_anova_stratification_ui(ns, output, df, input)
     
     # -----------------------------------------------------------
     # Level order selection
