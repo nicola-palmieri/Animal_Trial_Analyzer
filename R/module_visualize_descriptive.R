@@ -98,15 +98,16 @@ visualize_descriptive_server <- function(id, descriptive_summary, filtered_data)
       plots <- plots_all()
       validate(need(!is.null(plots), "No plots available."))
       
+      metrics <- plots$metrics
       switch(
         input$plot_type,
         categorical = plots$factors,
         boxplots = plots$boxplots,
         histograms = plots$histograms,
-        cv = if (!is.null(plots$metrics)) plots$metrics[[1]] else NULL,
-        outliers = if (!is.null(plots$metrics)) plots$metrics[[2]] else NULL,
-        missing = if (!is.null(plots$metrics)) plots$metrics[[3]] else NULL,
-        shapiro = if (!is.null(plots$metrics)) plots$metrics[[4]] else NULL,
+        cv = if (!is.null(metrics)) metrics$cv else NULL,
+        outliers = if (!is.null(metrics)) metrics$outliers else NULL,
+        missing = if (!is.null(metrics)) metrics$missing else NULL,
+        shapiro = if (!is.null(metrics)) metrics$shapiro else NULL,
         NULL
       )
     })
