@@ -67,7 +67,6 @@ visualize_descriptive_server <- function(id, filtered_data, descriptive_summary)
     
     summary_info <- reactive({
       info <- descriptive_summary()
-      print(info)
       validate(need(!is.null(info), "Run descriptive summary first."))
       validate(need(!is.null(info$summary), "Summary not available."))
       info
@@ -86,10 +85,20 @@ visualize_descriptive_server <- function(id, filtered_data, descriptive_summary)
     # 2️⃣ Build all plots using the shared helper
     # ------------------------------------------------------------
     plots_all <- reactive({
-      # Call summary() if it's a reactive
-      summary_data <- summary_info()$summary
+      info <- summary_info()
+      
+      summary_data <- info$summary
       if (is.reactive(summary_data)) summary_data <- summary_data()
-      build_descriptive_plots(summary_data, df())
+      
+      selected_vars <- info$selected_vars
+      if (is.reactive(selected_vars)) selected_vars <- selected_vars()
+      
+      data_subset <- df()
+      if (!is.null(selected_vars)) {
+        data_subset <- data_subset[, intersect(names(data_subset), selected_vars), drop = FALSE]
+      }
+      
+      build_descriptive_plots(summary_data, data_subset)
     })
     
     # ------------------------------------------------------------
