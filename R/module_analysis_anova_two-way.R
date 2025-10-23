@@ -29,7 +29,7 @@ two_way_anova_server <- function(id, filtered_data) {
     # -----------------------------------------------------------
     # Reactive data
     # -----------------------------------------------------------
-    df <- use_filtered_df(filtered_data)
+    df <- filtered_data()
     
     # -----------------------------------------------------------
     # Dynamic inputs
