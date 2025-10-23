@@ -35,7 +35,7 @@ ui <- navbarPage(
   # ---- Custom CSS (copied from website) ----
   header = tags$head(
     tags$style(HTML("
-      .container-fluid { max-width: 1600px; margin: auto; }
+      .container-fluid { max-width: 100%; margin: auto; }
       .hero {
         background: linear-gradient(135deg, #f8f9fa 0%, #e9f5ff 100%);
         border-radius: 16px; padding: 20px 24px;
