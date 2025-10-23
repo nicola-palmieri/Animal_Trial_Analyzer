@@ -2,6 +2,77 @@
 # 🧠 Animal Trial Analyzer — Shared ANOVA Module Helpers
 # ===============================================================
 
+build_anova_layout_controls <- function(ns, input, info, default_ui_value) {
+  has_strata <- !is.null(info$strata) && !is.null(info$strata$var)
+  n_responses <- if (!is.null(info$responses)) length(info$responses) else 0
+  
+  strata_inputs <- if (has_strata) {
+    tagList(
+      h5("Across strata:"),
+      fluidRow(
+        column(
+          width = 6,
+          numericInput(
+            ns("strata_rows"),
+            "Grid rows",
+            value = isolate(default_ui_value(input$strata_rows)),
+            min = 0,
+            step = 1
+          )
+        ),
+        column(
+          width = 6,
+          numericInput(
+            ns("strata_cols"),
+            "Grid columns",
+            value = isolate(default_ui_value(input$strata_cols)),
+            min = 0,
+            step = 1
+          )
+        )
+      )
+    )
+  } else {
+    NULL
+  }
+  
+  response_inputs <- if (!is.null(n_responses) && n_responses > 1) {
+    tagList(
+      h5("Across responses:"),
+      fluidRow(
+        column(
+          width = 6,
+          numericInput(
+            ns("resp_rows"),
+            "Grid rows",
+            value = isolate(default_ui_value(input$resp_rows)),
+            min = 0,
+            step = 1
+          )
+        ),
+        column(
+          width = 6,
+          numericInput(
+            ns("resp_cols"),
+            "Grid columns",
+            value = isolate(default_ui_value(input$resp_cols)),
+            min = 0,
+            step = 1
+          )
+        )
+      )
+    )
+  } else {
+    NULL
+  }
+  
+  tagList(
+    h4("Layout Controls"),
+    strata_inputs,
+    response_inputs
+  )
+}
+
 # ---------------------------------------------------------------
 # Model computation
 # ---------------------------------------------------------------

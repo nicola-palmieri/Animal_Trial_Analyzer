@@ -53,7 +53,7 @@ visualize_descriptive_ui <- function(id) {
 }
 
 
-visualize_descriptive_server <- function(id, descriptive_summary, filtered_data) {
+visualize_descriptive_server <- function(id, filtered_data, descriptive_summary) {
   moduleServer(id, function(input, output, session) {
     
     # ------------------------------------------------------------
@@ -67,6 +67,7 @@ visualize_descriptive_server <- function(id, descriptive_summary, filtered_data)
     
     summary_info <- reactive({
       info <- descriptive_summary()
+      print(info)
       validate(need(!is.null(info), "Run descriptive summary first."))
       validate(need(!is.null(info$summary), "Summary not available."))
       info
