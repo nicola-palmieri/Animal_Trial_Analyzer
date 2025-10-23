@@ -33,7 +33,7 @@ visualize_server <- function(id, filtered_data, model_fit) {
       } else if (type == "ggpairs") {
         visualize_ggpairs_ui(ns("ggpairs"))
       } else if (type == "pca") {
-        visualize_pca_ui(ns("pca")) 
+        visualize_pca_ui(ns("pca"), filtered_data())
       } else {
         div("Visualization not yet implemented for this analysis type.")
       }

@@ -1,13 +1,35 @@
 # ===============================================================
-# 🧪 Visualization Module — PCA (Biplot)
+# Visualization Module - PCA (Biplot)
 # ===============================================================
 
-visualize_pca_ui <- function(id) {
+# Helper to detect categorical columns ----------------------------------------
+.is_categorical <- function(x) {
+  is.factor(x) || is.character(x) || is.logical(x)
+}
+
+.pca_aesthetic_choices <- function(data) {
+  if (missing(data) || is.null(data) || !is.data.frame(data) || ncol(data) == 0) {
+    return(c("None" = "None"))
+  }
+
+  keep <- vapply(data, .is_categorical, logical(1))
+  cat_cols <- names(data)[keep]
+
+  if (length(cat_cols) == 0) {
+    return(c("None" = "None"))
+  }
+
+  c("None" = "None", stats::setNames(cat_cols, cat_cols))
+}
+
+visualize_pca_ui <- function(id, filtered_data = NULL) {
   ns <- NS(id)
+  choices <- .pca_aesthetic_choices(filtered_data)
+
   sidebarLayout(
     sidebarPanel(
       width = 4,
-      h4("Step 4 — Principal Component Analysis (PCA)"),
+      h4("Step 4 - Principal Component Analysis (PCA)"),
       p("Visualize multivariate structure using a PCA biplot."),
       hr(),
       selectInput(
@@ -20,19 +42,19 @@ visualize_pca_ui <- function(id) {
       selectInput(
         ns("pca_color"),
         label = "Color points by:",
-        choices = "None",
+        choices = choices,
         selected = "None"
       ),
       selectInput(
         ns("pca_shape"),
         label = "Shape points by:",
-        choices = "None",
+        choices = choices,
         selected = "None"
       ),
       selectInput(
         ns("pca_label"),
         label = "Label points by:",
-        choices = "None",
+        choices = choices,
         selected = "None"
       ),
       numericInput(
@@ -79,106 +101,92 @@ visualize_pca_ui <- function(id) {
   )
 }
 
-
 visualize_pca_server <- function(id, filtered_data, model_fit) {
   moduleServer(id, function(input, output, session) {
-    ns <- session$ns
-    
-    # -- Reactives ------------------------------------------------
+    # -- Reactives ------------------------------------------------------------
     df <- reactive({
-      d <- filtered_data()
-      validate(need(!is.null(d) && is.data.frame(d), "No data available."))
-      d
+      data <- filtered_data()
+      validate(need(!is.null(data) && is.data.frame(data), "No data available."))
+      data
     })
-    
-    info <- reactive({
-      mi <- model_fit()
-      validate(need(!is.null(mi) && identical(mi$type, "pca"), "Run PCA first."))
-      validate(need(!is.null(mi$model), "PCA model missing."))
-      mi
+
+    model_info <- reactive({
+      info <- model_fit()
+      validate(need(!is.null(info) && identical(info$type, "pca"), "Run PCA first."))
+      validate(need(!is.null(info$model), "PCA model missing."))
+      info
     })
-    
-    # -- Populate controls when data changes ----------------------
-    observeEvent(df(), {
-      d <- df()
-      
-      all_cols <- names(d)
-      print(all_cols)
-      # Build choices; keep "None" first
-      choices <- c("None", all_cols)
-      
-      # Update inputs
-      updateSelectInput(session, "pca_color", choices = choices)
-      updateSelectInput(session, "pca_shape", choices = choices)
-      updateSelectInput(session, "pca_label", choices = choices)
-      
-      # If current selections are invalid, reset to "None"
-      if (is.null(input$pca_color) || !(input$pca_color %in% choices)) {
-        updateSelectInput(session, "pca_color", selected = "None")
+
+    categorical_vars <- reactive({
+      data <- df()
+      keep <- vapply(data, .is_categorical, logical(1))
+      names(data)[keep]
+    })
+
+    validate_choice <- function(value, pool) {
+      if (is.null(value) || identical(value, "None") || !nzchar(value)) {
+        return(NULL)
       }
-      if (is.null(input$pca_shape) || !(input$pca_shape %in% choices)) {
-        updateSelectInput(session, "pca_shape", selected = "None")
+      if (length(pool) == 0 || !(value %in% pool)) {
+        return(NULL)
       }
-      if (is.null(input$pca_label) || !(input$pca_label %in% choices)) {
-        updateSelectInput(session, "pca_label", selected = "None")
-      }
-    }, ignoreInit = FALSE)
-    
-    # -- Size reactive --------------------------------------------
+      value
+    }
+
     plot_size <- reactive({
-      w <- suppressWarnings(as.numeric(input$plot_width));  if (is.na(w) || w <= 0) w <- 800
-      h <- suppressWarnings(as.numeric(input$plot_height)); if (is.na(h) || h <= 0) h <- 600
-      list(w = w, h = h)
-    })
-    
-    # -- Build current plot safely --------------------------------
-    build_current_plot <- reactive({
-      mi <- info()
-      d  <- df()
-      
-      # Selected aesthetics (validate existence)
-      col_var <- if (!is.null(input$pca_color) && input$pca_color != "None" && input$pca_color %in% names(d)) input$pca_color else NULL
-      shp_var <- if (!is.null(input$pca_shape) && input$pca_shape != "None" && input$pca_shape %in% names(d)) input$pca_shape else NULL
-      lbl_var <- if (!is.null(input$pca_label) && input$pca_label != "None" && input$pca_label %in% names(d)) input$pca_label else NULL
-      lbl_sz  <- if (!is.null(input$pca_label_size) && !is.na(input$pca_label_size)) input$pca_label_size else 2
-      
-      validate(need(!is.null(mi$model$x) && nrow(mi$model$x) >= 2, "PCA scores not available."))
-      
-      # Only one viz type for now
-      validate(need(!is.null(input$plot_type) && input$plot_type == "biplot", "Unsupported plot type."))
-      
-      build_pca_biplot(
-        pca_obj   = mi$model,
-        data      = d,                # full filtered dataset so color/shape/label work
-        color_var = col_var,
-        shape_var = shp_var,
-        label_var = lbl_var,
-        label_size = lbl_sz
+      width <- suppressWarnings(as.numeric(input$plot_width))
+      height <- suppressWarnings(as.numeric(input$plot_height))
+
+      list(
+        w = ifelse(is.na(width) || width <= 0, 800, width),
+        h = ifelse(is.na(height) || height <= 0, 600, height)
       )
     })
-    
-    # -- Render plot ----------------------------------------------
+
+    build_current_plot <- reactive({
+      info <- model_info()
+      data <- df()
+      categorical <- categorical_vars()
+
+      color_var <- validate_choice(input$pca_color, categorical)
+      shape_var <- validate_choice(input$pca_shape, categorical)
+      label_var <- validate_choice(input$pca_label, categorical)
+      label_size <- ifelse(is.null(input$pca_label_size) || is.na(input$pca_label_size), 2, input$pca_label_size)
+
+      validate(need(!is.null(info$model$x) && nrow(info$model$x) >= 2, "PCA scores not available."))
+      validate(need(!is.null(input$plot_type) && input$plot_type == "biplot", "Unsupported plot type."))
+
+      build_pca_biplot(
+        pca_obj = info$model,
+        data = data,
+        color_var = color_var,
+        shape_var = shape_var,
+        label_var = label_var,
+        label_size = label_size
+      )
+    })
+
     output$plot <- renderPlot({
       build_current_plot()
     },
-    width  = function() plot_size()$w,
+    width = function() plot_size()$w,
     height = function() plot_size()$h,
-    res    = 96)
-    
-    # -- Download -------------------------------------------------
+    res = 96)
+
     output$download_plot <- downloadHandler(
       filename = function() paste0("pca_biplot_", Sys.Date(), ".png"),
-      content  = function(file) {
-        g <- build_current_plot()
-        s <- plot_size()
+      content = function(file) {
+        plot_obj <- build_current_plot()
+        size <- plot_size()
+
         ggsave(
           filename = file,
-          plot = g,
+          plot = plot_obj,
           device = "png",
           dpi = 300,
-          width  = s$w / 96,
-          height = s$h / 96,
-          units  = "in",
+          width = size$w / 96,
+          height = size$h / 96,
+          units = "in",
           limitsize = FALSE
         )
       }
