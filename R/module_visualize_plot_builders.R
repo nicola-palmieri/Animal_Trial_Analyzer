@@ -3,165 +3,173 @@
 # ===============================================================
 
 build_descriptive_plots <- function(summary_info, original_data = NULL) {
-  data <- summary_info()
-  
-  # ------------------------------------------------------------
-  # 1️⃣ Helper: Tidy metric tables (CV, outliers, missing, shapiro)
-  # ------------------------------------------------------------
-  tidy_metric <- function(df, prefix) {
-    if (is.null(df) || nrow(df) == 0) return(NULL)
-    metric_cols <- grep(paste0("^", prefix, "_"), names(df), value = TRUE)
-    if (length(metric_cols) == 0) return(NULL)
-    group_cols <- setdiff(names(df), metric_cols)
-    has_group <- length(group_cols) > 0
-    group_label <- if (has_group) paste(group_cols, collapse = " / ") else NULL
-    if (!has_group) {
-      df <- df |> dplyr::mutate(.group = "Overall")
-      group_cols <- ".group"
-    }
-    tidy <- df |>
-      tidyr::unite(".group", dplyr::all_of(group_cols), sep = " / ", remove = FALSE) |>
-      tidyr::pivot_longer(
-        cols = dplyr::all_of(metric_cols),
-        names_to = "variable",
-        values_to = "value"
-      ) |>
-      dplyr::mutate(
-        variable = gsub(paste0("^", prefix, "_"), "", .data$variable),
-        value = ifelse(is.finite(.data$value), .data$value, NA_real_),
-        .group = factor(.data$.group, levels = unique(.data$.group))
-      ) |>
-      tidyr::drop_na("value")
-    if (nrow(tidy) == 0) return(NULL)
-    list(data = tidy, has_group = has_group, group_label = group_label)
-  }
-  
-  # ------------------------------------------------------------
-  # 2️⃣ Helper: Generic barplot for summary metrics
-  # ------------------------------------------------------------
-  build_bar_plot <- function(info, y_label) {
-    if (is.null(info)) return(NULL)
-    df <- info$data
-    has_multiple_groups <- length(unique(df$.group)) > 1
-    p <- ggplot(df, aes(x = variable, y = value))
-    if (has_multiple_groups) {
-      legend_title <- if (!is.null(info$group_label)) info$group_label else "Group"
-      p <- p +
-        geom_col(aes(fill = .group), position = position_dodge(width = 0.75), width = 0.65) +
-        labs(fill = legend_title)
-    } else {
-      p <- p + geom_col(fill = "#2C7FB8", width = 0.65)
-    }
-    p +
-      theme_minimal(base_size = 13) +
-      labs(x = NULL, y = y_label) +
-      theme(axis.text.x = element_text(angle = 45, hjust = 1))
-  }
-  
-  # ------------------------------------------------------------
-  # 3️⃣ Add: Barplots for categorical variables
-  # ------------------------------------------------------------
-  build_factor_barplots <- function(df) {
-    factor_vars <- names(df)[sapply(df, function(x) is.character(x) || is.factor(x))]
-    if (length(factor_vars) == 0) return(NULL)
-    plots <- lapply(factor_vars, function(v) {
-      ggplot(df, aes(x = .data[[v]])) +
-        geom_bar(fill = "#2C7FB8", width = 0.7) +
-        theme_minimal(base_size = 13) +
-        labs(title = v, x = NULL, y = "Count") +
-        theme(axis.text.x = element_text(angle = 45, hjust = 1))
-    })
-    patchwork::wrap_plots(plots, ncol = 2)
-  }
-  
-  # ------------------------------------------------------------
-  # 4️⃣ Add: Box + Jitter plots for numeric variables
-  # ------------------------------------------------------------
-  build_jitter_boxplots <- function(df) {
-    num_vars <- names(df)[sapply(df, is.numeric)]
-    if (length(num_vars) == 0) return(NULL)
-    plots <- lapply(num_vars, function(v) {
-      ggplot(df, aes(x = 1, y = .data[[v]])) +
-        geom_boxplot(outlier.shape = NA, fill = "#A6CEE3") +
-        geom_jitter(width = 0.1, alpha = 0.5, color = "#1F78B4") +
-        theme_minimal(base_size = 13) +
-        labs(title = v, x = NULL, y = "Value") +
-        theme(axis.text.x = element_blank(),
-              axis.ticks.x = element_blank())
-    })
-    patchwork::wrap_plots(plots, ncol = 2)
-  }
-  
-  # ------------------------------------------------------------
-  # 5️⃣ Add: Histograms for numeric variables
-  # ------------------------------------------------------------
-  build_histograms <- function(df) {
-    num_vars <- names(df)[sapply(df, is.numeric)]
-    if (length(num_vars) == 0) return(NULL)
-    plots <- lapply(num_vars, function(v) {
-      ggplot(df, aes(x = .data[[v]])) +
-        geom_histogram(fill = "#FDBF6F", color = "white", bins = 20) +
-        theme_minimal(base_size = 13) +
-        labs(title = paste(v, "Distribution"), x = NULL, y = "Frequency")
-    })
-    patchwork::wrap_plots(plots, ncol = 2)
-  }
-  
-  # ------------------------------------------------------------
-  # 6️⃣ Combine all subplots together
-  # ------------------------------------------------------------
-  metric_plots <- list(
-    cv = build_bar_plot(tidy_metric(data$cv, "cv"), "CV (%)"),
-    outliers = build_bar_plot(tidy_metric(data$outliers, "outliers"), "Outlier Count"),
-    missing = build_bar_plot(tidy_metric(data$missing, "missing"), "Missing (%)"),
-    shapiro = build_bar_plot(tidy_metric(data$shapiro, "shapiro"), "Shapiro p-value")
-  )
-  
-  metric_plots <- Filter(Negate(is.null), metric_plots)
-  
-  descriptive_plots <- list()
+  summary_data <- resolve_summary_input(summary_info)
 
+  plots <- list()
+
+  metric_plots <- build_descriptive_metric_plots(summary_data)
   if (length(metric_plots) > 0) {
-    descriptive_plots$metrics <-
-      patchwork::wrap_plots(metric_plots, ncol = 1) +
-      patchwork::plot_annotation(
-        title = "Summary Metrics",
-        theme = theme(plot.title = element_text(size = 16, face = "bold"))
-      )
+    plots$metrics <- metric_plots
   }
 
   if (!is.null(original_data)) {
-    factor_plot <- build_factor_barplots(original_data)
+    factor_plot <- build_descriptive_categorical_plot(original_data)
     if (!is.null(factor_plot)) {
-      descriptive_plots$factors <- factor_plot +
-        patchwork::plot_annotation(
-          title = "Categorical Distributions",
-          theme = theme(plot.title = element_text(size = 16, face = "bold"))
-        )
+      plots$factors <- factor_plot
     }
 
-    box_plot <- build_jitter_boxplots(original_data)
+    box_plot <- build_descriptive_boxplot(original_data)
     if (!is.null(box_plot)) {
-      descriptive_plots$boxplots <- box_plot +
-        patchwork::plot_annotation(
-          title = "Boxplots",
-          theme = theme(plot.title = element_text(size = 16, face = "bold"))
-        )
+      plots$boxplots <- box_plot
     }
 
-    hist_plot <- build_histograms(original_data)
+    hist_plot <- build_descriptive_histogram(original_data)
     if (!is.null(hist_plot)) {
-      descriptive_plots$histograms <- hist_plot +
-        patchwork::plot_annotation(
-          title = "Histograms",
-          theme = theme(plot.title = element_text(size = 16, face = "bold"))
-        )
+      plots$histograms <- hist_plot
     }
   }
 
-  if (length(descriptive_plots) == 0) return(NULL)
+  if (length(plots) == 0) return(NULL)
 
-  descriptive_plots
+  plots
+}
+
+
+resolve_summary_input <- function(summary_info) {
+  if (is.null(summary_info)) return(NULL)
+  if (is.function(summary_info)) {
+    return(summary_info())
+  }
+  summary_info
+}
+
+
+build_descriptive_metric_plots <- function(summary_data) {
+  if (is.null(summary_data)) return(list())
+
+  metric_plots <- list(
+    cv = build_descriptive_metric_panel(summary_data$cv, "cv", "CV (%)"),
+    outliers = build_descriptive_metric_panel(summary_data$outliers, "outliers", "Outlier Count"),
+    missing = build_descriptive_metric_panel(summary_data$missing, "missing", "Missing (%)"),
+    shapiro = build_descriptive_metric_panel(summary_data$shapiro, "shapiro", "Shapiro p-value")
+  )
+
+  Filter(Negate(is.null), metric_plots)
+}
+
+
+build_descriptive_metric_panel <- function(df, prefix, y_label) {
+  tidy <- tidy_descriptive_metric(df, prefix)
+  if (is.null(tidy)) return(NULL)
+
+  plot <- build_descriptive_metric_bar_plot(tidy, y_label)
+  plot + ggtitle(paste("Summary Metric:", y_label))
+}
+
+
+tidy_descriptive_metric <- function(df, prefix) {
+  if (is.null(df) || nrow(df) == 0) return(NULL)
+  metric_cols <- grep(paste0("^", prefix, "_"), names(df), value = TRUE)
+  if (length(metric_cols) == 0) return(NULL)
+  group_cols <- setdiff(names(df), metric_cols)
+  has_group <- length(group_cols) > 0
+  group_label <- if (has_group) paste(group_cols, collapse = " / ") else NULL
+  if (!has_group) {
+    df <- df |> dplyr::mutate(.group = "Overall")
+    group_cols <- ".group"
+  }
+  tidy <- df |>
+    tidyr::unite(".group", dplyr::all_of(group_cols), sep = " / ", remove = FALSE) |>
+    tidyr::pivot_longer(
+      cols = dplyr::all_of(metric_cols),
+      names_to = "variable",
+      values_to = "value"
+    ) |>
+    dplyr::mutate(
+      variable = gsub(paste0("^", prefix, "_"), "", .data$variable),
+      value = ifelse(is.finite(.data$value), .data$value, NA_real_),
+      .group = factor(.data$.group, levels = unique(.data$.group))
+    ) |>
+    tidyr::drop_na("value")
+  if (nrow(tidy) == 0) return(NULL)
+  list(data = tidy, has_group = has_group, group_label = group_label)
+}
+
+
+build_descriptive_metric_bar_plot <- function(info, y_label) {
+  if (is.null(info)) return(NULL)
+  df <- info$data
+  has_multiple_groups <- length(unique(df$.group)) > 1
+  p <- ggplot(df, aes(x = variable, y = value))
+  if (has_multiple_groups) {
+    legend_title <- if (!is.null(info$group_label)) info$group_label else "Group"
+    p <- p +
+      geom_col(aes(fill = .group), position = position_dodge(width = 0.75), width = 0.65) +
+      labs(fill = legend_title)
+  } else {
+    p <- p + geom_col(fill = "#2C7FB8", width = 0.65)
+  }
+  p +
+    theme_minimal(base_size = 13) +
+    labs(x = NULL, y = y_label) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+}
+
+
+build_descriptive_categorical_plot <- function(df) {
+  factor_vars <- names(df)[sapply(df, function(x) is.character(x) || is.factor(x))]
+  if (length(factor_vars) == 0) return(NULL)
+  plots <- lapply(factor_vars, function(v) {
+    ggplot(df, aes(x = .data[[v]])) +
+      geom_bar(fill = "#2C7FB8", width = 0.7) +
+      theme_minimal(base_size = 13) +
+      labs(title = v, x = NULL, y = "Count") +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  })
+  patchwork::wrap_plots(plots, ncol = 2) +
+    patchwork::plot_annotation(
+      title = "Categorical Distributions",
+      theme = theme(plot.title = element_text(size = 16, face = "bold"))
+    )
+}
+
+
+build_descriptive_boxplot <- function(df) {
+  num_vars <- names(df)[sapply(df, is.numeric)]
+  if (length(num_vars) == 0) return(NULL)
+  plots <- lapply(num_vars, function(v) {
+    ggplot(df, aes(x = 1, y = .data[[v]])) +
+      geom_boxplot(outlier.shape = NA, fill = "#A6CEE3") +
+      geom_jitter(width = 0.1, alpha = 0.5, color = "#1F78B4") +
+      theme_minimal(base_size = 13) +
+      labs(title = v, x = NULL, y = "Value") +
+      theme(
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank()
+      )
+  })
+  patchwork::wrap_plots(plots, ncol = 2) +
+    patchwork::plot_annotation(
+      title = "Boxplots",
+      theme = theme(plot.title = element_text(size = 16, face = "bold"))
+    )
+}
+
+
+build_descriptive_histogram <- function(df) {
+  num_vars <- names(df)[sapply(df, is.numeric)]
+  if (length(num_vars) == 0) return(NULL)
+  plots <- lapply(num_vars, function(v) {
+    ggplot(df, aes(x = .data[[v]])) +
+      geom_histogram(fill = "#FDBF6F", color = "white", bins = 20) +
+      theme_minimal(base_size = 13) +
+      labs(title = paste(v, "Distribution"), x = NULL, y = "Frequency")
+  })
+  patchwork::wrap_plots(plots, ncol = 2) +
+    patchwork::plot_annotation(
+      title = "Histograms",
+      theme = theme(plot.title = element_text(size = 16, face = "bold"))
+    )
 }
 
 
