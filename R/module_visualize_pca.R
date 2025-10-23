@@ -86,17 +86,30 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
     
     df <- reactive(filtered_data())
     model_info <- reactive(model_fit())
-    
-    # --- Dynamically populate aesthetics dropdowns ---
-    observeEvent(df(), {
+
+    # --- Determine the most complete dataset available for aesthetics ---
+    available_data <- reactive({
       data <- df()
+
+      info <- model_info()
+      if (!is.null(info) && is.list(info) && !is.null(info$data) && is.data.frame(info$data)) {
+        data <- info$data
+      }
+
+      if (!is.data.frame(data)) {
+        return(NULL)
+      }
+
+      data
+    })
+
+    # --- Dynamically populate aesthetics dropdowns ---
+    observeEvent(available_data(), {
+      data <- available_data()
       req(data)
-      
-      # only continue if it's actually a data.frame
-      if (!is.data.frame(data)) return()
-      
+
       cols <- names(data)
-      
+
       # make sure we have at least one column
       if (length(cols) == 0) {
         updateSelectInput(session, "pca_color", choices = "None", selected = "None")
@@ -104,12 +117,29 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
         updateSelectInput(session, "pca_label", choices = "None", selected = "None")
         return()
       }
-      
-      # ✅ populate all three aesthetic controls
-      updateSelectInput(session, "pca_color", choices = c("None", cols))
-      updateSelectInput(session, "pca_shape", choices = c("None", cols))
-      updateSelectInput(session, "pca_label", choices = c("None", cols))
-    })
+
+      # Group categorical columns for color/shape controls
+      cat_cols <- cols[vapply(data, function(x) is.factor(x) || is.character(x) || is.logical(x), logical(1))]
+      if (length(cat_cols) == 0) {
+        cat_choices <- "None"
+      } else {
+        cat_choices <- c("None", cat_cols)
+      }
+
+      current_color <- isolate(input$pca_color)
+      if (is.null(current_color) || !(current_color %in% cat_choices)) current_color <- "None"
+
+      current_shape <- isolate(input$pca_shape)
+      if (is.null(current_shape) || !(current_shape %in% cat_choices)) current_shape <- "None"
+
+      label_choices <- c("None", cols)
+      current_label <- isolate(input$pca_label)
+      if (is.null(current_label) || !(current_label %in% label_choices)) current_label <- "None"
+
+      updateSelectInput(session, "pca_color", choices = cat_choices, selected = current_color)
+      updateSelectInput(session, "pca_shape", choices = cat_choices, selected = current_shape)
+      updateSelectInput(session, "pca_label", choices = label_choices, selected = current_label)
+    }, ignoreNULL = TRUE)
     
     # --- Reactive plot size ---
     plot_size <- reactive({
@@ -121,10 +151,10 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
       info <- model_info()
       if (is.null(info) || info$type != "pca") return(NULL)
       validate(need(!is.null(info$model), "Run PCA first."))
-      validate(need(!is.null(df()), "No dataset available for PCA visualization."))
-      
+      data <- available_data()
+      validate(need(!is.null(data), "No dataset available for PCA visualization."))
+
       pca_obj <- info$model
-      data <- df()
       
       color_var <- if (input$pca_color != "None") input$pca_color else NULL
       shape_var <- if (input$pca_shape != "None") input$pca_shape else NULL
@@ -158,9 +188,10 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
         info <- model_info()
         req(info)
         validate(need(!is.null(info$model), "Run PCA first."))
-        
+
         pca_obj <- info$model
-        data <- df()
+        data <- available_data()
+        validate(need(!is.null(data), "No dataset available for PCA visualization."))
         
         color_var <- if (input$pca_color != "None") input$pca_color else NULL
         shape_var <- if (input$pca_shape != "None") input$pca_shape else NULL
