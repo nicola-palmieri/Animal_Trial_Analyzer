@@ -2,14 +2,16 @@
 # 🔧 Shared helpers for LM/LMM (UI + server utilities)
 # ===============================================================
 
-# --- Type detection (robust for Excel imports) ---
+# ---------------------------------------------------------------
+# UI setup
+# ---------------------------------------------------------------
+
 reg_detect_types <- function(df) {
   num_vars <- names(df)[sapply(df, is.numeric)]
   fac_vars <- names(df)[sapply(df, function(x) is.factor(x) || is.character(x))]
   list(num = num_vars, fac = fac_vars)
 }
 
-# --- Variable selectors UI (optionally expose a random effect) ---
 reg_variable_selectors_ui <- function(ns, types, allow_random = FALSE) {
   out <- list(
     selectInput(ns("dep"), "Response variable (numeric):", choices = types$num),
@@ -24,7 +26,6 @@ reg_variable_selectors_ui <- function(ns, types, allow_random = FALSE) {
   do.call(tagList, out)
 }
 
-# --- 2-way interaction checkbox list (categorical × categorical only) ---
 reg_interactions_ui <- function(ns, fixed, fac_vars) {
   if (is.null(fixed) || length(fixed) < 2) return(NULL)
   cats_only <- intersect(fixed, fac_vars)
@@ -39,7 +40,10 @@ reg_interactions_ui <- function(ns, fixed, fac_vars) {
   )
 }
 
-# --- Compose RHS terms (fixed + covar + interactions + optional random) ---
+# ---------------------------------------------------------------
+# Formula construction
+# ---------------------------------------------------------------
+
 reg_compose_rhs <- function(fixed, covar, interactions, random = NULL, engine = c("lm","lmm")) {
   engine <- match.arg(engine)
   rhs <- character(0)
@@ -52,7 +56,6 @@ reg_compose_rhs <- function(fixed, covar, interactions, random = NULL, engine = 
   rhs
 }
 
-# --- Formula preview UI ---
 reg_formula_preview_ui <- function(ns, dep, rhs) {
   if (is.null(dep) || !nzchar(dep)) return(NULL)
   form_txt <- if (length(rhs) == 0) paste(dep, "~ 1") else paste(dep, "~", paste(rhs, collapse = " + "))
@@ -62,7 +65,10 @@ reg_formula_preview_ui <- function(ns, dep, rhs) {
   )
 }
 
-# --- Fit model (LM vs LMM) ---
+# ---------------------------------------------------------------
+# Model computation
+# ---------------------------------------------------------------
+
 reg_fit_model <- function(dep, rhs, data, engine = c("lm","lmm")) {
   engine <- match.arg(engine)
   form <- as.formula(if (length(rhs) == 0) paste(dep, "~ 1") else paste(dep, "~", paste(rhs, collapse = " + ")))
@@ -74,7 +80,10 @@ reg_fit_model <- function(dep, rhs, data, engine = c("lm","lmm")) {
   }
 }
 
-# --- LM summary output ---
+# ---------------------------------------------------------------
+# Output composition
+# ---------------------------------------------------------------
+
 reg_display_lm_summary <- function(m) {
   aout <- capture.output(car::Anova(m, type = 3))
   signif_idx <- grep("^Signif\\. codes", aout)
@@ -94,7 +103,6 @@ reg_display_lm_summary <- function(m) {
   cat(paste(sout, collapse = "\n"))
 }
 
-# --- LMM summary output ---
 reg_display_lmm_summary <- function(m) {
   aout <- capture.output(anova(m, type = 3))
   cat(paste(aout, collapse = "\n"), "\n\n")
@@ -118,16 +126,11 @@ reg_display_lmm_summary <- function(m) {
 }
 
 # ===============================================================
-# 🧾 Publication-ready DOCX Export for LM and LMM
+# Results export
 # ===============================================================
 
 write_lm_docx <- function(model, file) {
-  library(flextable)
-  library(officer)
-  library(dplyr)
-  library(car)
-  library(lme4)
-
+  
   # Determine model type
   is_lmm <- inherits(model, "merMod")
   dep_var <- all.vars(formula(model))[1]

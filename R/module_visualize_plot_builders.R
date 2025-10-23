@@ -2,10 +2,6 @@
 # 🎨 Visualization Plot Builders
 # ===============================================================
 
-# ===============================================================
-# 🧩 Descriptive Plots Builder — Extended
-# ===============================================================
-
 build_descriptive_plots <- function(summary_info, original_data = NULL) {
   data <- summary_info()
   
@@ -253,7 +249,7 @@ build_anova_plot_info <- function(data, info, effective_input) {
         build_plot(stratum_plots[[stratum_name]], stratum_name, y_limits)
       })
 
-      layout <- compute_layout(
+      layout <- compute_grid_layout(
         length(strata_plot_list),
         effective_input("strata_rows"),
         effective_input("strata_cols")
@@ -300,7 +296,7 @@ build_anova_plot_info <- function(data, info, effective_input) {
     return(NULL)
   }
 
-  resp_layout <- compute_layout(
+  resp_layout <- compute_grid_layout(
     length(response_plots),
     effective_input("resp_rows"),
     effective_input("resp_cols")
@@ -418,3 +414,47 @@ build_ggpairs_plot <- function(data) {
       axis.text = element_text(color = "black")
     )
 }
+
+# ---------------------------------------------------------------
+# Low-level utilities
+# ---------------------------------------------------------------
+
+compute_grid_layout <- function(n_items, rows_input, cols_input) {
+  # Safely handle nulls
+  if (is.null(n_items) || length(n_items) == 0 || is.na(n_items) || n_items <= 0) {
+    return(list(nrow = 1, ncol = 1))
+  }
+  
+  # Replace NULL or NA inputs with 0
+  if (is.null(rows_input) || is.na(rows_input)) rows_input <- 0
+  if (is.null(cols_input) || is.na(cols_input)) cols_input <- 0
+  
+  n_row_input <- suppressWarnings(as.numeric(rows_input))
+  n_col_input <- suppressWarnings(as.numeric(cols_input))
+  
+  # Handle invalid inputs
+  if (is.na(n_row_input)) n_row_input <- 0
+  if (is.na(n_col_input)) n_col_input <- 0
+  
+  if (n_row_input > 0) {
+    n_row_final <- n_row_input
+    if (n_col_input > 0) {
+      n_col_final <- max(n_col_input, ceiling(n_items / max(1, n_row_final)))
+    } else {
+      n_col_final <- ceiling(n_items / max(1, n_row_final))
+    }
+  } else if (n_col_input > 0) {
+    n_col_final <- n_col_input
+    n_row_final <- ceiling(n_items / max(1, n_col_final))
+  } else {
+    # Default heuristic: single row if <=5 items, otherwise two
+    n_row_final <- ifelse(n_items <= 5, 1, 2)
+    n_col_final <- ceiling(n_items / n_row_final)
+  }
+  
+  list(
+    nrow = max(1, as.integer(n_row_final)),
+    ncol = max(1, as.integer(n_col_final))
+  )
+}
+

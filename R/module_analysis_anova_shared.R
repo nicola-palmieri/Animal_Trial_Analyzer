@@ -5,35 +5,7 @@
 source("R/module_analysis_stratification.R")
 
 # ---------------------------------------------------------------
-# 1️⃣ Response selector UI (single / multi)
-# ---------------------------------------------------------------
-render_response_selector <- function(ns, df, input) {
-  req(df())
-  data <- df()
-  num_cols <- names(data)[sapply(data, is.numeric)]
-
-  if (isTRUE(input$multi_resp)) {
-    selectizeInput(
-      ns("response"),
-      "Response variables (numeric):",
-      choices = num_cols,
-      selected = head(num_cols, 1),
-      multiple = TRUE,
-      options = list(maxItems = 10)
-    )
-  } else {
-    selectInput(
-      ns("response"),
-      "Response variable (numeric):",
-      choices = num_cols,
-      selected = if (length(num_cols) > 0) num_cols[1] else NULL
-    )
-  }
-}
-
-
-# ---------------------------------------------------------------
-# 2️⃣ Helper to fit ANOVA models (handles stratification)
+# Model computation
 # ---------------------------------------------------------------
 prepare_stratified_models <- function(df, responses, strat_var, factor1, factor2, orders, formula_builder) {
   req(df, responses)
@@ -98,20 +70,159 @@ prepare_stratified_models <- function(df, responses, strat_var, factor1, factor2
   )
 }
 
-# ---------------------------------------------------------------
-# 4️⃣ Safe name sanitization for filenames
-# ---------------------------------------------------------------
-sanitize_name <- function(name) {
-  safe <- gsub("[^A-Za-z0-9]+", "_", name)
-  safe <- gsub("_+", "_", safe)
-  safe <- gsub("^_|_$", "", safe)
-  if (!nzchar(safe)) safe <- "unnamed"
-  safe
+prepare_anova_outputs <- function(model_obj, factor_names) {
+  old_contrasts <- options("contrasts")
+  on.exit(options(old_contrasts), add = TRUE)
+  options(contrasts = c("contr.sum", "contr.poly"))
+  
+  anova_obj <- car::Anova(model_obj, type = 3)
+  anova_df <- as.data.frame(anova_obj)
+  anova_df$Effect <- rownames(anova_df)
+  rownames(anova_df) <- NULL
+  anova_df <- anova_df[, c("Effect", setdiff(names(anova_df), "Effect"))]
+  
+  # --- format p-values and round numeric columns ---
+  p_col <- grep("^Pr", names(anova_df), value = TRUE)
+  p_col <- if (length(p_col) > 0) p_col[1] else NULL
+  raw_p <- if (!is.null(p_col)) anova_df[[p_col]] else rep(NA_real_, nrow(anova_df))
+  
+  for (col in names(anova_df)) {
+    if (is.numeric(anova_df[[col]])) {
+      anova_df[[col]] <- round(anova_df[[col]], 2)
+    }
+  }
+  
+  anova_significant <- !is.na(raw_p) & raw_p < 0.05
+  if (!is.null(p_col)) {
+    formatted_p <- format_p_value(raw_p)
+    anova_df[[p_col]] <- add_significance_marker(formatted_p, raw_p)
+    names(anova_df)[names(anova_df) == p_col] <- "p.value"
+  } else {
+    anova_df$p.value <- NA_character_
+  }
+  
+  # --- Post-hoc Tukey for each factor ---
+  factor_names <- unique(factor_names[!is.na(factor_names) & nzchar(factor_names)])
+  posthoc_details <- list()
+  posthoc_combined <- NULL
+  posthoc_significant <- numeric(0)
+  
+  for (factor_nm in factor_names) {
+    if (!factor_nm %in% names(model_obj$model)) next
+    
+    res <- tryCatch({
+      emm <- emmeans::emmeans(model_obj, specs = factor_nm)
+      contrasts <- emmeans::contrast(emm, method = "revpairwise", adjust = "tukey")
+      as.data.frame(summary(contrasts))
+    }, error = function(e) list(error = e$message))
+    
+    if (is.data.frame(res)) {
+      res$Factor <- factor_nm
+      posthoc_details[[factor_nm]] <- list(table = res, error = NULL)
+      posthoc_combined <- rbind(posthoc_combined, res)
+    } else {
+      posthoc_details[[factor_nm]] <- list(table = NULL, error = res$error)
+    }
+  }
+  
+  if (!is.null(posthoc_combined)) {
+    posthoc_combined <- posthoc_combined[, c("Factor", setdiff(names(posthoc_combined), "Factor"))]
+    numeric_cols <- names(posthoc_combined)[sapply(posthoc_combined, is.numeric)]
+    if (length(numeric_cols) > 0) {
+      for (col in numeric_cols) {
+        posthoc_combined[[col]] <- round(posthoc_combined[[col]], 2)
+      }
+    }
+    
+    if ("p.value" %in% names(posthoc_combined)) {
+      raw_posthoc_p <- posthoc_combined$p.value
+      posthoc_significant <- !is.na(raw_posthoc_p) & raw_posthoc_p < 0.05
+      formatted_posthoc_p <- format_p_value(raw_posthoc_p)
+      posthoc_combined$p.value <- add_significance_marker(formatted_posthoc_p, raw_posthoc_p)
+    } else {
+      posthoc_significant <- rep(FALSE, nrow(posthoc_combined))
+    }
+  }
+  
+  list(
+    anova_object = anova_obj,
+    anova_table = anova_df,
+    anova_significant = anova_significant,
+    posthoc_details = posthoc_details,
+    posthoc_table = posthoc_combined,
+    posthoc_significant = posthoc_significant
+  )
 }
 
 # ---------------------------------------------------------------
-# 5️⃣ Shared results renderer (tab panels + download buttons)
+# Output composition
 # ---------------------------------------------------------------
+print_anova_summary_and_posthoc <- function(model_obj, factors) {
+  results <- prepare_anova_outputs(model_obj, factors)
+  print(results$anova_object)
+  
+  if (length(results$posthoc_details) == 0) {
+    cat("\nNo post-hoc Tukey comparisons were generated.\n")
+  } else {
+    for (factor_nm in names(results$posthoc_details)) {
+      details <- results$posthoc_details[[factor_nm]]
+      if (!is.null(details$error)) {
+        cat("\nPost-hoc Tukey comparisons for", factor_nm, "failed:", details$error, "\n")
+      } else if (!is.null(details$table)) {
+        cat("\nPost-hoc Tukey comparisons for", factor_nm, ":\n")
+        print(details$table)
+      }
+    }
+  }
+  invisible(results)
+}
+
+bind_single_model_outputs <- function(output, summary_id, download_id,
+                                      model_obj, response_name, factors,
+                                      stratum_label = NULL) {
+  output[[summary_id]] <- renderPrint({
+    print_anova_summary_and_posthoc(model_obj, factors)
+  })
+  
+  output[[download_id]] <- downloadHandler(
+    filename = function() {
+      base <- paste0("anova_results_", sanitize_name(response_name))
+      if (!is.null(stratum_label)) {
+        base <- paste0(base, "_stratum_", sanitize_name(stratum_label))
+      }
+      paste0(base, "_", Sys.Date(), ".docx")
+    },
+    content = function(file) {
+      results <- prepare_anova_outputs(model_obj, factors)
+      write_anova_docx(file, results, model_obj, response_name, stratum_label)
+    }
+  )
+}
+
+render_response_selector <- function(ns, df, input) {
+  req(df())
+  data <- df()
+  num_cols <- names(data)[sapply(data, is.numeric)]
+
+  if (isTRUE(input$multi_resp)) {
+    selectizeInput(
+      ns("response"),
+      "Response variables (numeric):",
+      choices = num_cols,
+      selected = head(num_cols, 1),
+      multiple = TRUE,
+      options = list(maxItems = 10)
+    )
+  } else {
+    selectInput(
+      ns("response"),
+      "Response variable (numeric):",
+      choices = num_cols,
+      selected = if (length(num_cols) > 0) num_cols[1] else NULL
+    )
+  }
+}
+
 render_anova_results <- function(ns, model_info, module_label = "ANOVA") {
   if (is.null(model_info)) return(NULL)
   
@@ -152,66 +263,16 @@ render_anova_results <- function(ns, model_info, module_label = "ANOVA") {
   do.call(tabsetPanel, c(list(id = ns("results_tabs")), tabs))
 }
 
-# ---------------------------------------------------------------
-# 6  Bind result renderers (summaries + downloads)
-#     Shared server-side wiring for both ANOVA modules
-#     Refactored into smaller helpers for clarity
-# ---------------------------------------------------------------
-
-# Print ANOVA summary and post-hoc results to the output
-print_anova_summary_and_posthoc <- function(model_obj, factors) {
-  results <- prepare_anova_outputs(model_obj, factors)
-  print(results$anova_object)
-
-  if (length(results$posthoc_details) == 0) {
-    cat("\nNo post-hoc Tukey comparisons were generated.\n")
-  } else {
-    for (factor_nm in names(results$posthoc_details)) {
-      details <- results$posthoc_details[[factor_nm]]
-      if (!is.null(details$error)) {
-        cat("\nPost-hoc Tukey comparisons for", factor_nm, "failed:", details$error, "\n")
-      } else if (!is.null(details$table)) {
-        cat("\nPost-hoc Tukey comparisons for", factor_nm, ":\n")
-        print(details$table)
-      }
-    }
-  }
-  invisible(results)
-}
-
-# Helper to bind a single model's outputs (summary + download)
-bind_single_model_outputs <- function(output, summary_id, download_id,
-                                      model_obj, response_name, factors,
-                                      stratum_label = NULL) {
-  output[[summary_id]] <- renderPrint({
-    print_anova_summary_and_posthoc(model_obj, factors)
-  })
-
-  output[[download_id]] <- downloadHandler(
-    filename = function() {
-      base <- paste0("anova_results_", sanitize_name(response_name))
-      if (!is.null(stratum_label)) {
-        base <- paste0(base, "_stratum_", sanitize_name(stratum_label))
-      }
-      paste0(base, "_", Sys.Date(), ".docx")
-    },
-    content = function(file) {
-      results <- prepare_anova_outputs(model_obj, factors)
-      write_anova_docx(file, results, model_obj, response_name, stratum_label)
-    }
-  )
-}
-
 bind_anova_outputs <- function(ns, output, models_reactive) {
   observeEvent(models_reactive(), {
     model_info <- models_reactive()
     if (is.null(model_info)) return()
-
+    
     responses <- model_info$responses
     model_list <- model_info$models
     strata_info <- model_info$strata
     factors <- unlist(model_info$factors, use.names = FALSE)
-
+    
     # --- Non-stratified case ---
     if (is.null(strata_info)) {
       for (i in seq_along(responses)) {
@@ -231,7 +292,7 @@ bind_anova_outputs <- function(ns, output, models_reactive) {
       }
       return()
     }
-
+    
     # --- Stratified case ---
     strata_levels <- strata_info$levels
     for (i in seq_along(responses)) {
@@ -257,9 +318,10 @@ bind_anova_outputs <- function(ns, output, models_reactive) {
   })
 }
 
-# ===============================================================
-# 🔽 Helper — Combine multiple ANOVA results into one DOCX
-# ===============================================================
+# ---------------------------------------------------------------
+# Results export
+# ---------------------------------------------------------------
+
 download_all_anova_results <- function(models_info, file) {
   if (is.null(models_info) || is.null(models_info$models)) {
     stop("No models found to export.")
@@ -302,141 +364,8 @@ download_all_anova_results <- function(models_info, file) {
   write_anova_docx(combined_results, file)
 }
 
-# ---------------------------------------------------------------
-# 7  Low-level utilities used by ANOVA modules
-#     Order: p-value formatting -> significance -> table prep -> doc export
-# ---------------------------------------------------------------
-
-# ---- p-value formatting ----
-format_p_value <- function(p_values) {
-  vapply(
-    p_values,
-    function(p) {
-      if (is.na(p)) {
-        return(NA_character_)
-      }
-      if (p < 0.001) {
-        "<0.001"
-      } else {
-        sprintf("%.2f", round(p, 2))
-      }
-    },
-    character(1)
-  )
-}
-
-# ---- significance markers ----
-add_significance_marker <- function(formatted_p, raw_p) {
-  mapply(
-    function(fp, rp) {
-      if (is.na(rp)) {
-        return(fp)
-      }
-      if (rp < 0.05) {
-        paste0(fp, "*")
-      } else {
-        fp
-      }
-    },
-    formatted_p,
-    raw_p,
-    USE.NAMES = FALSE
-  )
-}
-
-# ---- prepare ANOVA + posthoc results ----
-prepare_anova_outputs <- function(model_obj, factor_names) {
-  old_contrasts <- options("contrasts")
-  on.exit(options(old_contrasts), add = TRUE)
-  options(contrasts = c("contr.sum", "contr.poly"))
-
-  anova_obj <- car::Anova(model_obj, type = 3)
-  anova_df <- as.data.frame(anova_obj)
-  anova_df$Effect <- rownames(anova_df)
-  rownames(anova_df) <- NULL
-  anova_df <- anova_df[, c("Effect", setdiff(names(anova_df), "Effect"))]
-
-  # --- format p-values and round numeric columns ---
-  p_col <- grep("^Pr", names(anova_df), value = TRUE)
-  p_col <- if (length(p_col) > 0) p_col[1] else NULL
-  raw_p <- if (!is.null(p_col)) anova_df[[p_col]] else rep(NA_real_, nrow(anova_df))
-
-  for (col in names(anova_df)) {
-    if (is.numeric(anova_df[[col]])) {
-      anova_df[[col]] <- round(anova_df[[col]], 2)
-    }
-  }
-
-  anova_significant <- !is.na(raw_p) & raw_p < 0.05
-  if (!is.null(p_col)) {
-    formatted_p <- format_p_value(raw_p)
-    anova_df[[p_col]] <- add_significance_marker(formatted_p, raw_p)
-    names(anova_df)[names(anova_df) == p_col] <- "p.value"
-  } else {
-    anova_df$p.value <- NA_character_
-  }
-
-  # --- Post-hoc Tukey for each factor ---
-  factor_names <- unique(factor_names[!is.na(factor_names) & nzchar(factor_names)])
-  posthoc_details <- list()
-  posthoc_combined <- NULL
-  posthoc_significant <- numeric(0)
-
-  for (factor_nm in factor_names) {
-    if (!factor_nm %in% names(model_obj$model)) next
-
-    res <- tryCatch({
-      emm <- emmeans::emmeans(model_obj, specs = factor_nm)
-      contrasts <- emmeans::contrast(emm, method = "revpairwise", adjust = "tukey")
-      as.data.frame(summary(contrasts))
-    }, error = function(e) list(error = e$message))
-
-    if (is.data.frame(res)) {
-      res$Factor <- factor_nm
-      posthoc_details[[factor_nm]] <- list(table = res, error = NULL)
-      posthoc_combined <- rbind(posthoc_combined, res)
-    } else {
-      posthoc_details[[factor_nm]] <- list(table = NULL, error = res$error)
-    }
-  }
-
-  if (!is.null(posthoc_combined)) {
-    posthoc_combined <- posthoc_combined[, c("Factor", setdiff(names(posthoc_combined), "Factor"))]
-    numeric_cols <- names(posthoc_combined)[sapply(posthoc_combined, is.numeric)]
-    if (length(numeric_cols) > 0) {
-      for (col in numeric_cols) {
-        posthoc_combined[[col]] <- round(posthoc_combined[[col]], 2)
-      }
-    }
-
-    if ("p.value" %in% names(posthoc_combined)) {
-      raw_posthoc_p <- posthoc_combined$p.value
-      posthoc_significant <- !is.na(raw_posthoc_p) & raw_posthoc_p < 0.05
-      formatted_posthoc_p <- format_p_value(raw_posthoc_p)
-      posthoc_combined$p.value <- add_significance_marker(formatted_posthoc_p, raw_posthoc_p)
-    } else {
-      posthoc_significant <- rep(FALSE, nrow(posthoc_combined))
-    }
-  }
-
-  list(
-    anova_object = anova_obj,
-    anova_table = anova_df,
-    anova_significant = anova_significant,
-    posthoc_details = posthoc_details,
-    posthoc_table = posthoc_combined,
-    posthoc_significant = posthoc_significant
-  )
-}
-
-# ===============================================================
-# 🧪 Animal Trial Analyzer — Publication-ready DOCX Export for ANOVA
-# ===============================================================
 write_anova_docx <- function(results, file) {
-  library(dplyr)
-  library(flextable)
-  library(officer)
-  
+
   if (is.null(results) || length(results) == 0) stop("No ANOVA results available to export.")
   combined <- bind_rows(results)
   
@@ -530,6 +459,52 @@ write_anova_docx <- function(results, file) {
   doc <- body_add_par(doc, sprintf("Generated by Animal Trial Analyzer on %s", Sys.Date()))
   doc <- body_add_par(doc, "Significant p-values (< 0.05) in bold.", style = "Normal")
   print(doc, target = file)
+}
+
+# ---------------------------------------------------------------
+# Low-level utilities
+# ---------------------------------------------------------------
+sanitize_name <- function(name) {
+  safe <- gsub("[^A-Za-z0-9]+", "_", name)
+  safe <- gsub("_+", "_", safe)
+  safe <- gsub("^_|_$", "", safe)
+  if (!nzchar(safe)) safe <- "unnamed"
+  safe
+}
+
+format_p_value <- function(p_values) {
+  vapply(
+    p_values,
+    function(p) {
+      if (is.na(p)) {
+        return(NA_character_)
+      }
+      if (p < 0.001) {
+        "<0.001"
+      } else {
+        sprintf("%.2f", round(p, 2))
+      }
+    },
+    character(1)
+  )
+}
+
+add_significance_marker <- function(formatted_p, raw_p) {
+  mapply(
+    function(fp, rp) {
+      if (is.na(rp)) {
+        return(fp)
+      }
+      if (rp < 0.05) {
+        paste0(fp, "*")
+      } else {
+        fp
+      }
+    },
+    formatted_p,
+    raw_p,
+    USE.NAMES = FALSE
+  )
 }
 
 
