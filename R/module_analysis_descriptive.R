@@ -23,7 +23,7 @@ descriptive_ui <- function(id) {
 descriptive_server <- function(id, filtered_data) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
-    df <- use_filtered_df(filtered_data)
+    df <- filtered_data
     
     # ------------------------------------------------------------
     # 1️⃣ Update grouping variable selector

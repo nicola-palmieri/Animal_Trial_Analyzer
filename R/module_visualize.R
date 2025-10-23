@@ -34,6 +34,8 @@ visualize_server <- function(id, filtered_data, model_fit) {
         visualize_ggpairs_ui(ns("ggpairs"))
       } else if (type == "pca") {
         visualize_pca_ui(ns("pca"), filtered_data())
+      } else if (type == "descriptive") {
+        visualize_descriptive_ui(ns("descriptive"))
       } else {
         div("Visualization not yet implemented for this analysis type.")
       }
@@ -49,6 +51,8 @@ visualize_server <- function(id, filtered_data, model_fit) {
         visualize_ggpairs_server("ggpairs", filtered_data, model_info)
       } else if (type == "pca") {
         visualize_pca_server("pca", filtered_data, model_info)
+      } else if (type == "descriptive") {
+        visualize_descriptive_server("descriptive", filtered_data, model_info)
       }
     })
     

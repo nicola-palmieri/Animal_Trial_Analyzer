@@ -2,9 +2,6 @@
 # 🧩 Descriptive Statistics — Helper Functions
 # ===============================================================
 
-library(dplyr)
-library(skimr)
-
 # ---- Main computation wrapper ----
 compute_descriptive_summary <- function(data, group_var = NULL) {
   numeric_vars <- names(data)[sapply(data, is.numeric)]
@@ -60,7 +57,23 @@ compute_descriptive_summary <- function(data, group_var = NULL) {
 
 # ---- Shared printing ----
 print_summary_sections <- function(results) {
-  print(results$skim)
+  # --- Reformat skim() headers ---
+  lines <- capture.output(print(results$skim))
+  
+  # Replace the "Variable type: character/numeric" banner lines
+  lines <- stringr::str_replace(
+    lines,
+    "^\\s*──\\s*Variable type:\\s*character\\s*─+\\s*$",
+    "── Categorical variables ──"
+  )
+  lines <- stringr::str_replace(
+    lines,
+    "^\\s*──\\s*Variable type:\\s*numeric\\s*─+\\s*$",
+    "── Numeric variables ──"
+  )
+  
+  cat(paste(lines, collapse = "\n"), "\n")
+  
   cat("\n── Coefficient of Variation (CV%) ──\n")
   print(results$cv)
   cat("\n── Outlier Counts (IQR rule) ──\n")
