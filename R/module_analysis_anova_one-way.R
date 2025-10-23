@@ -2,10 +2,6 @@
 # 🧪 Animal Trial Analyzer — One-way ANOVA Module (Refactored)
 # ===============================================================
 
-source("R/module_analysis_anova_shared.R")
-source("R/module_analysis_multiple_responses.R")
-
-
 one_way_anova_ui <- function(id) {
   ns <- NS(id)
   list(

@@ -1,14 +1,6 @@
 # ===============================================================
 # 🧪 Animal Trial Analyzer — Analysis Coordinator (fixed + cleaned)
 # ===============================================================
-#source("R/module_analysis_descriptive.R")
-source("R/module_analysis_anova_one-way.R")
-#source("R/module_analysis_anova_two-way.R")
-#source("R/module_analysis_regression.R")  
-#source("R/module_analysis_lm.R")
-#source("R/module_analysis_lmm.R")
-#source("R/module_analysis_pairwise_correlation.R")
-#source("R/module_analysis_pca.R")
 
 analysis_ui <- function(id) {
   ns <- NS(id)

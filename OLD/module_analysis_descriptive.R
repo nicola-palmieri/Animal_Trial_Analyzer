@@ -2,8 +2,6 @@
 # 🧾 Animal Trial Analyzer — Descriptive Statistics Module (refactored)
 # ===============================================================
 
-source("R/module_analysis_descriptive_helpers.R")
-
 descriptive_ui <- function(id) {
   ns <- NS(id)
   list(

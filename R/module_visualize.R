@@ -2,10 +2,6 @@
 # 🧩 Visualization Coordinator
 # ===============================================================
 
-source("R/module_visualize_anova_one-way.R")
-source("R/module_visualize_anova_two-way.R")
-# later: source("R/visualize_pca.R"), etc.
-
 visualize_ui <- function(id) {
   ns <- NS(id)
   tagList(
@@ -34,6 +30,10 @@ visualize_server <- function(id, filtered_data, model_fit) {
         visualize_oneway_ui(ns("oneway"))
       } else if (type == "twoway_anova") {
         visualize_twoway_ui(ns("twoway"))
+      } else if (type == "ggpairs") {
+        visualize_ggpairs_ui(ns("ggpairs"))
+      } else if (type == "pca") {
+        visualize_pca_ui(ns("pca")) 
       } else {
         div("Visualization not yet implemented for this analysis type.")
       }
@@ -45,7 +45,12 @@ visualize_server <- function(id, filtered_data, model_fit) {
         visualize_oneway_server("oneway", filtered_data, model_info)
       } else if (type == "twoway_anova") {
         visualize_twoway_server("twoway", filtered_data, model_info)
+      } else if (type == "ggpairs") {
+        visualize_ggpairs_server("ggpairs", filtered_data, model_info)
+      } else if (type == "pca") {
+        visualize_pca_server("pca", filtered_data, model_info)
       }
     })
+    
   })
 }

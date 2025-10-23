@@ -2,8 +2,6 @@
 # 🧪 Animal Trial Analyzer — Upload Module (long + wide support)
 # ===============================================================
 
-source("R/module_upload_helpers.R")
-
 upload_ui <- function(id) {
   ns <- NS(id)
   sidebarLayout(

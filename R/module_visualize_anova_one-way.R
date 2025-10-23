@@ -2,9 +2,6 @@
 # 🧪 Visualization Module — One-way ANOVA
 # ===============================================================
 
-source("R/module_visualize_layout.R")
-source("R/module_visualize_plot_builders.R")
-
 visualize_oneway_ui <- function(id) {
   ns <- NS(id)
   sidebarLayout(

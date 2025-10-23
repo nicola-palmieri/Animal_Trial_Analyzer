@@ -2,10 +2,6 @@
 # 🧪 Animal Trial Analyzer — Visualization Module
 # ===============================================================
 
-source("R/module_visualize_helpers.R")
-source("R/module_visualize_layout.R")
-source("R/module_visualize_plot_builders.R")
-
 visualize_ui <- function(id) {
   ns <- NS(id)
   sidebarLayout(
