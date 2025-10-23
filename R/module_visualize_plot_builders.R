@@ -119,19 +119,49 @@ build_descriptive_plots <- function(summary_info, original_data = NULL) {
   
   metric_plots <- Filter(Negate(is.null), metric_plots)
   
-  descriptive_plots <- list(
-    metrics = if (length(metric_plots) > 0) patchwork::wrap_plots(metric_plots, ncol = 1) else NULL,
-    factors = if (!is.null(original_data)) build_factor_barplots(original_data) else NULL,
-    boxplots = if (!is.null(original_data)) build_jitter_boxplots(original_data) else NULL,
-    histograms = if (!is.null(original_data)) build_histograms(original_data) else NULL
-  )
-  
-  descriptive_plots <- Filter(Negate(is.null), descriptive_plots)
+  descriptive_plots <- list()
+
+  if (length(metric_plots) > 0) {
+    descriptive_plots$metrics <-
+      patchwork::wrap_plots(metric_plots, ncol = 1) +
+      patchwork::plot_annotation(
+        title = "Summary Metrics",
+        theme = theme(plot.title = element_text(size = 16, face = "bold"))
+      )
+  }
+
+  if (!is.null(original_data)) {
+    factor_plot <- build_factor_barplots(original_data)
+    if (!is.null(factor_plot)) {
+      descriptive_plots$factors <- factor_plot +
+        patchwork::plot_annotation(
+          title = "Categorical Distributions",
+          theme = theme(plot.title = element_text(size = 16, face = "bold"))
+        )
+    }
+
+    box_plot <- build_jitter_boxplots(original_data)
+    if (!is.null(box_plot)) {
+      descriptive_plots$boxplots <- box_plot +
+        patchwork::plot_annotation(
+          title = "Boxplots",
+          theme = theme(plot.title = element_text(size = 16, face = "bold"))
+        )
+    }
+
+    hist_plot <- build_histograms(original_data)
+    if (!is.null(hist_plot)) {
+      descriptive_plots$histograms <- hist_plot +
+        patchwork::plot_annotation(
+          title = "Histograms",
+          theme = theme(plot.title = element_text(size = 16, face = "bold"))
+        )
+    }
+  }
+
   if (length(descriptive_plots) == 0) return(NULL)
-  
-  # Final layout
-  patchwork::wrap_plots(descriptive_plots, ncol = 1) +
-    patchwork::plot_annotation(title = "Descriptive Data Overview", theme = theme(plot.title = element_text(size = 16, face = "bold")))
+
+  descriptive_plots
 }
 
 

@@ -46,7 +46,7 @@ visualize_ui <- function(id) {
     mainPanel(
       width = 8,
       h4("Plots"),
-      plotOutput(ns("plots"))
+      uiOutput(ns("plot_container"))
     )
   )
 }
@@ -86,7 +86,7 @@ visualize_server <- function(id, filtered_data, model_fit) {
 
     observe({
       type <- active_analysis_type()
-      if (is.null(type)) return()
+      if (is.null(type) || identical(type, "descriptive")) return()
 
       if (identical(type, "ggpairs") || identical(type, "pca")) {
         updateNumericInput(session, "plot_width", label = "Plot width (px)")
@@ -98,6 +98,20 @@ visualize_server <- function(id, filtered_data, model_fit) {
     })
 
     layout_state <- initialize_layout_state(input, session)
+
+    descriptive_sizes <- reactiveValues()
+    active_descriptive_tab <- reactiveVal(NULL)
+
+    format_descriptive_title <- function(id) {
+      switch(
+        id,
+        metrics = "Summary Metrics",
+        factors = "Categorical Distributions",
+        boxplots = "Boxplots",
+        histograms = "Histograms",
+        tools::toTitleCase(gsub("_", " ", id))
+      )
+    }
 
     output$layout_controls <- renderUI({
       info <- model_info()
@@ -117,6 +131,85 @@ visualize_server <- function(id, filtered_data, model_fit) {
         data_for_pca = data_for_controls
       )
     })
+
+    descriptive_plots <- reactive({
+      info <- model_info()
+      if (is.null(info) || is.null(info$type) || !identical(info$type, "descriptive")) {
+        return(NULL)
+      }
+
+      validate(need(!is.null(info$summary), "Run summary first."))
+      plots <- build_descriptive_plots(info$summary, df())
+      if (is.null(plots) || length(plots) == 0) {
+        return(NULL)
+      }
+
+      plots
+    })
+
+    observeEvent(descriptive_plots(), {
+      plots <- descriptive_plots()
+      if (is.null(plots) || length(plots) == 0) {
+        active_descriptive_tab(NULL)
+        return()
+      }
+
+      available <- names(plots)
+      for (nm in available) {
+        if (is.null(descriptive_sizes[[nm]])) {
+          descriptive_sizes[[nm]] <- list(width = 800, height = 600)
+        }
+      }
+
+      current_tab <- active_descriptive_tab()
+      if (is.null(current_tab) || !(current_tab %in% available)) {
+        active_descriptive_tab(available[[1]])
+      }
+
+      updateTabsetPanel(session, "descriptive_tab", selected = active_descriptive_tab())
+    })
+
+    observeEvent(input$descriptive_tab, {
+      if (!identical(active_analysis_type(), "descriptive")) return()
+      if (is.null(input$descriptive_tab) || identical(input$descriptive_tab, "")) return()
+      if (!identical(active_descriptive_tab(), input$descriptive_tab)) {
+        active_descriptive_tab(input$descriptive_tab)
+      }
+    }, ignoreNULL = TRUE)
+
+    observeEvent(active_descriptive_tab(), {
+      if (!identical(active_analysis_type(), "descriptive")) return()
+      tab <- active_descriptive_tab()
+      if (is.null(tab)) return()
+
+      size <- descriptive_sizes[[tab]]
+      width_val <- if (!is.null(size) && !is.null(size$width)) size$width else 800
+      height_val <- if (!is.null(size) && !is.null(size$height)) size$height else 600
+      title <- format_descriptive_title(tab)
+
+      updateNumericInput(session, "plot_width", label = sprintf("Plot width (px) — %s", title), value = width_val)
+      updateNumericInput(session, "plot_height", label = sprintf("Plot height (px) — %s", title), value = height_val)
+    }, ignoreNULL = TRUE)
+
+    observeEvent(list(input$plot_width, input$plot_height), {
+      if (!identical(active_analysis_type(), "descriptive")) return()
+      tab <- active_descriptive_tab()
+      if (is.null(tab)) return()
+
+      size <- descriptive_sizes[[tab]]
+      if (is.null(size)) {
+        size <- list(width = 800, height = 600)
+      }
+
+      if (!is.null(input$plot_width) && !is.na(input$plot_width)) {
+        size$width <- input$plot_width
+      }
+      if (!is.null(input$plot_height) && !is.na(input$plot_height)) {
+        size$height <- input$plot_height
+      }
+
+      descriptive_sizes[[tab]] <- size
+    }, ignoreNULL = TRUE)
 
     plot_obj_info <- reactive({
       info <- model_info()
@@ -169,22 +262,78 @@ visualize_server <- function(id, filtered_data, model_fit) {
       )
     })
 
+    output$plot_container <- renderUI({
+      info <- model_info()
+      req(info)
+
+      type <- if (!is.null(info$type)) info$type else "anova"
+      if (identical(type, "descriptive")) {
+        plots <- descriptive_plots()
+        if (is.null(plots) || length(plots) == 0) {
+          return(div(class = "alert alert-info", "No descriptive plots available."))
+        }
+
+        tabs <- lapply(names(plots), function(name) {
+          tabPanel(
+            title = format_descriptive_title(name),
+            plotOutput(ns(paste0("descriptive_plot_", name)))
+          )
+        })
+
+        do.call(tabsetPanel, c(list(id = ns("descriptive_tab")), tabs))
+      } else {
+        plotOutput(ns("plots"))
+      }
+    })
+
+    observe({
+      plots <- descriptive_plots()
+      if (is.null(plots) || length(plots) == 0) return()
+
+      lapply(names(plots), function(name) {
+        local({
+          plot_name <- name
+          output[[paste0("descriptive_plot_", plot_name)]] <- renderPlot({
+            plots <- descriptive_plots()
+            req(plots[[plot_name]])
+            plots[[plot_name]]
+          },
+          width = function() {
+            size <- descriptive_sizes[[plot_name]]
+            if (is.null(size) || is.null(size$width)) return(800)
+            size$width
+          },
+          height = function() {
+            size <- descriptive_sizes[[plot_name]]
+            if (is.null(size) || is.null(size$height)) return(600)
+            size$height
+          },
+          res = 96)
+        })
+      })
+    })
+
     output$plots <- renderPlot({
       info <- model_info()
       req(info)
 
       if (!is.null(info$type)) {
-        
+
         if (info$type == "descriptive") {
-          validate(need(!is.null(info$summary), "Run summary first."))
-          return(build_descriptive_plots(info$summary, df()))
+          plots <- descriptive_plots()
+          validate(need(!is.null(plots) && length(plots) > 0, "Run summary first."))
+          active_tab <- active_descriptive_tab()
+          if (is.null(active_tab) || is.null(plots[[active_tab]])) {
+            active_tab <- names(plots)[1]
+          }
+          return(plots[[active_tab]])
         }
-        
+
         if (info$type %in% c("anova", "lm", "lmm")) {
           req(plot_obj())
           return(plot_obj())
         }
-        
+
         if (info$type == "ggpairs") {
           validate(need(ncol(info$data) >= 2, "Need at least two numeric columns for ggpairs."))
           return(build_ggpairs_plot(info$data))
@@ -228,17 +377,36 @@ visualize_server <- function(id, filtered_data, model_fit) {
       content = function(file) {
         info <- model_info()
         req(info)
-        s <- plot_size()
-        width_in  <- s$w / 96
-        height_in <- s$h / 96
+        type <- if (!is.null(info$type)) info$type else "anova"
 
         g <- NULL
+        width_in <- NULL
+        height_in <- NULL
 
-        if (!is.null(info$type)) {
-          if (info$type == "ggpairs") {
+        if (identical(type, "descriptive")) {
+          plots <- descriptive_plots()
+          validate(need(!is.null(plots) && length(plots) > 0, "Run summary first."))
+          active_tab <- active_descriptive_tab()
+          if (is.null(active_tab) || is.null(plots[[active_tab]])) {
+            active_tab <- names(plots)[1]
+          }
+
+          size <- descriptive_sizes[[active_tab]]
+          width_px <- if (!is.null(size) && !is.null(size$width)) size$width else 800
+          height_px <- if (!is.null(size) && !is.null(size$height)) size$height else 600
+          width_in <- width_px / 96
+          height_in <- height_px / 96
+
+          g <- plots[[active_tab]]
+        } else {
+          s <- plot_size()
+          width_in  <- s$w / 96
+          height_in <- s$h / 96
+
+          if (type == "ggpairs") {
             validate(need(ncol(info$data) >= 2, "Need at least two numeric columns for ggpairs."))
             g <- build_ggpairs_plot(info$data)
-          } else if (info$type == "pca") {
+          } else if (type == "pca") {
             validate(need(!is.null(info$model), "Run PCA first."))
             pca_obj <- info$model
 
