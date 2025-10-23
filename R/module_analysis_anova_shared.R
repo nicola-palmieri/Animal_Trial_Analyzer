@@ -7,7 +7,7 @@ source("R/module_analysis_stratification.R")
 # ---------------------------------------------------------------
 # Model computation
 # ---------------------------------------------------------------
-prepare_stratified_models <- function(df, responses, strat_var, factor1, factor2, orders, formula_builder) {
+prepare_stratified_models <- function(df, responses, strat_var, factor1, factor2, orders, formula_builder, type) {
   req(df, responses)
   responses <- unique(responses)
   
@@ -34,7 +34,7 @@ prepare_stratified_models <- function(df, responses, strat_var, factor1, factor2
       model_list[[resp]] <- lm(model_formula, data = df)
     }
     return(list(
-      type = "anova",
+      type = type,
       models = model_list,
       responses = responses,
       strata = NULL,
@@ -61,7 +61,7 @@ prepare_stratified_models <- function(df, responses, strat_var, factor1, factor2
   }
   
   list(
-    type = "anova",
+    type = type,
     models = model_list,
     responses = responses,
     strata = list(var = strat_var, levels = strata),

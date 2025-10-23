@@ -1,14 +1,14 @@
 # ===============================================================
 # 🧪 Animal Trial Analyzer — Analysis Coordinator (fixed + cleaned)
 # ===============================================================
-source("R/module_analysis_descriptive.R")
+#source("R/module_analysis_descriptive.R")
 source("R/module_analysis_anova_one-way.R")
-source("R/module_analysis_anova_two-way.R")
-source("R/module_analysis_regression.R")  
-source("R/module_analysis_lm.R")
-source("R/module_analysis_lmm.R")
-source("R/module_analysis_pairwise_correlation.R")
-source("R/module_analysis_pca.R")
+#source("R/module_analysis_anova_two-way.R")
+#source("R/module_analysis_regression.R")  
+#source("R/module_analysis_lm.R")
+#source("R/module_analysis_lmm.R")
+#source("R/module_analysis_pairwise_correlation.R")
+#source("R/module_analysis_pca.R")
 
 analysis_ui <- function(id) {
   ns <- NS(id)
@@ -72,13 +72,13 @@ analysis_server <- function(id, filtered_data) {
         id = "anova_one",
         ui = one_way_anova_ui,
         server = one_way_anova_server,
-        type = "anova"
+        type = "oneway_anova"
       ),
       "Two-way ANOVA" = list(
         id = "anova_two",
         ui = two_way_anova_ui,
         server = two_way_anova_server,
-        type = "anova"
+        type = "twoway_anova"
       ),
       "Linear Model (LM)" = list(
         id = "lm",

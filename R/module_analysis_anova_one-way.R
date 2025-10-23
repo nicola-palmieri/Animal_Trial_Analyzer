@@ -96,7 +96,8 @@ one_way_anova_server <- function(id, filtered_data) {
         factor1 = input$group,
         factor2 = NULL,
         orders = list(order1 = input$order, order2 = NULL),
-        formula_builder = function(resp, f1, f2) as.formula(paste(resp, "~", f1))
+        formula_builder = function(resp, f1, f2) as.formula(paste(resp, "~", f1)),
+        type = "oneway_anova"
       )
     })
     
