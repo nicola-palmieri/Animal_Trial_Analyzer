@@ -4,7 +4,16 @@
 
 build_descriptive_plots <- function(summary_info, original_data = NULL) {
   data <- summary_info()
-  
+
+  auto_grid <- function(n) {
+    if (is.null(n) || n <= 0) {
+      return(list(rows = 1, cols = 1))
+    }
+    cols <- ceiling(sqrt(n))
+    rows <- ceiling(n / cols)
+    list(rows = max(1, rows), cols = max(1, cols))
+  }
+
   # ------------------------------------------------------------
   # 1️⃣ Helper: Tidy metric tables (CV, outliers, missing, shapiro)
   # ------------------------------------------------------------
@@ -35,7 +44,7 @@ build_descriptive_plots <- function(summary_info, original_data = NULL) {
     if (nrow(tidy) == 0) return(NULL)
     list(data = tidy, has_group = has_group, group_label = group_label)
   }
-  
+
   # ------------------------------------------------------------
   # 2️⃣ Helper: Generic barplot for summary metrics
   # ------------------------------------------------------------
@@ -57,7 +66,7 @@ build_descriptive_plots <- function(summary_info, original_data = NULL) {
       labs(x = NULL, y = y_label) +
       theme(axis.text.x = element_text(angle = 45, hjust = 1))
   }
-  
+
   # ------------------------------------------------------------
   # 3️⃣ Add: Barplots for categorical variables
   # ------------------------------------------------------------
@@ -71,9 +80,10 @@ build_descriptive_plots <- function(summary_info, original_data = NULL) {
         labs(title = v, x = NULL, y = "Count") +
         theme(axis.text.x = element_text(angle = 45, hjust = 1))
     })
-    patchwork::wrap_plots(plots, ncol = 2)
+    names(plots) <- factor_vars
+    plots
   }
-  
+
   # ------------------------------------------------------------
   # 4️⃣ Add: Box + Jitter plots for numeric variables
   # ------------------------------------------------------------
@@ -89,9 +99,10 @@ build_descriptive_plots <- function(summary_info, original_data = NULL) {
         theme(axis.text.x = element_blank(),
               axis.ticks.x = element_blank())
     })
-    patchwork::wrap_plots(plots, ncol = 2)
+    names(plots) <- num_vars
+    plots
   }
-  
+
   # ------------------------------------------------------------
   # 5️⃣ Add: Histograms for numeric variables
   # ------------------------------------------------------------
@@ -104,9 +115,10 @@ build_descriptive_plots <- function(summary_info, original_data = NULL) {
         theme_minimal(base_size = 13) +
         labs(title = paste(v, "Distribution"), x = NULL, y = "Frequency")
     })
-    patchwork::wrap_plots(plots, ncol = 2)
+    names(plots) <- num_vars
+    plots
   }
-  
+
   # ------------------------------------------------------------
   # 6️⃣ Combine all subplots together
   # ------------------------------------------------------------
@@ -116,46 +128,68 @@ build_descriptive_plots <- function(summary_info, original_data = NULL) {
     missing = build_bar_plot(tidy_metric(data$missing, "missing"), "Missing (%)"),
     shapiro = build_bar_plot(tidy_metric(data$shapiro, "shapiro"), "Shapiro p-value")
   )
-  
+
   metric_plots <- Filter(Negate(is.null), metric_plots)
-  
+
   descriptive_plots <- list()
 
   if (length(metric_plots) > 0) {
-    descriptive_plots$metrics <-
-      patchwork::wrap_plots(metric_plots, ncol = 1) +
-      patchwork::plot_annotation(
-        title = "Summary Metrics",
-        theme = theme(plot.title = element_text(size = 16, face = "bold"))
+    descriptive_plots$metrics <- list(
+      title = "Summary Metrics",
+      panels = metric_plots,
+      defaults = list(
+        width = 520,
+        height = 360,
+        rows = length(metric_plots),
+        cols = 1
       )
+    )
   }
 
   if (!is.null(original_data)) {
-    factor_plot <- build_factor_barplots(original_data)
-    if (!is.null(factor_plot)) {
-      descriptive_plots$factors <- factor_plot +
-        patchwork::plot_annotation(
-          title = "Categorical Distributions",
-          theme = theme(plot.title = element_text(size = 16, face = "bold"))
+    factor_plots <- build_factor_barplots(original_data)
+    if (!is.null(factor_plots)) {
+      grid <- auto_grid(length(factor_plots))
+      descriptive_plots$factors <- list(
+        title = "Categorical Distributions",
+        panels = factor_plots,
+        defaults = list(
+          width = 520,
+          height = 360,
+          rows = grid$rows,
+          cols = grid$cols
         )
+      )
     }
 
-    box_plot <- build_jitter_boxplots(original_data)
-    if (!is.null(box_plot)) {
-      descriptive_plots$boxplots <- box_plot +
-        patchwork::plot_annotation(
-          title = "Boxplots",
-          theme = theme(plot.title = element_text(size = 16, face = "bold"))
+    box_plots <- build_jitter_boxplots(original_data)
+    if (!is.null(box_plots)) {
+      grid <- auto_grid(length(box_plots))
+      descriptive_plots$boxplots <- list(
+        title = "Boxplots",
+        panels = box_plots,
+        defaults = list(
+          width = 520,
+          height = 400,
+          rows = grid$rows,
+          cols = grid$cols
         )
+      )
     }
 
-    hist_plot <- build_histograms(original_data)
-    if (!is.null(hist_plot)) {
-      descriptive_plots$histograms <- hist_plot +
-        patchwork::plot_annotation(
-          title = "Histograms",
-          theme = theme(plot.title = element_text(size = 16, face = "bold"))
+    hist_plots <- build_histograms(original_data)
+    if (!is.null(hist_plots)) {
+      grid <- auto_grid(length(hist_plots))
+      descriptive_plots$histograms <- list(
+        title = "Histograms",
+        panels = hist_plots,
+        defaults = list(
+          width = 520,
+          height = 360,
+          rows = grid$rows,
+          cols = grid$cols
         )
+      )
     }
   }
 
