@@ -20,19 +20,19 @@ visualize_pca_ui <- function(id) {
       selectInput(
         ns("pca_color"),
         label = "Color points by:",
-        choices = "None",
+        choices = c("None" = "None"),
         selected = "None"
       ),
       selectInput(
         ns("pca_shape"),
         label = "Shape points by:",
-        choices = "None",
+        choices = c("None" = "None"),
         selected = "None"
       ),
       selectInput(
         ns("pca_label"),
         label = "Label points by:",
-        choices = "None",
+        choices = c("None" = "None"),
         selected = "None"
       ),
       numericInput(
@@ -101,26 +101,30 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
     # -- Populate controls when data changes ----------------------
     observeEvent(df(), {
       d <- df()
-      
-      all_cols <- names(d)
-      print(all_cols)
-      # Build choices; keep "None" first
-      choices <- c("None", all_cols)
-      
+
+      if (is.null(d) || !is.data.frame(d) || ncol(d) == 0) {
+        choices <- c("None" = "None")
+      } else {
+        all_cols <- names(d)
+        all_cols <- all_cols[all_cols != ""]
+        all_cols <- unique(all_cols)
+        choices <- c("None" = "None", stats::setNames(all_cols, all_cols))
+      }
+
       # Update inputs
-      updateSelectInput(session, "pca_color", choices = choices)
-      updateSelectInput(session, "pca_shape", choices = choices)
-      updateSelectInput(session, "pca_label", choices = choices)
-      
+      updateSelectizeInput(session, "pca_color", choices = choices, server = TRUE)
+      updateSelectizeInput(session, "pca_shape", choices = choices, server = TRUE)
+      updateSelectizeInput(session, "pca_label", choices = choices, server = TRUE)
+
       # If current selections are invalid, reset to "None"
       if (is.null(input$pca_color) || !(input$pca_color %in% choices)) {
-        updateSelectInput(session, "pca_color", selected = "None")
+        updateSelectizeInput(session, "pca_color", selected = "None")
       }
       if (is.null(input$pca_shape) || !(input$pca_shape %in% choices)) {
-        updateSelectInput(session, "pca_shape", selected = "None")
+        updateSelectizeInput(session, "pca_shape", selected = "None")
       }
       if (is.null(input$pca_label) || !(input$pca_label %in% choices)) {
-        updateSelectInput(session, "pca_label", selected = "None")
+        updateSelectizeInput(session, "pca_label", selected = "None")
       }
     }, ignoreInit = FALSE)
     
