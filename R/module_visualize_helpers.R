@@ -85,7 +85,6 @@ build_anova_layout_controls <- function(ns, input, info, default_ui_value) {
   }
   
   tagList(
-    h4("Layout Controls"),
     strata_inputs,
     response_inputs
   )
@@ -93,7 +92,6 @@ build_anova_layout_controls <- function(ns, input, info, default_ui_value) {
 
 build_ggpairs_layout_controls <- function() {
   tagList(
-    h4("Layout Controls"),
     helpText("Pairwise correlation plots do not support grid layouts. Adjust the plot size inputs below to resize the matrix.")
   )
 }

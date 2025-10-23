@@ -3,6 +3,7 @@
 # ===============================================================
 
 source("R/module_visualize_anova_one-way.R")
+source("R/module_visualize_anova_two-way.R")
 # later: source("R/visualize_pca.R"), etc.
 
 visualize_ui <- function(id) {
@@ -29,19 +30,21 @@ visualize_server <- function(id, filtered_data, model_fit) {
     # dynamic UI placeholder
     output$dynamic_ui <- renderUI({
       type <- analysis_type()
-      print(type)
       if (type == "oneway_anova") {
         visualize_oneway_ui(ns("oneway"))
+      } else if (type == "twoway_anova") {
+        visualize_twoway_ui(ns("twoway"))
       } else {
         div("Visualization not yet implemented for this analysis type.")
       }
     })
     
-    # call appropriate submodule
     observe({
       type <- analysis_type()
       if (type == "oneway_anova") {
         visualize_oneway_server("oneway", filtered_data, model_info)
+      } else if (type == "twoway_anova") {
+        visualize_twoway_server("twoway", filtered_data, model_info)
       }
     })
   })
