@@ -177,6 +177,21 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
       df <- data()
       responses <- selected_responses()
       req(length(responses) > 0)
+      
+      # ---- Validate stratification complexity ----
+      strat_var <- input$stratify_var
+      if (!is.null(strat_var) && strat_var != "None" && strat_var %in% names(df)) {
+        n_levels <- length(unique(na.omit(df[[strat_var]])))
+        validate(
+          need(
+            n_levels <= 10,
+            paste0(
+              "❌ Stratification variable '", strat_var,
+              "' has ", n_levels, " levels — please select a variable with at most 10."
+            )
+          )
+        )
+      }
 
       rhs <- reg_compose_rhs(
         input$fixed,
@@ -544,7 +559,11 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
           doc <- officer::read_docx()
           for (entry in flat_models) {
             tmp <- tempfile(fileext = ".docx")
-            write_lm_docx(entry$model, tmp)
+            sublab <- if (!is.null(entry$stratum)) paste("Stratum:", entry$stratum) else NULL
+            
+            # pass subtitle so it appears RIGHT under the title
+            write_lm_docx(entry$model, tmp, subtitle = sublab)
+            
             doc <- officer::body_add_docx(doc, src = tmp)
             doc <- officer::body_add_par(doc, "", style = "Normal")
           }

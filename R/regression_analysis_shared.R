@@ -129,7 +129,7 @@ reg_display_lmm_summary <- function(m) {
 # Results export
 # ===============================================================
 
-write_lm_docx <- function(model, file) {
+write_lm_docx <- function(model, file, subtitle = NULL) {
   
   # Determine model type
   is_lmm <- inherits(model, "merMod")
@@ -174,16 +174,29 @@ write_lm_docx <- function(model, file) {
 
   # Create new Word document
   doc <- read_docx()
-
+  
   # ---- Title ----
   title_text <- sprintf(
     "%s Results — %s",
     if (is_lmm) "Linear Mixed Model" else "Linear Model",
     dep_var
   )
-  doc <- body_add_fpar(doc, fpar(ftext(title_text, prop = fp_text(bold = TRUE, font.size = 12))))
+  doc <- body_add_fpar(
+    doc,
+    fpar(ftext(title_text, prop = fp_text(bold = TRUE, font.size = 12)))
+  )
+  
+  # ---- Subtitle (Stratum, if any) ----
+  if (!is.null(subtitle) && nzchar(subtitle)) {
+    subtitle_text <- ftext(
+      subtitle,
+      prop = fp_text(bold = TRUE, font.size = 11)
+    )
+    doc <- body_add_fpar(doc, fpar(subtitle_text))
+  }
+  
   doc <- body_add_par(doc, "")
-
+  
   # ==========================================================
   # 🔹 ANOVA (Type III)
   # ==========================================================
