@@ -3,6 +3,7 @@
 # ===============================================================
 
 library(bslib)
+library(colourpicker)
 library(dplyr)
 library(DT)
 library(flextable)
@@ -158,7 +159,7 @@ one_way_anova_server <- function(id, filtered_data) {
     models <- eventReactive(input$run, {
       req(df(), input$response, input$group, input$order)
       responses <- get_selected_responses(input)
-      prepare_stratified_models(
+      prepare_stratified_anova(
         df = df(),
         responses = responses,
         model = "oneway_anova",
@@ -229,12 +230,12 @@ visualize_oneway_ui <- function(id) {
         column(6, numericInput(ns("plot_height"), "Subplot height (px)", value = 200, min = 200, max = 1200, step = 50))
       ),
       hr(),
+      # --- Reusable Advanced Options ---
+      add_color_customization_ui(ns, multi_group = FALSE),
+      hr(),
       downloadButton(ns("download_plot"), "Download Plot")
     ),
-    mainPanel(
-      width = 8,
-      plotOutput(ns("plot"), height = "auto")
-    )
+    mainPanel(width = 8, plotOutput(ns("plot"), height = "auto"))
   )
 }
 
@@ -242,9 +243,7 @@ visualize_oneway_ui <- function(id) {
 visualize_oneway_server <- function(id, filtered_data, model_info) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
-    
     df <- reactive(filtered_data())
-    
     layout_state <- initialize_layout_state(input, session)
     
     plot_info <- reactive({
@@ -278,17 +277,36 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
       build_anova_layout_controls(ns, input, info, layout_state$default_ui_value)
     })
     
+    # ---- Shared color logic ----
+    color_var_reactive <- reactive({
+      info <- model_info()
+      if (is.null(info)) return(NULL)
+      info$factors$factor1
+    })
+    
+    custom_color <- add_color_customization_server(
+      ns = ns,
+      input = input,
+      output = output,
+      data = df,
+      color_var_reactive = reactive(NULL),
+      multi_group = FALSE
+    )
+    
+    # ---- Plot rendering ----
     output$plot <- renderPlot({
       info <- model_info()
-      req(info, input$plot_type)
+      req(info, input$plot_type, plot_obj())
       
-      # --- Only one option for now ---
       if (input$plot_type == "mean_se") {
-        req(plot_obj())
-        return(plot_obj())
+        color_value <- custom_color()
+        p <- plot_obj() +
+          scale_color_manual(values = c(color_value)) +
+          scale_fill_manual(values = c(color_value))
+        return(p)
       }
-    
-    }, width = function() plot_size()$w,
+    },
+    width = function() plot_size()$w,
     height = function() plot_size()$h,
     res = 96)
     
@@ -382,6 +400,101 @@ build_anova_layout_controls <- function(ns, input, info, default_ui_value) {
     h4("Layout Controls"),
     strata_inputs,
     response_inputs
+  )
+}
+
+
+# ===============================================================
+# 📊 Prepare stratified models for ANOVA (one-way / two-way)
+# ===============================================================
+
+prepare_stratified_anova <- function(
+    df,
+    responses,
+    model,
+    factor1_var = NULL,
+    factor1_order = NULL,
+    factor2_var = NULL,
+    factor2_order = NULL,
+    stratify_var = NULL,
+    strata_order = NULL
+) {
+  req(df, responses, model)
+  
+  if (!is.null(factor1_var) && !is.null(factor1_order)) {
+    df[[factor1_var]] <- factor(as.character(df[[factor1_var]]), levels = factor1_order)
+  }
+  
+  if (!is.null(factor2_var) && !is.null(factor2_order)) {
+    df[[factor2_var]] <- factor(as.character(df[[factor2_var]]), levels = factor2_order)
+  }
+  
+  if (!is.null(stratify_var) && !is.null(strata_order)) {
+    df[[stratify_var]] <- factor(as.character(df[[stratify_var]]), levels = strata_order)
+  }
+  
+  strata <- if (!is.null(stratify_var) && stratify_var %in% names(df)) {
+    levels(df[[stratify_var]])
+  } else {
+    NULL
+  }
+  
+  build_rhs <- function() {
+    if (model == "oneway_anova") {
+      factor1_var
+    } else if (model == "twoway_anova") {
+      if (!is.null(factor1_var) && !is.null(factor2_var)) {
+        paste(factor1_var, factor2_var, sep = " *")
+      } else {
+        factor1_var
+      }
+    } else {
+      factor1_var
+    }
+  }
+  
+  build_formula <- function(resp) {
+    rhs <- build_rhs()
+    if (is.null(rhs) || rhs == "") rhs <- "1"
+    as.formula(paste(resp, "~", rhs))
+  }
+  
+  fit_fn <- function(fml, data) {
+    stats::aov(fml, data = data)
+  }
+  
+  if (is.null(strata)) {
+    out <- list()
+    for (resp in responses) {
+      out[[resp]] <- fit_fn(build_formula(resp), df)
+    }
+    return(list(
+      type = model,
+      models = out,
+      responses = responses,
+      strata = NULL,
+      factors = list(factor1 = factor1_var, factor2 = factor2_var),
+      orders = list(order1 = factor1_order, order2 = factor2_order)
+    ))
+  }
+  
+  out <- list()
+  for (s in strata) {
+    sub <- df[df[[stratify_var]] == s, , drop = FALSE]
+    sub_models <- list()
+    for (resp in responses) {
+      sub_models[[resp]] <- fit_fn(build_formula(resp), sub)
+    }
+    out[[s]] <- sub_models
+  }
+  
+  list(
+    type = model,
+    models = out,
+    responses = responses,
+    strata = list(var = stratify_var, levels = strata),
+    factors = list(factor1 = factor1_var, factor2 = factor2_var),
+    orders = list(order1 = factor1_order, order2 = factor2_order)
   )
 }
 
@@ -928,7 +1041,7 @@ two_way_anova_server <- function(id, filtered_data) {
     models <- eventReactive(input$run, {
       req(df(), input$response, input$factor1, input$order1, input$factor2, input$order2)
       responses <- get_selected_responses(input)
-      prepare_stratified_models(
+      prepare_stratified_anova(
         df = df(),
         responses = responses,
         model = "twoway_anova",
@@ -942,7 +1055,7 @@ two_way_anova_server <- function(id, filtered_data) {
     })
     
     
-    
+
     # -----------------------------------------------------------
     # Download all results as one combined DOCX
     # -----------------------------------------------------------
@@ -1505,204 +1618,6 @@ compute_icc <- function(model) {
   icc_df
 }
 # ===============================================================
-# 🔁 Shared utilities for multiple-response models
-# ===============================================================
-
-# --- UI builder for the checkbox and response selector
-render_response_inputs <- function(ns, data, input) {
-  df <- if (is.function(data)) data() else data
-  req(df)
-  num_vars <- names(df)[sapply(df, is.numeric)]
-  
-  current_selection <- input$response
-  if (is.null(current_selection) || !all(current_selection %in% num_vars)) {
-    current_selection <- if (length(num_vars) > 0) num_vars[1] else NULL
-  }
-  
-  tagList(
-    checkboxInput(
-      ns("multi_resp"),
-      "Enable multiple response variables",
-      value = isTRUE(input$multi_resp)
-    ),
-    selectInput(
-      ns("response"),
-      if (isTRUE(input$multi_resp)) "Select response variables:" else "Select response variable:",
-      choices = num_vars,
-      selected = current_selection,
-      multiple = isTRUE(input$multi_resp)
-    )
-  )
-}
-
-# --- Server-side helper to retrieve a standardized list of responses
-get_selected_responses <- function(input) {
-  req(input$response)
-  responses <- input$response
-  if (!isTRUE(input$multi_resp)) responses <- responses[1]
-  unique(responses)
-}
-# ===============================================================
-# 🧭 Stratification helpers (shared across analysis modules)
-# ===============================================================
-
-# -- Utility to resolve either a reactive expression or raw data frame
-.resolve_data <- function(data) {
-  if (is.function(data)) data() else data
-}
-
-# ---------------------------------------------------------------
-# Stratification options panel (select strat variable + placeholder for order)
-# ---------------------------------------------------------------
-render_stratification_controls <- function(ns, data, input,
-                                           section_title = "Advanced options",
-                                           stratify_label = "Stratify by:",
-                                           none_label = "None") {
-  df <- .resolve_data(data)
-  req(df)
-  
-  cat_cols <- names(df)[sapply(df, function(x) is.character(x) || is.factor(x))]
-  choices <- c(none_label, setdiff(unique(cat_cols), none_label))
-  
-  tags$details(
-    tags$summary(strong(section_title)),
-    selectInput(
-      ns("stratify_var"),
-      stratify_label,
-      choices = choices,
-      selected = none_label
-    ),
-    uiOutput(ns("strata_order_ui"))
-  )
-}
-
-# Backwards compat alias for ANOVA modules (legacy name)
-render_advanced_options <- render_stratification_controls
-
-# ---------------------------------------------------------------
-# Stratification order selector (shared across modules)
-# ---------------------------------------------------------------
-render_strata_order_input <- function(ns, data, strat_var,
-                                      input_id = "strata_order",
-                                      order_label = NULL) {
-  if (is.null(strat_var) || identical(strat_var, "None")) return(NULL)
-  
-  df <- .resolve_data(data)
-  if (is.null(df)) return(NULL)
-  if (nrow(df) == 0) return(NULL)
-  
-  values <- df[[strat_var]]
-  if (is.null(values)) return(NULL)
-  
-  if (is.factor(values)) {
-    strata_levels <- levels(values)
-  } else {
-    values <- values[!is.na(values)]
-    strata_levels <- unique(as.character(values))
-  }
-  
-  if (length(strata_levels) == 0) return(NULL)
-  
-  if (is.null(order_label)) {
-    order_label <- paste("Order of levels for", strat_var, "(strata):")
-  }
-  
-  selectInput(
-    ns(input_id),
-    order_label,
-    choices = strata_levels,
-    selected = strata_levels,
-    multiple = TRUE
-  )
-}
-
-prepare_stratified_models <- function(
-    df,
-    responses,
-    model,
-    factor1_var = NULL,
-    factor1_order = NULL,
-    factor2_var = NULL,
-    factor2_order = NULL,
-    stratify_var = NULL,
-    strata_order = NULL,
-    random_effect = NULL
-) {
-  req(df, responses, model)
-  
-  if (!is.null(factor1_var) && !is.null(factor1_order)) {
-    df[[factor1_var]] <- factor(as.character(df[[factor1_var]]), levels = factor1_order)
-  }
-  
-  if (!is.null(factor2_var) && !is.null(factor2_order)) {
-    df[[factor2_var]] <- factor(as.character(df[[factor2_var]]), levels = factor2_order)
-  }
-  
-  if (!is.null(stratify_var) && !is.null(strata_order)) {
-    df[[stratify_var]] <- factor(as.character(df[[stratify_var]]), levels = strata_order)
-  }
-  
-  strata <- if (!is.null(stratify_var) && stratify_var %in% names(df)) levels(df[[stratify_var]]) else NULL
-  
-  build_rhs <- function() {
-    if (model %in% c("oneway_anova")) {
-      factor1_var
-    } else if (model %in% c("twoway_anova")) {
-      if (!is.null(factor1_var) && !is.null(factor2_var)) paste(factor1_var, factor2_var, sep = " *") else factor1_var
-    } else if (model %in% c("lm", "lmm")) {
-      if (!is.null(factor1_var) && !is.null(factor2_var)) paste(factor1_var, factor2_var, sep = " +") else factor1_var
-    } else {
-      factor1_var
-    }
-  }
-  
-  build_formula <- function(resp) {
-    rhs <- build_rhs()
-    if (!is.null(random_effect) && model == "lmm") {
-      rhs <- paste(rhs, sprintf("(1|%s)", random_effect), sep = " + ")
-    }
-    as.formula(paste(resp, "~", rhs))
-  }
-  
-  fit_fn <- function(fml, data) {
-    if (model == "lmm") lmerTest::lmer(fml, data = data) else stats::lm(fml, data = data)
-  }
-  
-  if (is.null(strata)) {
-    out <- list()
-    for (resp in responses) {
-      out[[resp]] <- fit_fn(build_formula(resp), df)
-    }
-    return(list(
-      type = model,
-      models = out,
-      responses = responses,
-      strata = NULL,
-      factors = list(factor1 = factor1_var, factor2 = factor2_var),
-      orders = list(order1 = factor1_order, order2 = factor2_order)
-    ))
-  }
-  
-  out <- list()
-  for (s in strata) {
-    sub <- df[df[[stratify_var]] == s, , drop = FALSE]
-    sub_models <- list()
-    for (resp in responses) {
-      sub_models[[resp]] <- fit_fn(build_formula(resp), sub)
-    }
-    out[[s]] <- sub_models
-  }
-  
-  list(
-    type = model,
-    models = out,
-    responses = responses,
-    strata = list(var = stratify_var, levels = strata),
-    factors = list(factor1 = factor1_var, factor2 = factor2_var),
-    orders = list(order1 = factor1_order, order2 = factor2_order)
-  )
-}
-# ===============================================================
 # 🧪 Animal Trial Analyzer — Analysis Coordinator (fixed + cleaned)
 # ===============================================================
 
@@ -1882,6 +1797,78 @@ analysis_server <- function(id, filtered_data) {
       model
     })
   })
+}
+# ===============================================================
+# 🎨 Module for colors customization
+# ===============================================================
+
+# ---- UI ----
+add_color_customization_ui <- function(ns, multi_group = TRUE) {
+  tags$details(
+    tags$summary(strong("Advanced options")),
+    uiOutput(ns("color_custom_ui"))
+  )
+}
+
+# ---- SERVER logic ----
+add_color_customization_server <- function(ns, input, output, data, color_var_reactive, multi_group = TRUE) {
+  output$color_custom_ui <- renderUI({
+    req(data())
+    color_var <- color_var_reactive()
+    if (is.null(color_var)) return(NULL)
+    
+    if (isTRUE(multi_group)) {
+      render_color_inputs(ns, data, color_var)
+    } else {
+      colourpicker::colourInput(
+        ns("single_color"),
+        label = "Plot color",
+        value = "#1f77b4"
+      )
+    }
+  })
+  
+  reactive({
+    if (isTRUE(multi_group)) {
+      req(data())
+      color_var <- color_var_reactive()
+      req(color_var)
+      
+      lvls <- levels(as.factor(data()[[color_var]]))
+      cols <- sapply(seq_along(lvls), function(i) {
+        input[[paste0("col_", color_var, "_", i)]]
+      })
+      names(cols) <- lvls
+      cols
+    } else {
+      single_col <- input$single_color
+      if (is.null(single_col)) single_col <- "#1f77b4"
+      single_col
+    }
+  })
+}
+# ===============================================================
+# 🎨 UI helper to assign colors per level of a factor
+# ===============================================================
+
+render_color_inputs <- function(ns, data, color_var) {
+  if (is.null(color_var) || color_var == "None") return(NULL)
+  if (!color_var %in% names(data())) return(NULL)
+  
+  values <- data()[[color_var]]
+  lvls <- if (is.factor(values)) levels(values) else unique(as.character(values))
+  lvls <- lvls[!is.na(lvls)]
+  
+  tagList(
+    h5(paste("Customize colors for", color_var)),
+    lapply(seq_along(lvls), function(i) {
+      colourpicker::colourInput(
+        ns(paste0("col_", color_var, "_", i)),
+        label = lvls[i],
+        value = RColorBrewer::brewer.pal(8, "Set2")[i %% 8 + 1]
+      )
+    })
+  )
 }
 # ===============================================================
 # 🧪 Animal Trial Analyzer — Filter Module (cleaned, identical behavior)
@@ -4223,4 +4210,116 @@ format_regression_table <- function(df, bold_p = TRUE) {
   ft <- set_table_properties(ft, layout = "autofit", width = 0.9)
   ft <- padding(ft, padding.top = 2, padding.bottom = 2, padding.left = 2, padding.right = 2)
   ft
+}# ===============================================================
+# 🔁 Shared utilities for multiple-response models
+# ===============================================================
+
+# --- UI builder for the checkbox and response selector
+render_response_inputs <- function(ns, data, input) {
+  df <- if (is.function(data)) data() else data
+  req(df)
+  num_vars <- names(df)[sapply(df, is.numeric)]
+  
+  current_selection <- input$response
+  if (is.null(current_selection) || !all(current_selection %in% num_vars)) {
+    current_selection <- if (length(num_vars) > 0) num_vars[1] else NULL
+  }
+  
+  tagList(
+    checkboxInput(
+      ns("multi_resp"),
+      "Enable multiple response variables",
+      value = isTRUE(input$multi_resp)
+    ),
+    selectInput(
+      ns("response"),
+      if (isTRUE(input$multi_resp)) "Select response variables:" else "Select response variable:",
+      choices = num_vars,
+      selected = current_selection,
+      multiple = isTRUE(input$multi_resp)
+    )
+  )
 }
+
+# --- Server-side helper to retrieve a standardized list of responses
+get_selected_responses <- function(input) {
+  req(input$response)
+  responses <- input$response
+  if (!isTRUE(input$multi_resp)) responses <- responses[1]
+  unique(responses)
+}
+# ===============================================================
+# 🧭 Stratification helpers (shared across analysis modules)
+# ===============================================================
+
+# -- Utility to resolve either a reactive expression or raw data frame
+.resolve_data <- function(data) {
+  if (is.function(data)) data() else data
+}
+
+# ---------------------------------------------------------------
+# Stratification options panel (select strat variable + placeholder for order)
+# ---------------------------------------------------------------
+render_stratification_controls <- function(ns, data, input,
+                                           section_title = "Advanced options",
+                                           stratify_label = "Stratify by:",
+                                           none_label = "None") {
+  df <- .resolve_data(data)
+  req(df)
+  
+  cat_cols <- names(df)[sapply(df, function(x) is.character(x) || is.factor(x))]
+  choices <- c(none_label, setdiff(unique(cat_cols), none_label))
+  
+  tags$details(
+    tags$summary(strong(section_title)),
+    selectInput(
+      ns("stratify_var"),
+      stratify_label,
+      choices = choices,
+      selected = none_label
+    ),
+    uiOutput(ns("strata_order_ui"))
+  )
+}
+
+# Backwards compat alias for ANOVA modules (legacy name)
+render_advanced_options <- render_stratification_controls
+
+# ---------------------------------------------------------------
+# Stratification order selector (shared across modules)
+# ---------------------------------------------------------------
+render_strata_order_input <- function(ns, data, strat_var,
+                                      input_id = "strata_order",
+                                      order_label = NULL) {
+  if (is.null(strat_var) || identical(strat_var, "None")) return(NULL)
+  
+  df <- .resolve_data(data)
+  if (is.null(df)) return(NULL)
+  if (nrow(df) == 0) return(NULL)
+  
+  values <- df[[strat_var]]
+  if (is.null(values)) return(NULL)
+  
+  if (is.factor(values)) {
+    strata_levels <- levels(values)
+  } else {
+    values <- values[!is.na(values)]
+    strata_levels <- unique(as.character(values))
+  }
+  
+  if (length(strata_levels) == 0) return(NULL)
+  
+  if (is.null(order_label)) {
+    order_label <- paste("Order of levels for", strat_var, "(strata):")
+  }
+  
+  selectInput(
+    ns(input_id),
+    order_label,
+    choices = strata_levels,
+    selected = strata_levels,
+    multiple = TRUE
+  )
+}
+
+

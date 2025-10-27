@@ -3,6 +3,7 @@
 # ===============================================================
 
 library(bslib)
+library(colourpicker)
 library(dplyr)
 library(DT)
 library(flextable)

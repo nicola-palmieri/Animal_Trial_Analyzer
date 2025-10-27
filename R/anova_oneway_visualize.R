@@ -23,6 +23,8 @@ visualize_oneway_ui <- function(id) {
         column(6, numericInput(ns("plot_height"), "Subplot height (px)", value = 200, min = 200, max = 1200, step = 50))
       ),
       hr(),
+      add_color_customization_ui(ns, multi_group = FALSE),
+      hr(),
       downloadButton(ns("download_plot"), "Download Plot")
     ),
     mainPanel(
@@ -38,14 +40,29 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
     ns <- session$ns
     
     df <- reactive(filtered_data())
-    
     layout_state <- initialize_layout_state(input, session)
     
+    # ---- Plug in color customization module (single-color mode) ----
+    custom_colors <- add_color_customization_server(
+      ns = ns,
+      input = input,
+      output = output,
+      data = df,
+      color_var_reactive = reactive(NULL),
+      multi_group = FALSE
+    )
+    
+    # ---- Build plot info ----
     plot_info <- reactive({
       info <- model_info()
-      if (is.null(info) || info$type != "oneway_anova") return(NULL)
+      if (is.null(info)) return(NULL)
       data <- df()
-      build_anova_plot_info(data, info, layout_state$effective_input)
+      build_anova_plot_info(
+        data,
+        info,
+        layout_state$effective_input,
+        line_colors = custom_colors()
+      )
     })
     
     observe_layout_synchronization(plot_info, layout_state, session)
@@ -72,20 +89,20 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
       build_anova_layout_controls(ns, input, info, layout_state$default_ui_value)
     })
     
+    # ---- Render plot ----
     output$plot <- renderPlot({
       info <- model_info()
       req(info, input$plot_type)
-      
-      # --- Only one option for now ---
       if (input$plot_type == "mean_se") {
         req(plot_obj())
-        return(plot_obj())
+        plot_obj()
       }
-    
-    }, width = function() plot_size()$w,
+    },
+    width = function() plot_size()$w,
     height = function() plot_size()$h,
     res = 96)
     
+    # ---- Download handler ----
     output$download_plot <- downloadHandler(
       filename = function() paste0("anova_plot_", Sys.Date(), ".png"),
       content = function(file) {

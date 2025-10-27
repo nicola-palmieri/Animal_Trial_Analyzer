@@ -173,7 +173,7 @@ build_descriptive_histogram <- function(df) {
 }
 
 
-build_anova_plot_info <- function(data, info, effective_input) {
+build_anova_plot_info <- function(data, info, effective_input, line_colors = NULL) {
   factor1 <- info$factors$factor1
   factor2 <- info$factors$factor2
   order1 <- info$orders$order1
@@ -219,12 +219,14 @@ build_anova_plot_info <- function(data, info, effective_input) {
   }
 
   build_plot <- function(stats_df, title_text, y_limits) {
+    single_col <- if (!is.null(line_colors) && length(line_colors) == 1) line_colors else "steelblue"
+    
     if (is.null(factor2)) {
       p <- ggplot(stats_df, aes(x = !!sym(factor1), y = mean)) +
-        geom_line(aes(group = 1), color = "steelblue", linewidth = 1) +
-        geom_point(size = 3, color = "steelblue") +
+        geom_line(aes(group = 1), color = single_col, linewidth = 1) +
+        geom_point(size = 3, color = single_col) +
         geom_errorbar(aes(ymin = mean - se, ymax = mean + se),
-                      width = 0.15, color = "gray40") +
+                      width = 0.15, color = single_col) +
         theme_minimal(base_size = 14) +
         labs(x = factor1, y = "Mean ± SE") +
         theme(
@@ -252,12 +254,17 @@ build_anova_plot_info <- function(data, info, effective_input) {
           panel.grid.minor = element_blank(),
           panel.grid.major.x = element_blank()
         )
+      
+      if (!is.null(line_colors) && length(line_colors) > 1) {
+        p <- p + scale_color_manual(values = line_colors) +
+          scale_fill_manual(values = line_colors)
+      }
     }
-
+    
     if (!is.null(y_limits) && all(is.finite(y_limits))) {
       p <- p + scale_y_continuous(limits = y_limits)
     }
-
+    
     p + ggtitle(title_text) +
       theme(plot.title = element_text(size = 12, face = "bold"))
   }
