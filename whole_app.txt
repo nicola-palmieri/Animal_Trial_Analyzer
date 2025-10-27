@@ -3,7 +3,6 @@
 # ===============================================================
 
 library(bslib)
-library(colourpicker)
 library(dplyr)
 library(DT)
 library(flextable)
@@ -226,8 +225,8 @@ visualize_oneway_ui <- function(id) {
       hr(),
       uiOutput(ns("layout_controls")),
       fluidRow(
-        column(6, numericInput(ns("plot_width"), "Subplot width (px)", value = 300, min = 200, max = 1200, step = 50)),
-        column(6, numericInput(ns("plot_height"), "Subplot height (px)", value = 200, min = 200, max = 1200, step = 50))
+        column(6, numericInput(ns("plot_width"), "Subplot width (px)", value = 400, min = 200, max = 1200, step = 50)),
+        column(6, numericInput(ns("plot_height"), "Subplot height (px)", value = 300, min = 200, max = 1200, step = 50))
       ),
       hr(),
       add_color_customization_ui(ns, multi_group = FALSE),
@@ -429,8 +428,24 @@ prepare_stratified_anova <- function(
     df[[factor2_var]] <- factor(as.character(df[[factor2_var]]), levels = factor2_order)
   }
   
-  if (!is.null(stratify_var) && !is.null(strata_order)) {
-    df[[stratify_var]] <- factor(as.character(df[[stratify_var]]), levels = strata_order)
+  if (!is.null(stratify_var) && stratify_var %in% names(df)) {
+    n_levels <- length(unique(na.omit(df[[stratify_var]])))
+    
+    validate(
+      need(
+        n_levels <= 10,
+        paste0(
+          "❌ Stratification variable '", stratify_var,
+          "' has ", n_levels, " levels — please select a variable with at most 10."
+        )
+      )
+    )
+    
+    if (!is.null(strata_order) && length(strata_order) > 0) {
+      df[[stratify_var]] <- factor(as.character(df[[stratify_var]]), levels = strata_order)
+    } else {
+      df[[stratify_var]] <- as.factor(as.character(df[[stratify_var]]))
+    }
   }
   
   strata <- if (!is.null(stratify_var) && stratify_var %in% names(df)) {
@@ -1113,9 +1128,11 @@ visualize_twoway_ui <- function(id) {
       hr(),
       uiOutput(ns("layout_controls")),
       fluidRow(
-        column(6, numericInput(ns("plot_width"), "Subplot width (px)",  value = 300, min = 200, max = 1200, step = 50)),
-        column(6, numericInput(ns("plot_height"), "Subplot height (px)", value = 200, min = 200, max = 1200, step = 50))
+        column(6, numericInput(ns("plot_width"), "Subplot width (px)",  value = 400, min = 200, max = 1200, step = 50)),
+        column(6, numericInput(ns("plot_height"), "Subplot height (px)", value = 300, min = 200, max = 1200, step = 50))
       ),
+      hr(),
+      add_color_customization_ui(ns, multi_group = TRUE),
       hr(),
       downloadButton(ns("download_plot"), "Download Plot")
     ),
@@ -1145,6 +1162,22 @@ visualize_twoway_server <- function(id, filtered_data, model_fit) {
     
     observe_layout_synchronization(plot_info, layout_state, session)
     
+    # ---- color customization ----
+    color_var_reactive <- reactive({
+      info <- model_info()
+      if (is.null(info)) return(NULL)
+      info$factors$factor2   # color lines by factor2
+    })
+    
+    custom_colors <- add_color_customization_server(
+      ns = ns,
+      input = input,
+      output = output,
+      data = df,
+      color_var_reactive = color_var_reactive,
+      multi_group = TRUE
+    )
+    
     plot_obj <- reactive({
       info <- plot_info()
       if (is.null(info)) return(NULL)
@@ -1170,16 +1203,19 @@ visualize_twoway_server <- function(id, filtered_data, model_fit) {
     # ✅ simpler, consistent naming and structure
     output$plot <- renderPlot({
       info <- model_info()
-      req(info, input$plot_type)
-      
+      req(info, input$plot_type, plot_obj())
+
       if (input$plot_type == "mean_se") {
-        req(plot_obj())
-        return(plot_obj())
+        cols <- custom_colors()
+        p <- plot_obj() +
+          ggplot2::scale_color_manual(values = cols) +
+          ggplot2::scale_fill_manual(values = cols)
+        p
       }
     },
-    width  = function() plot_size()$w,
+    width = function() plot_size()$w,
     height = function() plot_size()$h,
-    res    = 96)
+    res = 96)
     
     output$download_plot <- downloadHandler(
       filename = function() paste0(input$plot_type, "_twoway_anova_plot_", Sys.Date(), ".png"),
@@ -3611,6 +3647,21 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
       df <- data()
       responses <- selected_responses()
       req(length(responses) > 0)
+      
+      # ---- Validate stratification complexity ----
+      strat_var <- input$stratify_var
+      if (!is.null(strat_var) && strat_var != "None" && strat_var %in% names(df)) {
+        n_levels <- length(unique(na.omit(df[[strat_var]])))
+        validate(
+          need(
+            n_levels <= 10,
+            paste0(
+              "❌ Stratification variable '", strat_var,
+              "' has ", n_levels, " levels — please select a variable with at most 10."
+            )
+          )
+        )
+      }
 
       rhs <- reg_compose_rhs(
         input$fixed,
@@ -3978,7 +4029,11 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
           doc <- officer::read_docx()
           for (entry in flat_models) {
             tmp <- tempfile(fileext = ".docx")
-            write_lm_docx(entry$model, tmp)
+            sublab <- if (!is.null(entry$stratum)) paste("Stratum:", entry$stratum) else NULL
+            
+            # pass subtitle so it appears RIGHT under the title
+            write_lm_docx(entry$model, tmp, subtitle = sublab)
+            
             doc <- officer::body_add_docx(doc, src = tmp)
             doc <- officer::body_add_par(doc, "", style = "Normal")
           }
@@ -4126,7 +4181,7 @@ reg_display_lmm_summary <- function(m) {
 # Results export
 # ===============================================================
 
-write_lm_docx <- function(model, file) {
+write_lm_docx <- function(model, file, subtitle = NULL) {
   
   # Determine model type
   is_lmm <- inherits(model, "merMod")
@@ -4171,16 +4226,29 @@ write_lm_docx <- function(model, file) {
 
   # Create new Word document
   doc <- read_docx()
-
+  
   # ---- Title ----
   title_text <- sprintf(
     "%s Results — %s",
     if (is_lmm) "Linear Mixed Model" else "Linear Model",
     dep_var
   )
-  doc <- body_add_fpar(doc, fpar(ftext(title_text, prop = fp_text(bold = TRUE, font.size = 12))))
+  doc <- body_add_fpar(
+    doc,
+    fpar(ftext(title_text, prop = fp_text(bold = TRUE, font.size = 12)))
+  )
+  
+  # ---- Subtitle (Stratum, if any) ----
+  if (!is.null(subtitle) && nzchar(subtitle)) {
+    subtitle_text <- ftext(
+      subtitle,
+      prop = fp_text(bold = TRUE, font.size = 11)
+    )
+    doc <- body_add_fpar(doc, fpar(subtitle_text))
+  }
+  
   doc <- body_add_par(doc, "")
-
+  
   # ==========================================================
   # 🔹 ANOVA (Type III)
   # ==========================================================

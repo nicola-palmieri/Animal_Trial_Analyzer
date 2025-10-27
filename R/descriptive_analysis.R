@@ -64,8 +64,22 @@ descriptive_server <- function(id, filtered_data) {
       validate(need(length(selected_vars) > 0, "Please select at least one variable."))
       
       group_var <- if (is.null(input$stratify_var) || input$stratify_var == "None") NULL else input$stratify_var
-      if (!is.null(group_var) && !(group_var %in% selected_vars)) {
-        selected_vars <- c(selected_vars, group_var)
+      if (!is.null(group_var)) {
+        # make sure the group var is present
+        if (!(group_var %in% names(local_data))) {
+          selected_vars <- unique(c(selected_vars, group_var))
+          local_data <- local_data[, selected_vars, drop = FALSE]
+        }
+        
+        # keep ONLY selected levels, in the exact order; drop NA and unused levels
+        sel <- input$strata_order
+        if (!is.null(sel) && length(sel) > 0) {
+          local_data <- dplyr::filter(local_data, .data[[group_var]] %in% sel)
+          local_data[[group_var]] <- factor(as.character(local_data[[group_var]]), levels = sel)
+        } else {
+          local_data[[group_var]] <- factor(as.character(local_data[[group_var]]))
+        }
+        local_data <- droplevels(local_data)
       }
       
       local_data <- local_data[, selected_vars, drop = FALSE]
