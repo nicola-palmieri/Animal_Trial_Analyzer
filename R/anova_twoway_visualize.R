@@ -23,6 +23,8 @@ visualize_twoway_ui <- function(id) {
         column(6, numericInput(ns("plot_height"), "Subplot height (px)", value = 300, min = 200, max = 1200, step = 50))
       ),
       hr(),
+      add_color_customization_ui(ns, multi_group = TRUE),
+      hr(),
       downloadButton(ns("download_plot"), "Download Plot")
     ),
     mainPanel(
@@ -51,6 +53,22 @@ visualize_twoway_server <- function(id, filtered_data, model_fit) {
     
     observe_layout_synchronization(plot_info, layout_state, session)
     
+    # ---- color customization ----
+    color_var_reactive <- reactive({
+      info <- model_info()
+      if (is.null(info)) return(NULL)
+      info$factors$factor2   # color lines by factor2
+    })
+    
+    custom_colors <- add_color_customization_server(
+      ns = ns,
+      input = input,
+      output = output,
+      data = df,
+      color_var_reactive = color_var_reactive,
+      multi_group = TRUE
+    )
+    
     plot_obj <- reactive({
       info <- plot_info()
       if (is.null(info)) return(NULL)
@@ -76,16 +94,19 @@ visualize_twoway_server <- function(id, filtered_data, model_fit) {
     # ✅ simpler, consistent naming and structure
     output$plot <- renderPlot({
       info <- model_info()
-      req(info, input$plot_type)
-      
+      req(info, input$plot_type, plot_obj())
+
       if (input$plot_type == "mean_se") {
-        req(plot_obj())
-        return(plot_obj())
+        cols <- custom_colors()
+        p <- plot_obj() +
+          ggplot2::scale_color_manual(values = cols) +
+          ggplot2::scale_fill_manual(values = cols)
+        p
       }
     },
-    width  = function() plot_size()$w,
+    width = function() plot_size()$w,
     height = function() plot_size()$h,
-    res    = 96)
+    res = 96)
     
     output$download_plot <- downloadHandler(
       filename = function() paste0(input$plot_type, "_twoway_anova_plot_", Sys.Date(), ".png"),
