@@ -218,7 +218,7 @@ visualize_descriptive_server <- function(id, filtered_data, descriptive_summary)
       )
     })
 
-    observe_layout_synchronization(layout_info, layout_state, session)
+    observe_layout_synchronization(input, layout_info, layout_state, session)
 
     # ------------------------------------------------------------
     # 4️⃣ Render plot safely

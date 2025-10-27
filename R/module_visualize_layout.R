@@ -61,7 +61,7 @@ initialize_layout_state <- function(input, session) {
   )
 }
 
-observe_layout_synchronization <- function(plot_info_reactive, layout_state, session) {
+observe_layout_synchronization <- function(input, plot_info_reactive, layout_state, session) {
   observeEvent(plot_info_reactive(), {
     info <- plot_info_reactive()
     if (is.null(info)) return()
