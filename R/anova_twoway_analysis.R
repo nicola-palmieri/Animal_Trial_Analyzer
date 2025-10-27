@@ -102,7 +102,7 @@ two_way_anova_server <- function(id, filtered_data) {
     models <- eventReactive(input$run, {
       req(df(), input$response, input$factor1, input$order1, input$factor2, input$order2)
       responses <- get_selected_responses(input)
-      prepare_stratified_models(
+      prepare_stratified_anova(
         df = df(),
         responses = responses,
         model = "twoway_anova",
@@ -116,7 +116,7 @@ two_way_anova_server <- function(id, filtered_data) {
     })
     
     
-    
+
     # -----------------------------------------------------------
     # Download all results as one combined DOCX
     # -----------------------------------------------------------

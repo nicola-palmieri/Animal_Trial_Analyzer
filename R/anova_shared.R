@@ -78,7 +78,7 @@ build_anova_layout_controls <- function(ns, input, info, default_ui_value) {
 # 📊 Prepare stratified models for ANOVA (one-way / two-way)
 # ===============================================================
 
-prepare_stratified_models <- function(
+prepare_stratified_anova <- function(
     df,
     responses,
     model,

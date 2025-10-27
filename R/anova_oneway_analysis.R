@@ -83,7 +83,7 @@ one_way_anova_server <- function(id, filtered_data) {
     models <- eventReactive(input$run, {
       req(df(), input$response, input$group, input$order)
       responses <- get_selected_responses(input)
-      prepare_stratified_models(
+      prepare_stratified_anova(
         df = df(),
         responses = responses,
         model = "oneway_anova",
