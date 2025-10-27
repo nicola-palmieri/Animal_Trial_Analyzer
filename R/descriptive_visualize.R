@@ -25,21 +25,30 @@ visualize_descriptive_ui <- function(id) {
         selected = "boxplots"
       ),
       hr(),
-      numericInput(
-        ns("plot_width"),
-        label = "Plot width (px)",
-        value = 800,
-        min = 400,
-        max = 2000,
-        step = 100
-      ),
-      numericInput(
-        ns("plot_height"),
-        label = "Plot height (px)",
-        value = 600,
-        min = 400,
-        max = 2000,
-        step = 100
+      uiOutput(ns("layout_controls")),
+      fluidRow(
+        column(
+          6,
+          numericInput(
+            ns("plot_width"),
+            label = "Subplot width (px)",
+            value = 400,
+            min = 200,
+            max = 2000,
+            step = 50
+          )
+        ),
+        column(
+          6,
+          numericInput(
+            ns("plot_height"),
+            label = "Subplot height (px)",
+            value = 300,
+            min = 200,
+            max = 2000,
+            step = 50
+          )
+        )
       ),
       hr(),
       downloadButton(ns("download_plot"), "Download Plot")
@@ -47,7 +56,7 @@ visualize_descriptive_ui <- function(id) {
     mainPanel(
       width = 8,
       h4("Descriptive Visualization"),
-      plotOutput(ns("plot"))
+      plotOutput(ns("plot"), height = "auto")
     )
   )
 }
@@ -72,45 +81,49 @@ visualize_descriptive_server <- function(id, filtered_data, descriptive_summary)
       info
     })
     
-    plot_size <- reactive({
-      w <- suppressWarnings(as.numeric(input$plot_width))
-      h <- suppressWarnings(as.numeric(input$plot_height))
-      list(
-        w = ifelse(is.na(w) || w <= 0, 800, w),
-        h = ifelse(is.na(h) || h <= 0, 600, h)
-      )
-    })
+    layout_state <- initialize_layout_state(input, session)
     
     # ------------------------------------------------------------
     # 2️⃣ Build all plots using the shared helper
     # ------------------------------------------------------------
     plots_all <- reactive({
       info <- summary_info()
-      
+
       summary_data <- info$summary
       if (is.reactive(summary_data)) summary_data <- summary_data()
-      
+
       selected_vars <- info$selected_vars
       if (is.reactive(selected_vars)) selected_vars <- selected_vars()
-      
+
       data_subset <- df()
       if (!is.null(selected_vars)) {
         data_subset <- data_subset[, intersect(names(data_subset), selected_vars), drop = FALSE]
       }
-      
-      build_descriptive_plots(summary_data, data_subset)
+
+      layout_overrides <- list(
+        rows = layout_state$effective_input("resp_rows"),
+        cols = layout_state$effective_input("resp_cols")
+      )
+
+      build_descriptive_plots(summary_data, data_subset, layout_overrides)
     })
-    
+
     # ------------------------------------------------------------
     # 3️⃣ Pick correct plot based on selection
     # ------------------------------------------------------------
     build_current_plot <- reactive({
       plots <- plots_all()
       validate(need(!is.null(plots), "No plots available."))
-      
+
+      req(!is.null(input$plot_type))
+
+      plot_choice <- as.character(input$plot_type)
+      validate(need(length(plot_choice) == 1, "Select a single plot type."))
+      plot_choice <- plot_choice[[1]]
+
       metrics <- plots$metrics
-      switch(
-        input$plot_type,
+      entry <- switch(
+        plot_choice,
         categorical = plots$factors,
         boxplots = plots$boxplots,
         histograms = plots$histograms,
@@ -120,16 +133,101 @@ visualize_descriptive_server <- function(id, filtered_data, descriptive_summary)
         shapiro = if (!is.null(metrics)) metrics$shapiro else NULL,
         NULL
       )
+
+      entry
     })
-    
+
+    plot_entry <- reactive({
+      entry <- build_current_plot()
+      if (is.null(entry)) return(NULL)
+
+      if (!is.list(entry) || is.null(entry$plot)) {
+        return(list(
+          plot = entry,
+          panels = 1L,
+          layout = list(rows = 1L, cols = 1L)
+        ))
+      }
+
+      entry
+    })
+
+    plot_size <- reactive({
+      entry <- plot_entry()
+
+      w <- suppressWarnings(as.numeric(input$plot_width))
+      h <- suppressWarnings(as.numeric(input$plot_height))
+
+      subplot_w <- ifelse(is.na(w) || w <= 0, 400, w)
+      subplot_h <- ifelse(is.na(h) || h <= 0, 300, h)
+
+      if (is.null(entry) || is.null(entry$layout)) {
+        return(list(w = subplot_w, h = subplot_h))
+      }
+
+      list(
+        w = subplot_w * max(1, entry$layout$cols),
+        h = subplot_h * max(1, entry$layout$rows)
+      )
+    })
+
+    output$layout_controls <- renderUI({
+      entry <- plot_entry()
+      if (is.null(entry) || is.null(entry$panels) || entry$panels <= 1) {
+        return(NULL)
+      }
+
+      tagList(
+        h4("Layout Controls"),
+        fluidRow(
+          column(
+            width = 6,
+            numericInput(
+              session$ns("resp_rows"),
+              "Grid rows",
+              value = isolate(layout_state$default_ui_value(input$resp_rows)),
+              min = 0,
+              step = 1
+            )
+          ),
+          column(
+            width = 6,
+            numericInput(
+              session$ns("resp_cols"),
+              "Grid columns",
+              value = isolate(layout_state$default_ui_value(input$resp_cols)),
+              min = 0,
+              step = 1
+            )
+          )
+        )
+      )
+    })
+
+    layout_info <- reactive({
+      entry <- plot_entry()
+      if (is.null(entry)) return(NULL)
+
+      list(
+        has_strata = FALSE,
+        layout = list(
+          strata = list(rows = 1L, cols = 1L),
+          responses = list(nrow = entry$layout$rows, ncol = entry$layout$cols)
+        ),
+        n_responses = entry$panels
+      )
+    })
+
+    observe_layout_synchronization(input, layout_info, layout_state, session)
+
     # ------------------------------------------------------------
     # 4️⃣ Render plot safely
     # ------------------------------------------------------------
     output$plot <- renderPlot({
-      p <- build_current_plot()
-      validate(need(!is.null(p), "Selected plot not available."))
+      entry <- plot_entry()
+      validate(need(!is.null(entry), "Selected plot not available."))
       # patchwork objects are fine with print()
-      print(p)
+      print(entry$plot)
     },
     width = function() plot_size()$w,
     height = function() plot_size()$h,
@@ -141,13 +239,13 @@ visualize_descriptive_server <- function(id, filtered_data, descriptive_summary)
     output$download_plot <- downloadHandler(
       filename = function() paste0("descriptive_plot_", Sys.Date(), ".png"),
       content = function(file) {
-        p <- build_current_plot()
-        validate(need(!is.null(p), "No plot available to download."))
-        
+        entry <- plot_entry()
+        validate(need(!is.null(entry), "No plot available to download."))
+
         size <- plot_size()
         ggsave(
           filename = file,
-          plot = p,
+          plot = entry$plot,
           device = "png",
           dpi = 300,
           width = size$w / 96,

@@ -65,7 +65,7 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
       )
     })
     
-    observe_layout_synchronization(plot_info, layout_state, session)
+    observe_layout_synchronization(input, plot_info, layout_state, session)
     
     plot_obj <- reactive({
       info <- plot_info()

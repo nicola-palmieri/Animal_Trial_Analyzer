@@ -61,17 +61,34 @@ initialize_layout_state <- function(input, session) {
   )
 }
 
-observe_layout_synchronization <- function(plot_info_reactive, layout_state, session) {
+observe_layout_synchronization <- function(input, plot_info_reactive, layout_state, session) {
   observeEvent(plot_info_reactive(), {
     info <- plot_info_reactive()
     if (is.null(info)) return()
 
     sync_input <- function(id, value, manual_key) {
-      val <- ifelse(is.null(value) || value <= 0, 1, value)
-      if (!isTRUE(layout_state$manual[[manual_key]])) {
-        layout_state$suppress[[id]] <- TRUE
-        updateNumericInput(session, id, value = val)
+      if (isTRUE(layout_state$manual[[manual_key]])) {
+        return()
       }
+
+      val <- suppressWarnings(as.numeric(value))
+      if (is.na(val) || val <= 0) {
+        val <- 1L
+      } else {
+        val <- as.integer(round(val))
+      }
+
+      current <- isolate({
+        cur <- suppressWarnings(as.numeric(input[[id]]))
+        if (length(cur) == 0) NA_real_ else cur
+      })
+
+      if (!is.na(current) && identical(as.integer(round(current)), val)) {
+        return()
+      }
+
+      layout_state$suppress[[id]] <- TRUE
+      updateNumericInput(session, id, value = val)
     }
 
     if (isTRUE(info$has_strata)) {
