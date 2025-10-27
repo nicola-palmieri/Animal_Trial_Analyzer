@@ -1,6 +1,6 @@
-# 🧪 Animal Trial Analyzer
+# 🧪 Table Analyzer
 
-The **Animal Trial Analyzer** is a Shiny dashboard that guides veterinary teams from raw monitoring spreadsheets to exploratory statistics, downloadable model summaries, and publication-ready visualisations. The code in this repository reflects the current production app and is ready to run locally in R.
+The **Table Analyzer** is a Shiny dashboard that guides veterinary teams from raw monitoring spreadsheets to exploratory statistics, downloadable model summaries, and publication-ready visualisations. The code in this repository reflects the current production app and is ready to run locally in R.
 
 ---
 
@@ -130,3 +130,4 @@ Advanced options allow response batching, stratified analyses (up to 10 strata),
 Open an issue if you encounter bugs or would like to propose enhancements. For deployment questions, mention your target environment (e.g., Shiny Server, Posit Connect) so we can point you toward the relevant configuration notes.
 
 Thank you for using the **Animal Trial Analyzer** to support evidence-based animal health decisions!
+
