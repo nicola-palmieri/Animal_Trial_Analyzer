@@ -115,9 +115,15 @@ visualize_descriptive_server <- function(id, filtered_data, descriptive_summary)
       plots <- plots_all()
       validate(need(!is.null(plots), "No plots available."))
 
+      req(!is.null(input$plot_type))
+
+      plot_choice <- as.character(input$plot_type)
+      validate(need(length(plot_choice) == 1, "Select a single plot type."))
+      plot_choice <- plot_choice[[1]]
+
       metrics <- plots$metrics
       entry <- switch(
-        input$plot_type,
+        plot_choice,
         categorical = plots$factors,
         boxplots = plots$boxplots,
         histograms = plots$histograms,
