@@ -74,6 +74,101 @@ build_anova_layout_controls <- function(ns, input, info, default_ui_value) {
 }
 
 
+# ===============================================================
+# 📊 Prepare stratified models for ANOVA (one-way / two-way)
+# ===============================================================
+
+prepare_stratified_models <- function(
+    df,
+    responses,
+    model,
+    factor1_var = NULL,
+    factor1_order = NULL,
+    factor2_var = NULL,
+    factor2_order = NULL,
+    stratify_var = NULL,
+    strata_order = NULL
+) {
+  req(df, responses, model)
+  
+  if (!is.null(factor1_var) && !is.null(factor1_order)) {
+    df[[factor1_var]] <- factor(as.character(df[[factor1_var]]), levels = factor1_order)
+  }
+  
+  if (!is.null(factor2_var) && !is.null(factor2_order)) {
+    df[[factor2_var]] <- factor(as.character(df[[factor2_var]]), levels = factor2_order)
+  }
+  
+  if (!is.null(stratify_var) && !is.null(strata_order)) {
+    df[[stratify_var]] <- factor(as.character(df[[stratify_var]]), levels = strata_order)
+  }
+  
+  strata <- if (!is.null(stratify_var) && stratify_var %in% names(df)) {
+    levels(df[[stratify_var]])
+  } else {
+    NULL
+  }
+  
+  build_rhs <- function() {
+    if (model == "oneway_anova") {
+      factor1_var
+    } else if (model == "twoway_anova") {
+      if (!is.null(factor1_var) && !is.null(factor2_var)) {
+        paste(factor1_var, factor2_var, sep = " *")
+      } else {
+        factor1_var
+      }
+    } else {
+      factor1_var
+    }
+  }
+  
+  build_formula <- function(resp) {
+    rhs <- build_rhs()
+    if (is.null(rhs) || rhs == "") rhs <- "1"
+    as.formula(paste(resp, "~", rhs))
+  }
+  
+  fit_fn <- function(fml, data) {
+    stats::aov(fml, data = data)
+  }
+  
+  if (is.null(strata)) {
+    out <- list()
+    for (resp in responses) {
+      out[[resp]] <- fit_fn(build_formula(resp), df)
+    }
+    return(list(
+      type = model,
+      models = out,
+      responses = responses,
+      strata = NULL,
+      factors = list(factor1 = factor1_var, factor2 = factor2_var),
+      orders = list(order1 = factor1_order, order2 = factor2_order)
+    ))
+  }
+  
+  out <- list()
+  for (s in strata) {
+    sub <- df[df[[stratify_var]] == s, , drop = FALSE]
+    sub_models <- list()
+    for (resp in responses) {
+      sub_models[[resp]] <- fit_fn(build_formula(resp), sub)
+    }
+    out[[s]] <- sub_models
+  }
+  
+  list(
+    type = model,
+    models = out,
+    responses = responses,
+    strata = list(var = stratify_var, levels = strata),
+    factors = list(factor1 = factor1_var, factor2 = factor2_var),
+    orders = list(order1 = factor1_order, order2 = factor2_order)
+  )
+}
+
+
 prepare_anova_outputs <- function(model_obj, factor_names) {
   old_contrasts <- options("contrasts")
   on.exit(options(old_contrasts), add = TRUE)
