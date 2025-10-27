@@ -11,7 +11,10 @@ basic_color_palette <- c(
 )
 
 # ---- UI Helper ----
-color_dropdown_input <- function(ns, id = "color_choice", palette = basic_color_palette, ncol = 4) {
+color_dropdown_input <- function(ns, id = "color_choice", palette = basic_color_palette,
+                                 ncol = 4, selected = NULL) {
+  selected_color <- if (is.null(selected)) palette[1] else selected
+
   tagList(
     tags$style(HTML(sprintf("
       .color-dropdown {
@@ -25,7 +28,6 @@ color_dropdown_input <- function(ns, id = "color_choice", palette = basic_color_
         height: 32px;
         border: 1px solid #ccc;
         border-radius: 4px;
-        background-color: steelblue;
         cursor: pointer;
       }
       .color-dropdown-grid {
@@ -56,7 +58,8 @@ color_dropdown_input <- function(ns, id = "color_choice", palette = basic_color_
       class = "color-dropdown",
       tags$div(
         id = ns(paste0(id, "_button")),
-        class = "color-dropdown-button"
+        class = "color-dropdown-button",
+        style = sprintf("background-color:%s;", selected_color)
       ),
       tags$div(
         id = ns(paste0(id, "_grid")),
@@ -85,6 +88,7 @@ color_dropdown_input <- function(ns, id = "color_choice", palette = basic_color_
       $(document).on('click', function(){
         $('.color-dropdown-grid').hide();
       });
-    ", ns(id), ns(id))))
+      Shiny.setInputValue('%s','%s',{priority:'event'});
+    ", ns(id), ns(id), ns(id), selected_color)))
   )
 }

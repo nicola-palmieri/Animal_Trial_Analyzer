@@ -34,9 +34,15 @@ add_color_customization_server <- function(ns, input, output, data, color_var_re
       req(color_var)
       
       lvls <- levels(as.factor(data()[[color_var]]))
-      cols <- sapply(seq_along(lvls), function(i) {
-        input[[paste0("col_", color_var, "_", i)]]
-      })
+      base_palette <- RColorBrewer::brewer.pal(8, "Set2")
+      cols <- vapply(seq_along(lvls), function(i) {
+        input_val <- input[[paste0("col_", color_var, "_", i)]]
+        if (is.null(input_val) || identical(input_val, "")) {
+          base_palette[(i - 1) %% length(base_palette) + 1]
+        } else {
+          input_val
+        }
+      }, character(1))
       names(cols) <- lvls
       cols
     } else {

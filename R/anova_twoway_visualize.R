@@ -43,23 +43,14 @@ visualize_twoway_server <- function(id, filtered_data, model_fit) {
     model_info <- reactive(model_fit())
     
     layout_state <- initialize_layout_state(input, session)
-    
-    plot_info <- reactive({
-      info <- model_info()
-      if (is.null(info) || info$type != "twoway_anova") return(NULL)
-      data <- df()
-      build_anova_plot_info(data, info, layout_state$effective_input)
-    })
-    
-    observe_layout_synchronization(plot_info, layout_state, session)
-    
+
     # ---- color customization ----
     color_var_reactive <- reactive({
       info <- model_info()
       if (is.null(info)) return(NULL)
       info$factors$factor2   # color lines by factor2
     })
-    
+
     custom_colors <- add_color_customization_server(
       ns = ns,
       input = input,
@@ -68,6 +59,24 @@ visualize_twoway_server <- function(id, filtered_data, model_fit) {
       color_var_reactive = color_var_reactive,
       multi_group = TRUE
     )
+
+    plot_info <- reactive({
+      info <- model_info()
+      if (is.null(info) || info$type != "twoway_anova") return(NULL)
+      data <- df()
+      line_colors <- custom_colors()
+      if (is.null(line_colors) || length(line_colors) == 0) {
+        line_colors <- NULL
+      }
+      build_anova_plot_info(
+        data,
+        info,
+        layout_state$effective_input,
+        line_colors = line_colors
+      )
+    })
+
+    observe_layout_synchronization(plot_info, layout_state, session)
     
     plot_obj <- reactive({
       info <- plot_info()
@@ -94,14 +103,11 @@ visualize_twoway_server <- function(id, filtered_data, model_fit) {
     # ✅ simpler, consistent naming and structure
     output$plot <- renderPlot({
       info <- model_info()
-      req(info, input$plot_type, plot_obj())
+      req(info, input$plot_type)
 
       if (input$plot_type == "mean_se") {
-        cols <- custom_colors()
-        p <- plot_obj() +
-          ggplot2::scale_color_manual(values = cols) +
-          ggplot2::scale_fill_manual(values = cols)
-        p
+        req(plot_obj())
+        plot_obj()
       }
     },
     width = function() plot_size()$w,
