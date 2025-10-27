@@ -9,14 +9,22 @@ render_color_inputs <- function(ns, data, color_var) {
   values <- data()[[color_var]]
   lvls <- if (is.factor(values)) levels(values) else unique(as.character(values))
   lvls <- lvls[!is.na(lvls)]
-  
+  default_palette <- RColorBrewer::brewer.pal(8, "Set2")
+
   tagList(
     h5(paste("Customize colors for", color_var)),
     lapply(seq_along(lvls), function(i) {
-      colourpicker::colourInput(
-        ns(paste0("col_", color_var, "_", i)),
-        label = lvls[i],
-        value = RColorBrewer::brewer.pal(8, "Set2")[i %% 8 + 1]
+      selected <- default_palette[(i - 1) %% length(default_palette) + 1]
+      tags$div(
+        style = "margin-bottom: 8px;",
+        tags$label(lvls[i]),
+        color_dropdown_input(
+          ns,
+          id = paste0("col_", color_var, "_", i),
+          palette = basic_color_palette,
+          ncol = 4,
+          selected = selected
+        )
       )
     })
   )
