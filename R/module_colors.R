@@ -2,7 +2,6 @@
 # 🎨 Module for colors customization
 # ===============================================================
 
-# ---- UI ----
 add_color_customization_ui <- function(ns, multi_group = TRUE) {
   tags$details(
     tags$summary(strong("Advanced options")),
@@ -10,20 +9,20 @@ add_color_customization_ui <- function(ns, multi_group = TRUE) {
   )
 }
 
-# ---- SERVER logic ----
+# ---- SERVER ----
 add_color_customization_server <- function(ns, input, output, data, color_var_reactive, multi_group = TRUE) {
   output$color_custom_ui <- renderUI({
     req(data())
     color_var <- color_var_reactive()
-    if (isTRUE(multi_group) && is.null(color_var)) return(NULL)
     
     if (isTRUE(multi_group)) {
+      if (is.null(color_var)) return(NULL)
       render_color_inputs(ns, data, color_var)
     } else {
-      colourpicker::colourInput(
-        ns("single_color"),
-        label = "Plot color",
-        value = "#1f77b4"
+      tagList(
+        br(),
+        h5("Line color"),
+        color_dropdown_input(ns, "single_color", basic_color_palette, ncol = 4)
       )
     }
   })
@@ -41,9 +40,9 @@ add_color_customization_server <- function(ns, input, output, data, color_var_re
       names(cols) <- lvls
       cols
     } else {
-      single_col <- input$single_color
-      if (is.null(single_col)) single_col <- "#1f77b4"
-      single_col
+      selected_color <- input$single_color
+      if (is.null(selected_color)) selected_color <- "steelblue"
+      selected_color
     }
   })
 }
