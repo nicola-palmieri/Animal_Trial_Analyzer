@@ -22,7 +22,7 @@ options(shiny.autoreload = TRUE)
 # UI
 # ---------------------------------------------------------------
 ui <- navbarPage(
-  title = "🐓 Animal Trial Analyzer",
+  title = "📊 Table Analyzer",
   id = "main_nav",
   theme = bs_theme(bootswatch = "flatly"),
   

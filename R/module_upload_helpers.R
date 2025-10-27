@@ -1,3 +1,23 @@
+# Clean names + convert characters to ordered factors
+preprocess_uploaded_table <- function(df) {
+  df <- janitor::clean_names(df)
+  df <- df |> mutate(across(where(is.character), auto_factor_order))
+  df
+}
+
+# Convert character to factor with numeric-aware order
+auto_factor_order <- function(x) {
+  if (!is.character(x)) return(x)
+  nums <- suppressWarnings(as.numeric(gsub("\\D", "", x)))
+  if (all(is.na(nums))) {
+    factor(x, levels = sort(unique(x)))
+  } else {
+    x <- factor(x, levels = unique(x[order(nums, na.last = TRUE)]))
+    x
+  }
+}
+
+
 convert_wide_to_long <- function(path, sheet = 1, replicate_col = "Replicate") {
   header_rows <- 2
   

@@ -42,40 +42,44 @@ upload_server <- function(id) {
     ns <- session$ns
     df <- reactiveVal(NULL)
     
-    # ---- Example layouts ----
-    # ---- Example layouts ----
+    # ---- Load default example on startup ----
+    observe({
+      path <- "data/toy_animal_trial_data_long.xlsx"
+      if (!file.exists(path)) {
+        output$validation_msg <- renderText("⚠️ Default example file not found in data folder.")
+        return()
+      }
+      
+      data <- readxl::read_excel(path)
+      data <- preprocess_uploaded_table(data)
+      df(data)
+      
+      output$validation_msg <- renderText(paste("📂 Loaded default long-format dataset from:", path))
+      output$preview <- renderDT(data, options = list(scrollX = TRUE, pageLength = 5))
+    })
+    
+    # ---- Example layout preview ----
     output$layout_example <- renderUI({
       req(input$layout_type)
       
       long_path <- "data/toy_animal_trial_data_long.xlsx"
       wide_path <- "data/toy_animal_trial_data_wide.xlsx"
-      
       if (!file.exists(long_path) || !file.exists(wide_path))
         return(p("❌ Example files not found in /data folder."))
       
       if (input$layout_type == "long") {
         toy <- readxl::read_excel(long_path, n_max = 5)
-        caption_txt <- paste(
-          "Long format — one row per measurement.",
-          "Each measurement is a separate row; responses (e.g. Cortisol, Glucose, FeedIntake) each have their own column."
-        )
+        caption <- "Long format — one row per measurement."
       } else {
         toy <- readxl::read_excel(wide_path, n_max = 5)
-        
-        # Replace default "...1", "...2", etc. with empty column names
-        bad_names <- grepl("^\\.\\.\\.[0-9]+$", names(toy))
-        names(toy)[bad_names] <- "\t"
-        
-        caption_txt <- paste(
-          "Wide format — two header rows.",
-          "Top row: responses (e.g. FAMACHA, BCS, EPG).",
-          "Bottom row: replicate numbers (1, 2, 3...)."
-        )
+        bad <- grepl("^\\.\\.\\.[0-9]+$", names(toy))
+        names(toy)[bad] <- "\t"
+        caption <- "Wide format — two header rows (top: response, bottom: replicate)."
       }
       
       DT::datatable(
         toy,
-        caption = htmltools::tags$caption(htmltools::tags$b(caption_txt)),
+        caption = htmltools::tags$caption(htmltools::tags$b(caption)),
         elementId = ns("example_dt"),
         options = list(dom = "t", scrollX = TRUE),
         rownames = FALSE,
@@ -83,20 +87,17 @@ upload_server <- function(id) {
       )
     })
     
-    
-    # ---- File upload + sheet selection ----
+    # ---- File upload and sheet list ----
     observeEvent(input$file, {
       req(input$file)
-      fpath <- input$file$datapath
       ext <- tolower(tools::file_ext(input$file$name))
-      
       if (!ext %in% c("xlsx", "xls", "xlsm")) {
         output$validation_msg <- renderText("❌ Invalid file type. Please upload .xlsx/.xls/.xlsm.")
         return()
       }
       
-      sheets <- tryCatch(readxl::excel_sheets(fpath), error = function(e) NULL)
-      if (is.null(sheets) || length(sheets) == 0) {
+      sheets <- tryCatch(readxl::excel_sheets(input$file$datapath), error = function(e) NULL)
+      if (is.null(sheets)) {
         output$validation_msg <- renderText("❌ No readable sheets found in the workbook.")
         return()
       }
@@ -108,37 +109,34 @@ upload_server <- function(id) {
     }, ignoreInit = TRUE)
     
     # ---- Load selected sheet ----
-    # ---- Load selected sheet ----
     observeEvent(list(input$sheet, input$file$datapath, input$layout_type), {
       req(input$file, input$sheet)
       
-      tmp <- tryCatch(
+      data <- tryCatch(
         readxl::read_excel(input$file$datapath, sheet = input$sheet),
         error = function(e) e
       )
-      if (inherits(tmp, "error")) {
-        output$validation_msg <- renderText(paste("❌ Error loading sheet —", conditionMessage(tmp)))
+      if (inherits(data, "error")) {
+        output$validation_msg <- renderText(paste("❌ Error loading sheet —", conditionMessage(data)))
         return()
       }
       
-      # ---- Detect likely wide-format pattern ----
-      first_row <- suppressMessages(readxl::read_excel(input$file$datapath, sheet = input$sheet, n_max = 1))
+      first_row <- suppressMessages(
+        readxl::read_excel(input$file$datapath, sheet = input$sheet, n_max = 1)
+      )
       if (any(duplicated(unlist(first_row))) && input$layout_type == "long") {
-        output$validation_msg <- renderText(
-          "❌ Wide-format structure detected — please select 'Wide format' before proceeding."
-        )
+        output$validation_msg <- renderText("❌ Wide-format detected — please switch to 'Wide format'.")
         output$preview <- renderDT(data.frame(), options = list(scrollX = TRUE))
         return()
       }
       
-      # ---- Convert or validate ----
       if (input$layout_type == "wide") {
-        tmp <- tryCatch(
+        data <- tryCatch(
           convert_wide_to_long(input$file$datapath, sheet = input$sheet, replicate_col = "Replicate"),
           error = function(e) e
         )
-        if (inherits(tmp, "error")) {
-          output$validation_msg <- renderText(paste("❌ Error converting wide format —", conditionMessage(tmp)))
+        if (inherits(data, "error")) {
+          output$validation_msg <- renderText(paste("❌ Error converting wide format —", conditionMessage(data)))
           return()
         }
         output$validation_msg <- renderText("✅ Wide format detected and reshaped successfully.")
@@ -146,14 +144,12 @@ upload_server <- function(id) {
         output$validation_msg <- renderText("✅ Long format detected and loaded successfully.")
       }
       
-      tmp <- janitor::clean_names(tmp)
-      df(tmp)
-      
-      output$preview <- renderDT(tmp, options = list(scrollX = TRUE, pageLength = 5))
+      data <- preprocess_uploaded_table(data)
+      df(data)
+      output$preview <- renderDT(data, options = list(scrollX = TRUE, pageLength = 5))
     })
-    
-    
     
     return(df)
   })
 }
+

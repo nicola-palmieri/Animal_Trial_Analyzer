@@ -90,10 +90,13 @@ prepare_stratified_models <- function(df, responses, strat_var, factor1, factor2
   # Handle stratification
   if (!is.null(strat_var) && !identical(strat_var, "None")) {
     if (!is.null(df[[strat_var]])) {
-      strata_counts <- table(df[[strat_var]])
-      strata <- names(strata_counts)[strata_counts > 0]
-    } else strata <- NULL
-  } else strata <- NULL
+      strata <- unique(as.character(df[[strat_var]]))
+    } else {
+      strata <- NULL
+    }
+  } else {
+    strata <- NULL
+  }
   
   # Case 1 — no stratification
   if (is.null(strata)) {

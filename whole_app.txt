@@ -1,0 +1,4174 @@
+# ===============================================================
+# 🧪 Animal Trial Analyzer — Standalone App
+# ===============================================================
+
+library(bslib)
+library(dplyr)
+library(DT)
+library(flextable)
+library(GGally)
+library(ggplot2)
+library(lmerTest)
+library(officer)
+library(patchwork)
+library(shiny)
+library(shinyjqui)
+library(skimr)
+library(tidyr)
+
+options(shiny.autoreload = TRUE)
+
+# ---------------------------------------------------------------
+# UI
+# ---------------------------------------------------------------
+ui <- navbarPage(
+  title = "📊 Table Analyzer",
+  id = "main_nav",
+  theme = bs_theme(bootswatch = "flatly"),
+  
+  # ---- Custom CSS (copied from website) ----
+  header = tags$head(
+    tags$style(HTML("
+      .container-fluid { max-width: 100%; margin: auto; }
+      .hero {
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9f5ff 100%);
+        border-radius: 16px; padding: 20px 24px;
+      }
+      h1, h2, h3 { margin-top: 0.4rem; }
+      .section { margin-top: 18px; }
+      .card { border-radius: 16px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+      .nav-tabs > li > a { font-weight: 500; }
+    "))
+  ),
+  
+  tabPanel(
+    "1️⃣ Upload",
+    fluidPage(upload_ui("upload"))
+  ),
+  tabPanel(
+    "2️⃣ Filter",
+    fluidPage(filter_ui("filter"))
+  ),
+  tabPanel(
+    "3️⃣ Analyze",
+    fluidPage(analysis_ui("analysis"))
+  ),
+  tabPanel(
+    "4️⃣ Visualize",
+    fluidPage(visualize_ui("visualize"))
+  ),
+)
+
+# ---------------------------------------------------------------
+# SERVER
+# ---------------------------------------------------------------
+server <- function(input, output, session) {
+  uploaded  <- upload_server("upload")
+  filtered  <- filter_server("filter", uploaded)
+  analyzed  <- analysis_server("analysis", filtered)
+  visualize_server("visualize", filtered, analyzed)
+}
+
+# ---------------------------------------------------------------
+# LAUNCH
+# ---------------------------------------------------------------
+shinyApp(ui, server)
+# ===============================================================
+# 🧪 Animal Trial Analyzer — One-way ANOVA Module (Refactored)
+# ===============================================================
+
+one_way_anova_ui <- function(id) {
+  ns <- NS(id)
+  list(
+    config = tagList(
+      uiOutput(ns("inputs")),
+      uiOutput(ns("level_order")),
+      uiOutput(ns("advanced_options")),
+      br(),
+      fluidRow(
+        column(6, actionButton(ns("run"), "Run", width = "100%")),
+        column(6, downloadButton(ns("download_all"), "Download All Results", width = "100%"))
+      )
+    ),
+    results = tagList(
+      uiOutput(ns("summary_ui"))
+    )
+  )
+}
+
+one_way_anova_server <- function(id, filtered_data) {
+  moduleServer(id, function(input, output, session) {
+    ns <- session$ns
+    
+    # -----------------------------------------------------------
+    # Reactive data
+    # -----------------------------------------------------------
+    df <- filtered_data
+    
+    # -----------------------------------------------------------
+    # Dynamic inputs
+    # -----------------------------------------------------------
+    output$inputs <- renderUI({
+      req(df())
+      data <- df()
+      num_cols <- names(data)[sapply(data, is.numeric)]
+      cat_cols <- names(data)[sapply(data, function(x) is.character(x) || is.factor(x))]
+      
+      tagList(
+        uiOutput(ns("response_inputs")),
+        selectInput(
+          ns("group"),
+          "Categorical predictor:",
+          choices = cat_cols,
+          selected = if (length(cat_cols) > 0) cat_cols[1] else NULL
+        )
+      )
+    })
+    
+    output$response_inputs <- renderUI({
+      render_response_inputs(ns, df(), input)
+    })
+    
+    output$advanced_options <- renderUI({
+      render_stratification_controls(ns, df, input)
+    })
+    
+    output$strata_order_ui <- renderUI({
+      render_strata_order_input(ns, df, input$stratify_var)
+    })
+    
+    # -----------------------------------------------------------
+    # Level order selection
+    # -----------------------------------------------------------
+    output$level_order <- renderUI({
+      req(df(), input$group)
+      levels <- unique(as.character(df()[[input$group]]))
+      selectInput(
+        ns("order"),
+        "Order of levels (first = reference):",
+        choices = levels,
+        selected = levels,
+        multiple = TRUE
+      )
+    })
+    
+    # -----------------------------------------------------------
+    # Model fitting (via shared helper)
+    # -----------------------------------------------------------
+    models <- eventReactive(input$run, {
+      req(df(), input$response, input$group, input$order)
+      responses <- get_selected_responses(input)
+      req(length(responses) > 0)
+      
+      prepare_stratified_models(
+        df = df(),
+        responses = responses,
+        strat_var = input$stratify_var,
+        factor1 = input$group,
+        factor2 = NULL,
+        orders = list(order1 = input$order, order2 = NULL),
+        formula_builder = function(resp, f1, f2) as.formula(paste(resp, "~", f1)),
+        type = "oneway_anova"
+      )
+    })
+    
+    # -----------------------------------------------------------
+    # Download all results as one combined DOCX
+    # -----------------------------------------------------------
+    output$download_all <- downloadHandler(
+      filename = function() {
+        model_info <- models()
+        n_resp <- length(model_info$responses)
+        n_strata <- if (is.null(model_info$strata)) 0 else length(model_info$strata$levels)
+        strata_label <- ifelse(n_strata == 0, "nostratum", paste0(n_strata, "strata"))
+        timestamp <- format(Sys.time(), "%Y%m%d-%H%M")
+        sprintf("anova_results_%sresp_%s_%s.docx", n_resp, strata_label, timestamp)
+      },
+      content = function(file) {
+        model_info <- models()
+        if (is.null(model_info)) stop("Please run the ANOVA first.")
+        download_all_anova_results(model_info, file)
+      }
+    )
+    
+    # -----------------------------------------------------------
+    # Render results (shared UI generator)
+    # -----------------------------------------------------------
+    output$summary_ui <- renderUI({
+      render_anova_results(ns, models(), "One-way ANOVA")
+    })
+    
+    # -----------------------------------------------------------
+    # Render model summaries + download buttons (shared helper)
+    # -----------------------------------------------------------
+    bind_anova_outputs(ns, output, models)
+    
+    return(models)
+  })
+}
+# ===============================================================
+# 🧪 Visualization Module — One-way ANOVA
+# ===============================================================
+
+visualize_oneway_ui <- function(id) {
+  ns <- NS(id)
+  sidebarLayout(
+    sidebarPanel(
+      width = 4,
+      h4("Step 4 — Visualize One-way ANOVA"),
+      p("Select visualization type and adjust subplot layout, axis scaling, and figure size."),
+      hr(),
+      selectInput(
+        ns("plot_type"),
+        label = "Visualization type:",
+        choices = c("Mean ± SE" = "mean_se"),
+        selected = "mean_se"
+      ),
+      hr(),
+      uiOutput(ns("layout_controls")),
+      fluidRow(
+        column(6, numericInput(ns("plot_width"), "Subplot width (px)", value = 300, min = 200, max = 1200, step = 50)),
+        column(6, numericInput(ns("plot_height"), "Subplot height (px)", value = 200, min = 200, max = 1200, step = 50))
+      ),
+      hr(),
+      downloadButton(ns("download_plot"), "Download Plot")
+    ),
+    mainPanel(
+      width = 8,
+      plotOutput(ns("plot"), height = "auto")
+    )
+  )
+}
+
+
+visualize_oneway_server <- function(id, filtered_data, model_info) {
+  moduleServer(id, function(input, output, session) {
+    ns <- session$ns
+    
+    df <- reactive(filtered_data())
+    
+    layout_state <- initialize_layout_state(input, session)
+    
+    plot_info <- reactive({
+      info <- model_info()
+      if (is.null(info) || info$type != "oneway_anova") return(NULL)
+      data <- df()
+      build_anova_plot_info(data, info, layout_state$effective_input)
+    })
+    
+    observe_layout_synchronization(plot_info, layout_state, session)
+    
+    plot_obj <- reactive({
+      info <- plot_info()
+      if (is.null(info)) return(NULL)
+      info$plot
+    })
+    
+    plot_size <- reactive({
+      info <- plot_info()
+      if (is.null(info)) return(list(w = input$plot_width, h = input$plot_height))
+      s <- plot_info()$layout
+      list(
+        w = input$plot_width * s$strata$cols * s$responses$ncol,
+        h = input$plot_height * s$strata$rows * s$responses$nrow
+      )
+    })
+    
+    output$layout_controls <- renderUI({
+      info <- model_info()
+      if (is.null(info) || info$type != "oneway_anova") return(NULL)
+      build_anova_layout_controls(ns, input, info, layout_state$default_ui_value)
+    })
+    
+    output$plot <- renderPlot({
+      info <- model_info()
+      req(info, input$plot_type)
+      
+      # --- Only one option for now ---
+      if (input$plot_type == "mean_se") {
+        req(plot_obj())
+        return(plot_obj())
+      }
+    
+    }, width = function() plot_size()$w,
+    height = function() plot_size()$h,
+    res = 96)
+    
+    output$download_plot <- downloadHandler(
+      filename = function() paste0("anova_plot_", Sys.Date(), ".png"),
+      content = function(file) {
+        req(plot_obj())
+        ggsave(
+          filename = file,
+          plot = plot_obj(),
+          device = "png",
+          dpi = 300,
+          width = plot_size()$w / 96,
+          height = plot_size()$h / 96,
+          units = "in",
+          limitsize = FALSE
+        )
+      }
+    )
+  })
+}
+# ===============================================================
+# 🧠 Animal Trial Analyzer — Shared ANOVA Module Helpers
+# ===============================================================
+
+build_anova_layout_controls <- function(ns, input, info, default_ui_value) {
+  has_strata <- !is.null(info$strata) && !is.null(info$strata$var)
+  n_responses <- if (!is.null(info$responses)) length(info$responses) else 0
+  
+  strata_inputs <- if (has_strata) {
+    tagList(
+      h5("Across strata:"),
+      fluidRow(
+        column(
+          width = 6,
+          numericInput(
+            ns("strata_rows"),
+            "Grid rows",
+            value = isolate(default_ui_value(input$strata_rows)),
+            min = 0,
+            step = 1
+          )
+        ),
+        column(
+          width = 6,
+          numericInput(
+            ns("strata_cols"),
+            "Grid columns",
+            value = isolate(default_ui_value(input$strata_cols)),
+            min = 0,
+            step = 1
+          )
+        )
+      )
+    )
+  } else {
+    NULL
+  }
+  
+  response_inputs <- if (!is.null(n_responses) && n_responses > 1) {
+    tagList(
+      h5("Across responses:"),
+      fluidRow(
+        column(
+          width = 6,
+          numericInput(
+            ns("resp_rows"),
+            "Grid rows",
+            value = isolate(default_ui_value(input$resp_rows)),
+            min = 0,
+            step = 1
+          )
+        ),
+        column(
+          width = 6,
+          numericInput(
+            ns("resp_cols"),
+            "Grid columns",
+            value = isolate(default_ui_value(input$resp_cols)),
+            min = 0,
+            step = 1
+          )
+        )
+      )
+    )
+  } else {
+    NULL
+  }
+  
+  tagList(
+    h4("Layout Controls"),
+    strata_inputs,
+    response_inputs
+  )
+}
+
+# ---------------------------------------------------------------
+# Model computation
+# ---------------------------------------------------------------
+prepare_stratified_models <- function(df, responses, strat_var, factor1, factor2, orders, formula_builder, type) {
+  req(df, responses)
+  responses <- unique(responses)
+  
+  if (length(responses) > 10)
+    validate(need(FALSE, "Please select at most 10 response variables."))
+  
+  # Apply factor ordering
+  if (!is.null(factor1)) df[[factor1]] <- factor(df[[factor1]], levels = orders$order1)
+  if (!is.null(factor2)) df[[factor2]] <- factor(df[[factor2]], levels = orders$order2)
+  
+  # Handle stratification
+  if (!is.null(strat_var) && !identical(strat_var, "None")) {
+    if (!is.null(df[[strat_var]])) {
+      strata_counts <- table(df[[strat_var]])
+      strata <- names(strata_counts)[strata_counts > 0]
+    } else strata <- NULL
+  } else strata <- NULL
+  
+  # Case 1 — no stratification
+  if (is.null(strata)) {
+    model_list <- list()
+    for (resp in responses) {
+      model_formula <- formula_builder(resp, factor1, factor2)
+      model_list[[resp]] <- lm(model_formula, data = df)
+    }
+    return(list(
+      type = type,
+      models = model_list,
+      responses = responses,
+      strata = NULL,
+      factors = list(factor1 = factor1, factor2 = factor2),
+      orders = orders
+    ))
+  }
+  
+  # Case 2 — stratified
+  if (length(strata) > 10)
+    validate(need(FALSE, "Stratified analysis supports up to 10 strata."))
+  
+  model_list <- list()
+  for (stratum in strata) {
+    subset_data <- df[df[[strat_var]] == stratum, , drop = FALSE]
+    if (!is.null(factor1)) subset_data[[factor1]] <- factor(subset_data[[factor1]], levels = orders$order1)
+    if (!is.null(factor2)) subset_data[[factor2]] <- factor(subset_data[[factor2]], levels = orders$order2)
+    
+    model_list[[stratum]] <- list()
+    for (resp in responses) {
+      model_formula <- formula_builder(resp, factor1, factor2)
+      model_list[[stratum]][[resp]] <- lm(model_formula, data = subset_data)
+    }
+  }
+  
+  list(
+    type = type,
+    models = model_list,
+    responses = responses,
+    strata = list(var = strat_var, levels = strata),
+    factors = list(factor1 = factor1, factor2 = factor2),
+    orders = orders
+  )
+}
+
+prepare_anova_outputs <- function(model_obj, factor_names) {
+  old_contrasts <- options("contrasts")
+  on.exit(options(old_contrasts), add = TRUE)
+  options(contrasts = c("contr.sum", "contr.poly"))
+  
+  anova_obj <- car::Anova(model_obj, type = 3)
+  anova_df <- as.data.frame(anova_obj)
+  anova_df$Effect <- rownames(anova_df)
+  rownames(anova_df) <- NULL
+  anova_df <- anova_df[, c("Effect", setdiff(names(anova_df), "Effect"))]
+  
+  # --- format p-values and round numeric columns ---
+  p_col <- grep("^Pr", names(anova_df), value = TRUE)
+  p_col <- if (length(p_col) > 0) p_col[1] else NULL
+  raw_p <- if (!is.null(p_col)) anova_df[[p_col]] else rep(NA_real_, nrow(anova_df))
+  
+  for (col in names(anova_df)) {
+    if (is.numeric(anova_df[[col]])) {
+      anova_df[[col]] <- round(anova_df[[col]], 2)
+    }
+  }
+  
+  anova_significant <- !is.na(raw_p) & raw_p < 0.05
+  if (!is.null(p_col)) {
+    formatted_p <- format_p_value(raw_p)
+    anova_df[[p_col]] <- add_significance_marker(formatted_p, raw_p)
+    names(anova_df)[names(anova_df) == p_col] <- "p.value"
+  } else {
+    anova_df$p.value <- NA_character_
+  }
+  
+  # --- Post-hoc Tukey for each factor ---
+  factor_names <- unique(factor_names[!is.na(factor_names) & nzchar(factor_names)])
+  posthoc_details <- list()
+  posthoc_combined <- NULL
+  posthoc_significant <- numeric(0)
+  
+  for (factor_nm in factor_names) {
+    if (!factor_nm %in% names(model_obj$model)) next
+    
+    res <- tryCatch({
+      emm <- emmeans::emmeans(model_obj, specs = factor_nm)
+      contrasts <- emmeans::contrast(emm, method = "revpairwise", adjust = "tukey")
+      as.data.frame(summary(contrasts))
+    }, error = function(e) list(error = e$message))
+    
+    if (is.data.frame(res)) {
+      res$Factor <- factor_nm
+      posthoc_details[[factor_nm]] <- list(table = res, error = NULL)
+      posthoc_combined <- rbind(posthoc_combined, res)
+    } else {
+      posthoc_details[[factor_nm]] <- list(table = NULL, error = res$error)
+    }
+  }
+  
+  if (!is.null(posthoc_combined)) {
+    posthoc_combined <- posthoc_combined[, c("Factor", setdiff(names(posthoc_combined), "Factor"))]
+    numeric_cols <- names(posthoc_combined)[sapply(posthoc_combined, is.numeric)]
+    if (length(numeric_cols) > 0) {
+      for (col in numeric_cols) {
+        posthoc_combined[[col]] <- round(posthoc_combined[[col]], 2)
+      }
+    }
+    
+    if ("p.value" %in% names(posthoc_combined)) {
+      raw_posthoc_p <- posthoc_combined$p.value
+      posthoc_significant <- !is.na(raw_posthoc_p) & raw_posthoc_p < 0.05
+      formatted_posthoc_p <- format_p_value(raw_posthoc_p)
+      posthoc_combined$p.value <- add_significance_marker(formatted_posthoc_p, raw_posthoc_p)
+    } else {
+      posthoc_significant <- rep(FALSE, nrow(posthoc_combined))
+    }
+  }
+  
+  list(
+    anova_object = anova_obj,
+    anova_table = anova_df,
+    anova_significant = anova_significant,
+    posthoc_details = posthoc_details,
+    posthoc_table = posthoc_combined,
+    posthoc_significant = posthoc_significant
+  )
+}
+
+# ---------------------------------------------------------------
+# Output composition
+# ---------------------------------------------------------------
+print_anova_summary_and_posthoc <- function(model_obj, factors) {
+  results <- prepare_anova_outputs(model_obj, factors)
+  print(results$anova_object)
+  
+  if (length(results$posthoc_details) == 0) {
+    cat("\nNo post-hoc Tukey comparisons were generated.\n")
+  } else {
+    for (factor_nm in names(results$posthoc_details)) {
+      details <- results$posthoc_details[[factor_nm]]
+      if (!is.null(details$error)) {
+        cat("\nPost-hoc Tukey comparisons for", factor_nm, "failed:", details$error, "\n")
+      } else if (!is.null(details$table)) {
+        cat("\nPost-hoc Tukey comparisons for", factor_nm, ":\n")
+        print(details$table)
+      }
+    }
+  }
+  invisible(results)
+}
+
+bind_single_model_outputs <- function(output, summary_id, download_id,
+                                      model_obj, response_name, factors,
+                                      stratum_label = NULL) {
+  output[[summary_id]] <- renderPrint({
+    print_anova_summary_and_posthoc(model_obj, factors)
+  })
+  
+  output[[download_id]] <- downloadHandler(
+    filename = function() {
+      base <- paste0("anova_results_", sanitize_name(response_name))
+      if (!is.null(stratum_label)) {
+        base <- paste0(base, "_stratum_", sanitize_name(stratum_label))
+      }
+      paste0(base, "_", Sys.Date(), ".docx")
+    },
+    content = function(file) {
+      results <- prepare_anova_outputs(model_obj, factors)
+      write_anova_docx(file, results, model_obj, response_name, stratum_label)
+    }
+  )
+}
+
+render_response_selector <- function(ns, df, input) {
+  req(df())
+  data <- df()
+  num_cols <- names(data)[sapply(data, is.numeric)]
+
+  if (isTRUE(input$multi_resp)) {
+    selectizeInput(
+      ns("response"),
+      "Response variables (numeric):",
+      choices = num_cols,
+      selected = head(num_cols, 1),
+      multiple = TRUE,
+      options = list(maxItems = 10)
+    )
+  } else {
+    selectInput(
+      ns("response"),
+      "Response variable (numeric):",
+      choices = num_cols,
+      selected = if (length(num_cols) > 0) num_cols[1] else NULL
+    )
+  }
+}
+
+render_anova_results <- function(ns, model_info, module_label = "ANOVA") {
+  if (is.null(model_info)) return(NULL)
+  
+  responses <- model_info$responses
+  strata_info <- model_info$strata
+  
+  # No stratification
+  if (is.null(strata_info)) {
+    tabs <- lapply(seq_along(responses), function(i) {
+      tabPanel(
+        title = responses[i],
+        tags$div(
+          verbatimTextOutput(ns(paste0("summary_", i)))
+        )
+      )
+    })
+    return(do.call(tabsetPanel, c(list(id = ns("results_tabs")), tabs)))
+  }
+  
+  # Stratified
+  strata_levels <- strata_info$levels
+  tabs <- lapply(seq_along(responses), function(i) {
+    response_name <- responses[i]
+    stratum_tabs <- lapply(seq_along(strata_levels), function(j) {
+      stratum_name <- strata_levels[j]
+      tabPanel(
+        title = stratum_name,
+        tags$div(
+          verbatimTextOutput(ns(paste0("summary_", i, "_", j)))
+        )
+      )
+    })
+    tabPanel(
+      title = response_name,
+      do.call(tabsetPanel, c(list(id = ns(paste0("strata_tabs_", i))), stratum_tabs))
+    )
+  })
+  do.call(tabsetPanel, c(list(id = ns("results_tabs")), tabs))
+}
+
+bind_anova_outputs <- function(ns, output, models_reactive) {
+  observeEvent(models_reactive(), {
+    model_info <- models_reactive()
+    if (is.null(model_info)) return()
+    
+    responses <- model_info$responses
+    model_list <- model_info$models
+    strata_info <- model_info$strata
+    factors <- unlist(model_info$factors, use.names = FALSE)
+    
+    # --- Non-stratified case ---
+    if (is.null(strata_info)) {
+      for (i in seq_along(responses)) {
+        local({
+          idx <- i
+          response_name <- responses[i]
+          model_obj <- model_list[[response_name]]
+          bind_single_model_outputs(
+            output,
+            summary_id = paste0("summary_", idx),
+            download_id = paste0("download_", idx),
+            model_obj = model_obj,
+            response_name = response_name,
+            factors = factors
+          )
+        })
+      }
+      return()
+    }
+    
+    # --- Stratified case ---
+    strata_levels <- strata_info$levels
+    for (i in seq_along(responses)) {
+      for (j in seq_along(strata_levels)) {
+        local({
+          idx <- i
+          stratum_idx <- j
+          response_name <- responses[i]
+          stratum_label <- strata_levels[j]
+          model_obj <- model_list[[stratum_label]][[response_name]]
+          bind_single_model_outputs(
+            output,
+            summary_id = paste0("summary_", idx, "_", stratum_idx),
+            download_id = paste0("download_", idx, "_", stratum_idx),
+            model_obj = model_obj,
+            response_name = response_name,
+            factors = factors,
+            stratum_label = stratum_label
+          )
+        })
+      }
+    }
+  })
+}
+
+# ---------------------------------------------------------------
+# Results export
+# ---------------------------------------------------------------
+
+download_all_anova_results <- function(models_info, file) {
+  if (is.null(models_info) || is.null(models_info$models)) {
+    stop("No models found to export.")
+  }
+  
+  combined_results <- list()
+  
+  # --- Case 1: no stratification
+  if (is.null(models_info$strata)) {
+    for (resp in models_info$responses) {
+      model_obj <- models_info$models[[resp]]
+      anova_obj <- car::Anova(model_obj, type = 3)
+      tbl <- as.data.frame(anova_obj)
+      tbl$Response <- resp
+      tbl$Stratum <- "None"
+      tbl$Term <- rownames(tbl)
+      rownames(tbl) <- NULL
+      names(tbl) <- sub(" ", "", names(tbl))
+      tbl$PrF <- tbl[, grep("^Pr", names(tbl))[1]]
+      combined_results[[length(combined_results) + 1]] <- tbl
+    }
+  } else {
+    # --- Case 2: stratified
+    for (stratum in models_info$strata$levels) {
+      for (resp in models_info$responses) {
+        model_obj <- models_info$models[[stratum]][[resp]]
+        anova_obj <- car::Anova(model_obj, type = 3)
+        tbl <- as.data.frame(anova_obj)
+        tbl$Response <- resp
+        tbl$Stratum <- stratum
+        tbl$Term <- rownames(tbl)
+        rownames(tbl) <- NULL
+        names(tbl) <- sub(" ", "", names(tbl))
+        tbl$PrF <- tbl[, grep("^Pr", names(tbl))[1]]
+        combined_results[[length(combined_results) + 1]] <- tbl
+      }
+    }
+  }
+  
+  write_anova_docx(combined_results, file)
+}
+
+write_anova_docx <- function(results, file) {
+
+  if (is.null(results) || length(results) == 0) stop("No ANOVA results available to export.")
+  combined <- bind_rows(results)
+  
+  required_cols <- c("Response", "Stratum", "Term", "SumSq", "Df", "Fvalue", "PrF")
+  if (!all(required_cols %in% names(combined))) stop("Missing required columns in ANOVA results.")
+  
+  # Format and sort
+  combined <- combined %>%
+    mutate(
+      SumSq = round(SumSq, 3),
+      Fvalue = round(Fvalue, 3),
+      PrF_label = ifelse(PrF < 0.001, "<0.001", sprintf("%.3f", PrF)),
+      sig = PrF < 0.05
+    ) %>%
+    arrange(Response, Stratum, Term)
+  
+  # Hide Stratum column if it's all "None"
+  if (length(unique(combined$Stratum)) == 1 && unique(combined$Stratum) == "None") {
+    combined$Stratum <- NULL
+    visible_cols <- c("Response", "Term", "SumSq", "Df", "Fvalue", "PrF_label")
+    merge_cols <- c("Response")
+  } else {
+    visible_cols <- c("Response", "Stratum", "Term", "SumSq", "Df", "Fvalue", "PrF_label")
+    merge_cols <- c("Response", "Stratum")
+  }
+  
+  # Build flextable
+  ft <- flextable(combined[, visible_cols])
+  
+  # Clean header names
+  ft <- set_header_labels(
+    ft,
+    Response = "Response",
+    Stratum = if ("Stratum" %in% visible_cols) "Stratum" else NULL,
+    Term = "Term",
+    SumSq = "Sum Sq",
+    Df = "Df",
+    Fvalue = "F value",
+    PrF_label = "Pr(>F)"
+  )
+  
+  # Merge identical group labels
+  ft <- merge_v(ft, j = intersect(merge_cols, ft$col_keys))
+  
+  # Styling
+  ft <- fontsize(ft, part = "all", size = 10)
+  ft <- bold(ft, part = "header", bold = TRUE)
+  ft <- color(ft, part = "header", color = "black")
+  ft <- align(ft, align = "center", part = "all")
+  
+  # Bold significant p-values (< 0.05)
+  if ("sig" %in% names(combined)) {
+    sig_rows <- which(combined$sig)
+    if (length(sig_rows) > 0 && "PrF_label" %in% ft$col_keys) {
+      ft <- bold(ft, i = sig_rows, j = "PrF_label", bold = TRUE)
+    }
+  }
+  
+  # ===== Journal-style borders =====
+  ft <- border_remove(ft)
+  black <- fp_border(color = "black", width = 1)
+  thin <- fp_border(color = "black", width = 0.5)
+  
+  # 1) Top line above header
+  ft <- border(ft, part = "header", border.top = black)
+  # 2) Line below header
+  ft <- border(ft, part = "header", border.bottom = black)
+  
+  # 3) Thin horizontal lines between different responses
+  if ("Response" %in% names(combined)) {
+    resp_index <- which(diff(as.numeric(factor(combined$Response))) != 0)
+    if (length(resp_index) > 0) {
+      ft <- border(ft, i = resp_index, part = "body", border.bottom = thin)
+    }
+  }
+  
+  # 4) Final bottom border (last line)
+  if (nrow(combined) > 0) {
+    ft <- border(ft, i = nrow(combined), part = "body", border.bottom = black)
+  }
+  
+  
+  # No side or inner borders
+  ft <- set_table_properties(ft, layout = "autofit", width = 0.9)
+  ft <- padding(ft, padding.top = 2, padding.bottom = 2, padding.left = 2, padding.right = 2)
+  
+  # Write to DOCX
+  doc <- read_docx()
+  doc <- body_add_flextable(doc, ft)
+  doc <- body_add_par(doc, "")
+  doc <- body_add_par(doc, sprintf("Generated by Animal Trial Analyzer on %s", Sys.Date()))
+  doc <- body_add_par(doc, "Significant p-values (< 0.05) in bold.", style = "Normal")
+  print(doc, target = file)
+}
+
+# ---------------------------------------------------------------
+# Low-level utilities
+# ---------------------------------------------------------------
+sanitize_name <- function(name) {
+  safe <- gsub("[^A-Za-z0-9]+", "_", name)
+  safe <- gsub("_+", "_", safe)
+  safe <- gsub("^_|_$", "", safe)
+  if (!nzchar(safe)) safe <- "unnamed"
+  safe
+}
+
+format_p_value <- function(p_values) {
+  vapply(
+    p_values,
+    function(p) {
+      if (is.na(p)) {
+        return(NA_character_)
+      }
+      if (p < 0.001) {
+        "<0.001"
+      } else {
+        sprintf("%.2f", round(p, 2))
+      }
+    },
+    character(1)
+  )
+}
+
+add_significance_marker <- function(formatted_p, raw_p) {
+  mapply(
+    function(fp, rp) {
+      if (is.na(rp)) {
+        return(fp)
+      }
+      if (rp < 0.05) {
+        paste0(fp, "*")
+      } else {
+        fp
+      }
+    },
+    formatted_p,
+    raw_p,
+    USE.NAMES = FALSE
+  )
+}
+
+
+# ===============================================================
+# 🧪 Animal Trial Analyzer — Two-way ANOVA Module (Refactored)
+# ===============================================================
+
+two_way_anova_ui <- function(id) {
+  ns <- NS(id)
+  list(
+    config = tagList(
+      uiOutput(ns("inputs")),
+      uiOutput(ns("level_order_1")),
+      uiOutput(ns("level_order_2")),
+      uiOutput(ns("advanced_options")),
+      br(),
+      fluidRow(
+        column(6, actionButton(ns("run"), "Run", width = "100%")),
+        column(6, downloadButton(ns("download_all"), "Download All Results"))
+      )
+    ),
+    results = tagList(
+      uiOutput(ns("summary_ui"))
+    )
+  )
+}
+
+two_way_anova_server <- function(id, filtered_data) {
+  moduleServer(id, function(input, output, session) {
+    ns <- session$ns
+    
+    # -----------------------------------------------------------
+    # Reactive data
+    # -----------------------------------------------------------
+    df <- filtered_data
+    
+    # -----------------------------------------------------------
+    # Dynamic inputs
+    # -----------------------------------------------------------
+    output$inputs <- renderUI({
+      req(df())
+      data <- df()
+      cat_cols <- names(data)[sapply(data, function(x) is.character(x) || is.factor(x))]
+      
+      tagList(
+        checkboxInput(ns("multi_resp"), "Enable multiple response variables", value = FALSE),
+        uiOutput(ns("response_selector")),
+        selectInput(
+          ns("factor1"),
+          "Categorical predictor 1 (x-axis):",
+          choices = cat_cols,
+          selected = if (length(cat_cols) > 0) cat_cols[1] else NULL
+        ),
+        selectInput(
+          ns("factor2"),
+          "Categorical predictor 2 (lines):",
+          choices = cat_cols,
+          selected = if (length(cat_cols) > 1) cat_cols[2] else NULL
+        )
+      )
+    })
+    
+    output$response_selector <- renderUI({
+      render_response_selector(ns, df, input)
+    })
+    
+    output$advanced_options <- renderUI({
+      render_stratification_controls(ns, df, input)
+    })
+    
+    output$strata_order_ui <- renderUI({
+      render_strata_order_input(ns, df, input$stratify_var)
+    })
+    
+    # -----------------------------------------------------------
+    # Level order selections
+    # -----------------------------------------------------------
+    output$level_order_1 <- renderUI({
+      req(df(), input$factor1)
+      levels1 <- unique(as.character(df()[[input$factor1]]))
+      selectInput(
+        ns("order1"),
+        paste("Order of levels for", input$factor1, "(x-axis):"),
+        choices = levels1,
+        selected = levels1,
+        multiple = TRUE
+      )
+    })
+    
+    output$level_order_2 <- renderUI({
+      req(df(), input$factor2)
+      levels2 <- unique(as.character(df()[[input$factor2]]))
+      selectInput(
+        ns("order2"),
+        paste("Order of levels for", input$factor2, "(lines):"),
+        choices = levels2,
+        selected = levels2,
+        multiple = TRUE
+      )
+    })
+    
+    # -----------------------------------------------------------
+    # Model fitting (via shared helper)
+    # -----------------------------------------------------------
+    models <- eventReactive(input$run, {
+      req(df(), input$response, input$factor1, input$factor2, input$order1, input$order2)
+      responses <- input$response
+      if (!isTRUE(input$multi_resp)) responses <- responses[1]
+      responses <- unique(responses)
+      req(length(responses) > 0)
+      
+      prepare_stratified_models(
+        df = df(),
+        responses = responses,
+        strat_var = input$stratify_var,
+        factor1 = input$factor1,
+        factor2 = input$factor2,
+        orders = list(order1 = input$order1, order2 = input$order2),
+        formula_builder = function(resp, f1, f2) as.formula(paste(resp, "~", f1, "*", f2)),
+        type = "twoway_anova"
+      )
+    })
+    
+    # -----------------------------------------------------------
+    # Download all results as one combined DOCX
+    # -----------------------------------------------------------
+    output$download_all <- downloadHandler(
+      filename = function() {
+        model_info <- models()
+        if (is.null(model_info)) return("anova_results.docx")
+        
+        n_resp <- length(model_info$responses)
+        n_strata <- if (is.null(model_info$strata)) 0 else length(model_info$strata$levels)
+        strata_label <- ifelse(n_strata == 0, "nostratum", paste0(n_strata, "strata"))
+        timestamp <- format(Sys.time(), "%Y%m%d-%H%M")
+        sprintf("anova_results_%sresp_%s_%s.docx", n_resp, strata_label, timestamp)
+      },
+      content = function(file) {
+        model_info <- models()
+        if (is.null(model_info)) stop("Please run the ANOVA first.")
+        download_all_anova_results(model_info, file)
+      }
+    )
+    
+    # -----------------------------------------------------------
+    # Render results
+    # -----------------------------------------------------------
+    output$summary_ui <- renderUI({
+      render_anova_results(ns, models(), "Two-way ANOVA")
+    })
+    
+    # -----------------------------------------------------------
+    # Render model summaries + downloads (shared helper)
+    # -----------------------------------------------------------
+    bind_anova_outputs(ns, output, models)
+    
+    return(models)
+  })
+}
+# ===============================================================
+# 🧪 Visualization Module — Two-way ANOVA (Simplified & Consistent)
+# ===============================================================
+
+visualize_twoway_ui <- function(id) {
+  ns <- NS(id)
+  sidebarLayout(
+    sidebarPanel(
+      width = 4,
+      h4("Step 4 — Visualize Two-way ANOVA"),
+      p("Select visualization type and adjust subplot layout, axis scaling, and figure size."),
+      hr(),
+      selectInput(
+        ns("plot_type"),
+        label = "Visualization type:",
+        choices = c("Mean ± SE" = "mean_se"),
+        selected = "mean_se"
+      ),
+      hr(),
+      uiOutput(ns("layout_controls")),
+      fluidRow(
+        column(6, numericInput(ns("plot_width"), "Subplot width (px)",  value = 300, min = 200, max = 1200, step = 50)),
+        column(6, numericInput(ns("plot_height"), "Subplot height (px)", value = 200, min = 200, max = 1200, step = 50))
+      ),
+      hr(),
+      downloadButton(ns("download_plot"), "Download Plot")
+    ),
+    mainPanel(
+      width = 8,
+      plotOutput(ns("plot"), height = "auto")   # ✅ same as one-way
+    )
+  )
+}
+
+
+visualize_twoway_server <- function(id, filtered_data, model_fit) {
+  moduleServer(id, function(input, output, session) {
+    ns <- session$ns
+    df <- reactive(filtered_data())
+    
+    model_info <- reactive(model_fit())
+    
+    layout_state <- initialize_layout_state(input, session)
+    
+    plot_info <- reactive({
+      info <- model_info()
+      if (is.null(info) || info$type != "twoway_anova") return(NULL)
+      data <- df()
+      build_anova_plot_info(data, info, layout_state$effective_input)
+    })
+    
+    observe_layout_synchronization(plot_info, layout_state, session)
+    
+    plot_obj <- reactive({
+      info <- plot_info()
+      if (is.null(info)) return(NULL)
+      info$plot
+    })
+    
+    plot_size <- reactive({
+      info <- plot_info()
+      if (is.null(info)) return(list(w = input$plot_width, h = input$plot_height))
+      s <- info$layout
+      list(
+        w = input$plot_width  * s$strata$cols   * s$responses$ncol,
+        h = input$plot_height * s$strata$rows   * s$responses$nrow
+      )
+    })
+    
+    output$layout_controls <- renderUI({
+      info <- model_info()
+      if (is.null(info) || info$type != "twoway_anova") return(NULL)
+      build_anova_layout_controls(ns, input, info, layout_state$default_ui_value)
+    })
+    
+    # ✅ simpler, consistent naming and structure
+    output$plot <- renderPlot({
+      info <- model_info()
+      req(info, input$plot_type)
+      
+      if (input$plot_type == "mean_se") {
+        req(plot_obj())
+        return(plot_obj())
+      }
+    },
+    width  = function() plot_size()$w,
+    height = function() plot_size()$h,
+    res    = 96)
+    
+    output$download_plot <- downloadHandler(
+      filename = function() paste0(input$plot_type, "_twoway_anova_plot_", Sys.Date(), ".png"),
+      content = function(file) {
+        req(plot_obj())
+        s <- plot_size()
+        ggsave(
+          filename = file,
+          plot = plot_obj(),
+          device = "png",
+          dpi = 300,
+          width  = s$w / 96,
+          height = s$h / 96,
+          units = "in",
+          limitsize = FALSE
+        )
+      }
+    )
+  })
+}
+# ===============================================================
+# 🧾 Animal Trial Analyzer — Descriptive Statistics Module (Aligned Layout)
+# ===============================================================
+
+descriptive_ui <- function(id) {
+  ns <- NS(id)
+  list(
+    config = tagList(
+      uiOutput(ns("inputs")),
+      uiOutput(ns("advanced_options")),
+      br(),
+      fluidRow(
+        column(6, actionButton(ns("run"), "Run", width = "100%")),
+        column(6, downloadButton(ns("download_summary"), "Download Summary", width = "100%"))
+      ),
+      hr()
+    ),
+    results = tagList(
+      verbatimTextOutput(ns("summary_text"))
+    )
+  )
+}
+
+descriptive_server <- function(id, filtered_data) {
+  moduleServer(id, function(input, output, session) {
+    ns <- session$ns
+    df <- filtered_data
+    
+    # ------------------------------------------------------------
+    # Dynamic inputs
+    # ------------------------------------------------------------
+    output$inputs <- renderUI({
+      req(df())
+      data <- df()
+      cat_cols <- names(data)[vapply(data, function(x) is.character(x) || is.factor(x) || is.logical(x), logical(1))]
+      num_cols <- names(data)[vapply(data, is.numeric, logical(1))]
+      
+      tagList(
+        h5("Categorical variables:"),
+        selectInput(ns("cat_vars"), label = NULL, choices = cat_cols, selected = cat_cols, multiple = TRUE),
+        br(),
+        h5("Numeric variables:"),
+        selectInput(ns("num_vars"), label = NULL, choices = num_cols, selected = num_cols, multiple = TRUE)
+      )
+    })
+    
+    output$advanced_options <- renderUI({
+      render_stratification_controls(ns, df, input)
+    })
+    
+    # ------------------------------------------------------------
+    # Summary computation
+    # ------------------------------------------------------------
+    summary_data <- eventReactive(input$run, {
+      data <- df()
+      selected_vars <- unique(c(input$cat_vars, input$num_vars))
+      validate(need(length(selected_vars) > 0, "Please select at least one variable."))
+      
+      group_var <- if (is.null(input$stratify_var) || input$stratify_var == "None") NULL else input$stratify_var
+      if (!is.null(group_var) && !(group_var %in% selected_vars)) {
+        selected_vars <- c(selected_vars, group_var)
+      }
+      
+      data <- data[, selected_vars, drop = FALSE]
+      list(
+        summary = compute_descriptive_summary(data, group_var),
+        selected_vars = selected_vars,
+        group_var = group_var
+      )
+    })
+    
+    # ------------------------------------------------------------
+    # Print summary
+    # ------------------------------------------------------------
+    output$summary_text <- renderPrint({
+      req(summary_data())
+      print_summary_sections(summary_data()$summary)
+    })
+    
+    # ------------------------------------------------------------
+    # Download
+    # ------------------------------------------------------------
+    output$download_summary <- downloadHandler(
+      filename = function() paste0("Descriptive_Statistics_", Sys.Date(), ".txt"),
+      content = function(file) {
+        sink(file)
+        print_summary_sections(summary_data()$summary)
+        sink()
+      }
+    )
+    
+    # ------------------------------------------------------------
+    # Return full model info
+    # ------------------------------------------------------------
+    return(reactive({
+      list(
+        type = "descriptive",
+        data = df,
+        summary = reactive(summary_data()$summary),
+        selected_vars = reactive(summary_data()$selected_vars),
+        group_var = reactive(summary_data()$group_var)
+      )
+    }))
+    
+  })
+}
+
+# ===============================================================
+# 🧩 Descriptive Statistics — Helper Functions
+# ===============================================================
+
+# ---- Main computation wrapper ----
+compute_descriptive_summary <- function(data, group_var = NULL) {
+  numeric_vars <- names(data)[sapply(data, is.numeric)]
+  
+  group_data <- if (!is.null(group_var)) group_by(data, .data[[group_var]]) else data
+  
+  skim_out <- if (!is.null(group_var)) {
+    group_data %>% skim()
+  } else {
+    skim(data)
+  }
+  
+  cv_out <- group_data %>%
+    summarise(across(
+      where(is.numeric),
+      ~ 100 * sd(.x, na.rm = TRUE) / mean(.x, na.rm = TRUE),
+      .names = "cv_{.col}"
+    ), .groups = "drop")
+  
+  outlier_out <- group_data %>%
+    summarise(across(
+      all_of(numeric_vars),
+      ~ {
+        q <- quantile(.x, probs = c(0.25, 0.75), na.rm = TRUE)
+        iqr <- q[2] - q[1]
+        sum(.x < q[1] - 1.5 * iqr | .x > q[2] + 1.5 * iqr, na.rm = TRUE)
+      },
+      .names = "outliers_{.col}"
+    ), .groups = "drop")
+  
+  missing_out <- group_data %>%
+    summarise(across(
+      all_of(numeric_vars),
+      ~ 100 * mean(is.na(.x)),
+      .names = "missing_{.col}"
+    ), .groups = "drop")
+  
+  shapiro_out <- group_data %>%
+    summarise(across(
+      all_of(numeric_vars),
+      ~ tryCatch(shapiro.test(.x)$p.value, error = function(e) NA_real_),
+      .names = "shapiro_{.col}"
+    ), .groups = "drop")
+  
+  list(
+    skim = skim_out,
+    cv = cv_out,
+    outliers = outlier_out,
+    missing = missing_out,
+    shapiro = shapiro_out
+  )
+}
+
+# ---- Shared printing ----
+print_summary_sections <- function(results) {
+  # --- Reformat skim() headers ---
+  lines <- capture.output(print(results$skim))
+  
+  # Replace the "Variable type: character/numeric" banner lines
+  lines <- stringr::str_replace(
+    lines,
+    "^\\s*──\\s*Variable type:\\s*character\\s*─+\\s*$",
+    "── Categorical variables ──"
+  )
+  lines <- stringr::str_replace(
+    lines,
+    "^\\s*──\\s*Variable type:\\s*numeric\\s*─+\\s*$",
+    "── Numeric variables ──"
+  )
+  
+  cat(paste(lines, collapse = "\n"), "\n")
+  
+  cat("\n── Coefficient of Variation (CV%) ──\n")
+  print(results$cv)
+  cat("\n── Outlier Counts (IQR rule) ──\n")
+  print(results$outliers)
+  cat("\n── Missingness Summary (% Missing) ──\n")
+  print(results$missing)
+  cat("\n── Shapiro–Wilk Normality Test (p-values) ──\n")
+  print(results$shapiro)
+  cat("\nInterpretation:\n")
+  cat("  • CV% > 20 may indicate high variability.\n")
+  cat("  • Outliers = # of animals beyond 1.5×IQR.\n")
+  cat("  • Missing% > 5 may indicate measurement gaps.\n")
+  cat("  • Shapiro p < 0.05 → non-normal distribution.\n")
+}
+# ===============================================================
+# Visualization Module — Descriptive Statistics
+# ===============================================================
+
+visualize_descriptive_ui <- function(id) {
+  ns <- NS(id)
+  sidebarLayout(
+    sidebarPanel(
+      width = 4,
+      h4("Step 5 — Visualize Descriptive Statistics"),
+      p("Explore distributions, variability, and normality across variables."),
+      hr(),
+      selectInput(
+        ns("plot_type"),
+        label = "Visualization type:",
+        choices = c(
+          "Categorical Distributions" = "categorical",
+          "Numeric Boxplots" = "boxplots",
+          "Numeric Histograms" = "histograms",
+          "CV (%)" = "cv",
+          "Outlier Counts" = "outliers",
+          "Missingness (%)" = "missing",
+          "Shapiro–Wilk p-values" = "shapiro"
+        ),
+        selected = "boxplots"
+      ),
+      hr(),
+      numericInput(
+        ns("plot_width"),
+        label = "Plot width (px)",
+        value = 800,
+        min = 400,
+        max = 2000,
+        step = 100
+      ),
+      numericInput(
+        ns("plot_height"),
+        label = "Plot height (px)",
+        value = 600,
+        min = 400,
+        max = 2000,
+        step = 100
+      ),
+      hr(),
+      downloadButton(ns("download_plot"), "Download Plot")
+    ),
+    mainPanel(
+      width = 8,
+      h4("Descriptive Visualization"),
+      plotOutput(ns("plot"))
+    )
+  )
+}
+
+
+visualize_descriptive_server <- function(id, filtered_data, descriptive_summary) {
+  moduleServer(id, function(input, output, session) {
+    
+    # ------------------------------------------------------------
+    # 1️⃣ Base reactive: Data + summary check
+    # ------------------------------------------------------------
+    df <- reactive({
+      data <- filtered_data()
+      validate(need(!is.null(data) && is.data.frame(data), "No data available."))
+      data
+    })
+    
+    summary_info <- reactive({
+      info <- descriptive_summary()
+      validate(need(!is.null(info), "Run descriptive summary first."))
+      validate(need(!is.null(info$summary), "Summary not available."))
+      info
+    })
+    
+    plot_size <- reactive({
+      w <- suppressWarnings(as.numeric(input$plot_width))
+      h <- suppressWarnings(as.numeric(input$plot_height))
+      list(
+        w = ifelse(is.na(w) || w <= 0, 800, w),
+        h = ifelse(is.na(h) || h <= 0, 600, h)
+      )
+    })
+    
+    # ------------------------------------------------------------
+    # 2️⃣ Build all plots using the shared helper
+    # ------------------------------------------------------------
+    plots_all <- reactive({
+      info <- summary_info()
+      
+      summary_data <- info$summary
+      if (is.reactive(summary_data)) summary_data <- summary_data()
+      
+      selected_vars <- info$selected_vars
+      if (is.reactive(selected_vars)) selected_vars <- selected_vars()
+      
+      data_subset <- df()
+      if (!is.null(selected_vars)) {
+        data_subset <- data_subset[, intersect(names(data_subset), selected_vars), drop = FALSE]
+      }
+      
+      build_descriptive_plots(summary_data, data_subset)
+    })
+    
+    # ------------------------------------------------------------
+    # 3️⃣ Pick correct plot based on selection
+    # ------------------------------------------------------------
+    build_current_plot <- reactive({
+      plots <- plots_all()
+      validate(need(!is.null(plots), "No plots available."))
+      
+      metrics <- plots$metrics
+      switch(
+        input$plot_type,
+        categorical = plots$factors,
+        boxplots = plots$boxplots,
+        histograms = plots$histograms,
+        cv = if (!is.null(metrics)) metrics$cv else NULL,
+        outliers = if (!is.null(metrics)) metrics$outliers else NULL,
+        missing = if (!is.null(metrics)) metrics$missing else NULL,
+        shapiro = if (!is.null(metrics)) metrics$shapiro else NULL,
+        NULL
+      )
+    })
+    
+    # ------------------------------------------------------------
+    # 4️⃣ Render plot safely
+    # ------------------------------------------------------------
+    output$plot <- renderPlot({
+      p <- build_current_plot()
+      validate(need(!is.null(p), "Selected plot not available."))
+      # patchwork objects are fine with print()
+      print(p)
+    },
+    width = function() plot_size()$w,
+    height = function() plot_size()$h,
+    res = 96)
+    
+    # ------------------------------------------------------------
+    # 5️⃣ Download
+    # ------------------------------------------------------------
+    output$download_plot <- downloadHandler(
+      filename = function() paste0("descriptive_plot_", Sys.Date(), ".png"),
+      content = function(file) {
+        p <- build_current_plot()
+        validate(need(!is.null(p), "No plot available to download."))
+        
+        size <- plot_size()
+        ggsave(
+          filename = file,
+          plot = p,
+          device = "png",
+          dpi = 300,
+          width = size$w / 96,
+          height = size$h / 96,
+          units = "in",
+          limitsize = FALSE
+        )
+      }
+    )
+  })
+}
+# ===============================================================
+# 🧮 Linear Model (LM) — fixed effects only
+# ===============================================================
+
+lm_ui <- function(id) regression_ui(id, "lm", allow_multi_response = TRUE)
+
+lm_server <- function(id, data) regression_server(id, data, "lm", allow_multi_response = TRUE)
+# ===============================================================
+# 🧬 Linear Mixed Model (LMM) — single random intercept
+# ===============================================================
+
+lmm_ui <- function(id) regression_ui(id, "lmm", allow_multi_response = TRUE)
+
+lmm_server <- function(id, data) regression_server(id, data, "lmm", allow_multi_response = TRUE)
+# ===============================================================
+# 🧩 Helpers for LMM
+# ===============================================================
+
+compute_icc <- function(model) {
+  if (!inherits(model, "merMod")) return(NA_real_)
+  
+  vc <- as.data.frame(VarCorr(model))
+  if (nrow(vc) < 2) return(NA_real_)
+  
+  # residual variance is always the last row
+  var_residual <- vc$vcov[nrow(vc)]
+  
+  # compute ICC for each random effect
+  icc_list <- lapply(seq_len(nrow(vc) - 1), function(i) {
+    var_random <- vc$vcov[i]
+    icc_value <- var_random / (var_random + var_residual)
+    data.frame(
+      Group = vc$grp[i],
+      ICC   = round(icc_value, 3),
+      stringsAsFactors = FALSE
+    )
+  })
+  
+  icc_df <- do.call(rbind, icc_list)
+  rownames(icc_df) <- NULL
+  icc_df
+}
+# ===============================================================
+# 🧪 Animal Trial Analyzer — Analysis Coordinator (fixed + cleaned)
+# ===============================================================
+
+analysis_ui <- function(id) {
+  ns <- NS(id)
+  sidebarLayout(
+    sidebarPanel(
+      width = 4,
+      h4("Step 3 — Analyze Results"),
+      p("Choose the statistical approach that fits your trial design, then inspect the summaries on the right."),
+      hr(),
+      tags$style(HTML(sprintf("
+        /* Make only this input's dropdown tall enough to show all items */
+        #%s + .selectize-control .selectize-dropdown,
+        #%s + .selectize-control .selectize-dropdown .selectize-dropdown-content {
+          max-height: none !important;   /* show everything, no internal scroll */
+        }
+      ", ns("analysis_type"), ns("analysis_type")))),
+      selectInput(
+        ns("analysis_type"),
+        "Select analysis type:",
+        choices = list(
+          " " = "",
+          "Descriptive" = c("Descriptive Statistics" = "Descriptive Statistics"),
+          "Univariate" = c(
+            "One-way ANOVA" = "One-way ANOVA",
+            "Two-way ANOVA" = "Two-way ANOVA",
+            "Linear Model (LM)" = "Linear Model (LM)",
+            "Linear Mixed Model (LMM)" = "Linear Mixed Model (LMM)"
+          ),
+          "Multivariate" = c(
+            "Pairwise Correlation" = "Pairwise Correlation",
+            "Principal Component Analysis (PCA)" = "PCA"
+          )
+        ),
+        selected = ""
+      ),
+      hr(),
+      uiOutput(ns("config_panel"))
+    ),
+    mainPanel(
+      width = 8,
+      h4("Analysis Results"),
+      uiOutput(ns("results_panel"))
+    )
+  )
+}
+
+analysis_server <- function(id, filtered_data) {
+  moduleServer(id, function(input, output, session) {
+    ns <- session$ns
+    df <- reactive(filtered_data())
+    
+    # --- Mapping between analysis type and submodules ---
+    submodules <- list(
+      "Descriptive Statistics" = list(
+        id = "descriptive",
+        ui = descriptive_ui,
+        server = descriptive_server,
+        type = "descriptive"
+      ),
+      "One-way ANOVA" = list(
+        id = "anova_one",
+        ui = one_way_anova_ui,
+        server = one_way_anova_server,
+        type = "oneway_anova"
+      ),
+      "Two-way ANOVA" = list(
+        id = "anova_two",
+        ui = two_way_anova_ui,
+        server = two_way_anova_server,
+        type = "twoway_anova"
+      ),
+      "Linear Model (LM)" = list(
+        id = "lm",
+        ui = lm_ui,
+        server = lm_server,
+        type = "lm"
+      ),
+      "Linear Mixed Model (LMM)" = list(
+        id = "lmm",
+        ui = lmm_ui,
+        server = lmm_server,
+        type = "lmm"
+      ),
+      "Pairwise Correlation" = list(
+        id = "ggpairs",
+        ui = ggpairs_ui,
+        server = ggpairs_server,
+        type = "ggpairs"
+      ),
+      "PCA" = list(
+        id = "pca",
+        ui = pca_ui,
+        server = pca_server,
+        type = "pca"
+      )
+    )
+    
+    # --- Render selected submodule UI dynamically ---
+    current_module_ui <- reactive({
+      req(input$analysis_type)
+      mod <- submodules[[input$analysis_type]]
+      req(mod)
+      mod$ui(ns(mod$id))
+    })
+    
+    output$config_panel <- renderUI({
+      ui <- current_module_ui()
+      req(ui$config)
+      ui$config
+    })
+    
+    output$results_panel <- renderUI({
+      ui <- current_module_ui()
+      req(ui$results)
+      ui$results
+    })
+    
+    # --- Dynamically call selected server ---
+    model_fit <- reactiveVal(NULL)
+    
+    observeEvent(input$analysis_type, {
+      mod <- submodules[[input$analysis_type]]
+      if (is.null(mod)) {
+        model_fit(NULL)
+        return()
+      }
+
+      server_result <- mod$server(mod$id, df)
+
+      if (is.null(server_result) || !is.function(server_result)) {
+        model_fit(reactive(list(type = mod$type, models = NULL)))
+        return()
+      }
+
+      model_fit(reactive({
+        raw <- tryCatch(
+          server_result(),
+          error = function(e) {
+            if (inherits(e, "shiny.silent.stop")) {
+              return(NULL)
+            }
+            stop(e)
+          }
+        )
+        
+        # Case 1: module returned nothing
+        if (is.null(raw)) {
+          return(list(type = mod$type, model = NULL, models = NULL))
+        }
+        
+        # Case 2: module returned a list-like structure (e.g. ANOVA)
+        if (is.list(raw)) {
+          if (is.null(raw$type)) raw$type <- mod$type
+          if (!is.null(raw$model) && is.null(raw$models)) raw$models <- raw$model
+          if (!is.null(raw$models) && is.null(raw$model)) raw$model <- raw$models
+          return(raw)
+        }
+        
+        # Case 3: module returned a bare model object (lm, lmerMod, etc.)
+        list(
+          type   = mod$type,
+          model  = raw,
+          models = raw  # alias for compatibility
+        )
+      }))
+      
+    }, ignoreNULL = FALSE)
+    
+    # --- Expose final fitted model ---
+    reactive({
+      model_reactive <- model_fit()
+      req(model_reactive)
+      model <- model_reactive()
+      req(model)
+      model
+    })
+  })
+}
+# ===============================================================
+# 🔁 Shared utilities for multiple-response models
+# ===============================================================
+
+# --- UI builder for the checkbox and response selector
+render_response_inputs <- function(ns, data, input) {
+  df <- if (is.function(data)) data() else data
+  req(df)
+  num_vars <- names(df)[sapply(df, is.numeric)]
+  
+  current_selection <- input$response
+  if (is.null(current_selection) || !all(current_selection %in% num_vars)) {
+    current_selection <- if (length(num_vars) > 0) num_vars[1] else NULL
+  }
+  
+  tagList(
+    checkboxInput(
+      ns("multi_resp"),
+      "Enable multiple response variables",
+      value = isTRUE(input$multi_resp)
+    ),
+    selectInput(
+      ns("response"),
+      if (isTRUE(input$multi_resp)) "Select response variables:" else "Select response variable:",
+      choices = num_vars,
+      selected = current_selection,
+      multiple = isTRUE(input$multi_resp)
+    )
+  )
+}
+
+# --- Server-side helper to retrieve a standardized list of responses
+get_selected_responses <- function(input) {
+  req(input$response)
+  responses <- input$response
+  if (!isTRUE(input$multi_resp)) responses <- responses[1]
+  unique(responses)
+}
+# ===============================================================
+# 🧭 Stratification helpers (shared across analysis modules)
+# ===============================================================
+
+# -- Utility to resolve either a reactive expression or raw data frame
+.resolve_data <- function(data) {
+  if (is.function(data)) data() else data
+}
+
+# ---------------------------------------------------------------
+# Stratification options panel (select strat variable + placeholder for order)
+# ---------------------------------------------------------------
+render_stratification_controls <- function(ns, data, input,
+                                           section_title = "Advanced options",
+                                           stratify_label = "Stratify by:",
+                                           none_label = "None") {
+  df <- .resolve_data(data)
+  req(df)
+  
+  cat_cols <- names(df)[sapply(df, function(x) is.character(x) || is.factor(x))]
+  choices <- c(none_label, setdiff(unique(cat_cols), none_label))
+  
+  tags$details(
+    tags$summary(strong(section_title)),
+    selectInput(
+      ns("stratify_var"),
+      stratify_label,
+      choices = choices,
+      selected = none_label
+    ),
+    uiOutput(ns("strata_order_ui"))
+  )
+}
+
+# Backwards compat alias for ANOVA modules (legacy name)
+render_advanced_options <- render_stratification_controls
+
+# ---------------------------------------------------------------
+# Stratification order selector (shared across modules)
+# ---------------------------------------------------------------
+render_strata_order_input <- function(ns, data, strat_var,
+                                      input_id = "strata_order",
+                                      order_label = NULL) {
+  if (is.null(strat_var) || identical(strat_var, "None")) return(NULL)
+  
+  df <- .resolve_data(data)
+  if (is.null(df)) return(NULL)
+  if (nrow(df) == 0) return(NULL)
+  
+  values <- df[[strat_var]]
+  if (is.null(values)) return(NULL)
+  
+  if (is.factor(values)) {
+    strata_levels <- levels(values)
+  } else {
+    values <- values[!is.na(values)]
+    strata_levels <- unique(as.character(values))
+  }
+  
+  if (length(strata_levels) == 0) return(NULL)
+  
+  if (is.null(order_label)) {
+    order_label <- paste("Order of levels for", strat_var, "(strata):")
+  }
+  
+  selectInput(
+    ns(input_id),
+    order_label,
+    choices = strata_levels,
+    selected = strata_levels,
+    multiple = TRUE
+  )
+}
+# ===============================================================
+# 🧪 Animal Trial Analyzer — Filter Module (cleaned, identical behavior)
+# ===============================================================
+
+filter_ui <- function(id) {
+  ns <- NS(id)
+  sidebarLayout(
+    sidebarPanel(
+      width = 4,
+      h4("Step 2 — Filter Records"),
+      p("Pick the columns to focus on and adjust the filters to refine the dataset for analysis."),
+      hr(),
+      uiOutput(ns("column_selector")),
+      hr(),
+      uiOutput(ns("filter_widgets"))
+    ),
+    mainPanel(
+      width = 8,
+      h4("Filtered Data Preview"),
+      DTOutput(ns("filtered_preview"))
+    )
+  )
+}
+
+filter_server <- function(id, uploaded_data) {
+  moduleServer(id, function(input, output, session) {
+    ns <- session$ns
+    
+    df <- reactive(uploaded_data())
+    
+    # --- 1. Column selector ---
+    output$column_selector <- renderUI({
+      req(df())
+      selectInput(
+        ns("columns"),
+        "Select columns to filter:",
+        choices = names(df()),
+        multiple = TRUE
+      )
+    })
+    
+    # --- 2. Dynamic filter widgets ---
+    output$filter_widgets <- renderUI({
+      req(df())
+      cols <- input$columns
+      if (is.null(cols) || length(cols) == 0) return(NULL)
+      
+      make_numeric_widget <- function(col, x) {
+        rng <- suppressWarnings(range(x, na.rm = TRUE))
+        if (any(!is.finite(rng))) rng <- c(0, 0)
+        step_val <- ifelse(diff(rng) == 0, 1, diff(rng) / 100)
+        fluidRow(
+          column(
+            6,
+            numericInput(
+              ns(paste0("min_", col)),
+              label = paste(col, "(min)"),
+              value = rng[1],
+              min = rng[1],
+              max = rng[2],
+              step = step_val
+            )
+          ),
+          column(
+            6,
+            numericInput(
+              ns(paste0("max_", col)),
+              label = paste(col, "(max)"),
+              value = rng[2],
+              min = rng[1],
+              max = rng[2],
+              step = step_val
+            )
+          )
+        )
+      }
+      
+      make_logical_widget <- function(col) {
+        checkboxGroupInput(
+          ns(paste0("filter_", col)),
+          label = col,
+          choices = c(TRUE, FALSE),
+          selected = c(TRUE, FALSE),
+          inline = TRUE
+        )
+      }
+      
+      make_factor_widget <- function(col, x) {
+        choices <- sort(unique(as.character(x)))
+        selectInput(
+          ns(paste0("filter_", col)),
+          label = col,
+          choices = choices,
+          multiple = TRUE,
+          selected = choices
+        )
+      }
+      
+      widgets <- lapply(cols, function(col) {
+        col_data <- df()[[col]]
+        if (is.numeric(col_data)) make_numeric_widget(col, col_data)
+        else if (is.logical(col_data)) make_logical_widget(col)
+        else make_factor_widget(col, col_data)
+      })
+      
+      tagList(widgets)
+    })
+    
+    # --- 3. Reactive filtering ---
+    filtered_df <- reactive({
+      req(df())
+      data <- df()
+      cols <- input$columns
+      if (is.null(cols) || length(cols) == 0) return(data)
+      
+      for (col in cols) {
+        col_data <- data[[col]]
+        
+        if (is.numeric(col_data)) {
+          min_val <- input[[paste0("min_", col)]]
+          max_val <- input[[paste0("max_", col)]]
+          if (is.null(min_val) || is.null(max_val)) {
+            data <- data[0, , drop = FALSE]
+            break
+          }
+          data <- data[data[[col]] >= min_val & data[[col]] <= max_val, , drop = FALSE]
+        } else {
+          sel <- input[[paste0("filter_", col)]]
+          if (is.null(sel) || length(sel) == 0) {
+            data <- data[0, , drop = FALSE]
+            break
+          }
+          data <- data[data[[col]] %in% sel, , drop = FALSE]
+        }
+      }
+      
+      data
+    })
+    
+    # --- 4. Preview table ---
+    output$filtered_preview <- renderDT({
+      datatable(
+        filtered_df(),
+        options = list(scrollX = TRUE, pageLength = 5)
+      )
+    })
+    
+    # --- 5. Return filtered data for downstream modules ---
+    return(filtered_df)
+  })
+}
+# ===============================================================
+# 🧪 Animal Trial Analyzer — Upload Module (long + wide support)
+# ===============================================================
+
+upload_ui <- function(id) {
+  ns <- NS(id)
+  sidebarLayout(
+    sidebarPanel(
+      width = 4,
+      h4("Step 1 — Upload Data"),
+      p("Upload your Excel file, choose the worksheet to analyze, and ensure the data follow either the long or wide format shown below."),
+      hr(),
+      radioButtons(
+        ns("layout_type"),
+        label = "Data layout:",
+        choices = c(
+          "Long format (one row per measurement)" = "long",
+          "Wide format (replicates in columns)" = "wide"
+        ),
+        selected = "long"
+      ),
+      uiOutput(ns("layout_example")),
+      hr(),
+      fileInput(
+        ns("file"),
+        "Upload Excel file (.xlsx / .xls / .xlsm)",
+        accept = c(".xlsx", ".xls", ".xlsm")
+      ),
+      uiOutput(ns("sheet_selector"))
+    ),
+    mainPanel(
+      width = 8,
+      h4("Data Preview"),
+      verbatimTextOutput(ns("validation_msg")),
+      DTOutput(ns("preview"))
+    )
+  )
+}
+
+upload_server <- function(id) {
+  moduleServer(id, function(input, output, session) {
+    ns <- session$ns
+    df <- reactiveVal(NULL)
+    
+    # ---- Example layouts ----
+    # ---- Example layouts ----
+    output$layout_example <- renderUI({
+      req(input$layout_type)
+      
+      long_path <- "data/toy_animal_trial_data_long.xlsx"
+      wide_path <- "data/toy_animal_trial_data_wide.xlsx"
+      
+      if (!file.exists(long_path) || !file.exists(wide_path))
+        return(p("❌ Example files not found in /data folder."))
+      
+      if (input$layout_type == "long") {
+        toy <- readxl::read_excel(long_path, n_max = 5)
+        caption_txt <- paste(
+          "Long format — one row per measurement.",
+          "Each measurement is a separate row; responses (e.g. Cortisol, Glucose, FeedIntake) each have their own column."
+        )
+      } else {
+        toy <- readxl::read_excel(wide_path, n_max = 5)
+        
+        # Replace default "...1", "...2", etc. with empty column names
+        bad_names <- grepl("^\\.\\.\\.[0-9]+$", names(toy))
+        names(toy)[bad_names] <- "\t"
+        
+        caption_txt <- paste(
+          "Wide format — two header rows.",
+          "Top row: responses (e.g. FAMACHA, BCS, EPG).",
+          "Bottom row: replicate numbers (1, 2, 3...)."
+        )
+      }
+      
+      DT::datatable(
+        toy,
+        caption = htmltools::tags$caption(htmltools::tags$b(caption_txt)),
+        elementId = ns("example_dt"),
+        options = list(dom = "t", scrollX = TRUE),
+        rownames = FALSE,
+        class = "compact stripe"
+      )
+    })
+    
+    
+    # ---- File upload + sheet selection ----
+    observeEvent(input$file, {
+      req(input$file)
+      fpath <- input$file$datapath
+      ext <- tolower(tools::file_ext(input$file$name))
+      
+      if (!ext %in% c("xlsx", "xls", "xlsm")) {
+        output$validation_msg <- renderText("❌ Invalid file type. Please upload .xlsx/.xls/.xlsm.")
+        return()
+      }
+      
+      sheets <- tryCatch(readxl::excel_sheets(fpath), error = function(e) NULL)
+      if (is.null(sheets) || length(sheets) == 0) {
+        output$validation_msg <- renderText("❌ No readable sheets found in the workbook.")
+        return()
+      }
+      
+      output$validation_msg <- renderText(paste("✅ File loaded:", input$file$name))
+      output$sheet_selector <- renderUI({
+        selectInput(ns("sheet"), "Select sheet:", choices = sheets)
+      })
+    }, ignoreInit = TRUE)
+    
+    # ---- Load selected sheet ----
+    # ---- Load selected sheet ----
+    observeEvent(list(input$sheet, input$file$datapath, input$layout_type), {
+      req(input$file, input$sheet)
+      
+      tmp <- tryCatch(
+        readxl::read_excel(input$file$datapath, sheet = input$sheet),
+        error = function(e) e
+      )
+      if (inherits(tmp, "error")) {
+        output$validation_msg <- renderText(paste("❌ Error loading sheet —", conditionMessage(tmp)))
+        return()
+      }
+      
+      # ---- Detect likely wide-format pattern ----
+      first_row <- suppressMessages(readxl::read_excel(input$file$datapath, sheet = input$sheet, n_max = 1))
+      if (any(duplicated(unlist(first_row))) && input$layout_type == "long") {
+        output$validation_msg <- renderText(
+          "❌ Wide-format structure detected — please select 'Wide format' before proceeding."
+        )
+        output$preview <- renderDT(data.frame(), options = list(scrollX = TRUE))
+        return()
+      }
+      
+      # ---- Convert or validate ----
+      if (input$layout_type == "wide") {
+        tmp <- tryCatch(
+          convert_wide_to_long(input$file$datapath, sheet = input$sheet, replicate_col = "Replicate"),
+          error = function(e) e
+        )
+        if (inherits(tmp, "error")) {
+          output$validation_msg <- renderText(paste("❌ Error converting wide format —", conditionMessage(tmp)))
+          return()
+        }
+        output$validation_msg <- renderText("✅ Wide format detected and reshaped successfully.")
+      } else {
+        output$validation_msg <- renderText("✅ Long format detected and loaded successfully.")
+      }
+      
+      tmp <- janitor::clean_names(tmp)
+      df(tmp)
+      
+      output$preview <- renderDT(tmp, options = list(scrollX = TRUE, pageLength = 5))
+    })
+    
+    
+    
+    return(df)
+  })
+}
+convert_wide_to_long <- function(path, sheet = 1, replicate_col = "Replicate") {
+  header_rows <- 2
+  
+  headers <- readxl::read_excel(path, sheet = sheet, n_max = header_rows, col_names = FALSE)
+  data <- readxl::read_excel(path, sheet = sheet, skip = header_rows, col_names = FALSE)
+  
+  first_row <- as.character(unlist(headers[1, ]))
+  first_row[first_row == ""] <- NA
+  
+  # find first repeated header (start of measured block)
+  duplicated_start <- which(duplicated(first_row) & !is.na(first_row))
+  if (length(duplicated_start) > 0) {
+    n_fixed <- duplicated_start[1] - 1
+  } else {
+    n_fixed <- 3
+  }
+  
+  fixed_names <- as.character(unlist(headers[1, 1:n_fixed]))
+  fixed_names[is.na(fixed_names) | fixed_names == ""] <- paste0("V", seq_len(sum(is.na(fixed_names) | fixed_names == "")))
+  colnames(data)[1:n_fixed] <- fixed_names
+  
+  measure_names <- as.character(unlist(headers[1, (n_fixed + 1):ncol(headers)]))
+  measure_names <- zoo::na.locf(measure_names)
+  
+  replicate_ids <- as.character(unlist(headers[2, (n_fixed + 1):ncol(headers)]))
+  replicate_ids[is.na(replicate_ids) | replicate_ids == ""] <- "1"
+  
+  colnames(data)[(n_fixed + 1):ncol(data)] <- paste0(measure_names, "_", replicate_ids)
+  
+  measure_cols <- colnames(data)[(n_fixed + 1):ncol(data)]
+  
+  data_fixed <- data[, 1:n_fixed]
+  data_long <- data |>
+    select(all_of(measure_cols)) |>
+    mutate(row_id = seq_len(n())) |>
+    pivot_longer(
+      cols = all_of(measure_cols),
+      names_to = c("Variable", replicate_col),
+      names_sep = "_",
+      values_to = "Value"
+    ) |>
+    pivot_wider(names_from = "Variable", values_from = "Value")
+  
+  long_df <- bind_cols(data_fixed[rep(seq_len(nrow(data_fixed)), each = length(unique(data_long[[replicate_col]]))), ],
+                       data_long |> select(-row_id))
+  
+  long_df
+}
+# ===============================================================
+# 🧩 Visualization Coordinator
+# ===============================================================
+
+visualize_ui <- function(id) {
+  ns <- NS(id)
+  tagList(
+    uiOutput(ns("dynamic_ui"))
+  )
+}
+
+visualize_server <- function(id, filtered_data, model_fit) {
+  moduleServer(id, function(input, output, session) {
+    ns <- session$ns
+    
+    # reactive model info
+    model_info <- reactive(model_fit())
+    
+    # detect analysis type
+    analysis_type <- reactive({
+      info <- model_info()
+      if (is.null(info$type)) return("oneway_anova")  # default
+      info$type
+    })
+    
+    # dynamic UI placeholder
+    output$dynamic_ui <- renderUI({
+      type <- analysis_type()
+      if (type == "oneway_anova") {
+        visualize_oneway_ui(ns("oneway"))
+      } else if (type == "twoway_anova") {
+        visualize_twoway_ui(ns("twoway"))
+      } else if (type == "ggpairs") {
+        visualize_ggpairs_ui(ns("ggpairs"))
+      } else if (type == "pca") {
+        visualize_pca_ui(ns("pca"), filtered_data())
+      } else if (type == "descriptive") {
+        visualize_descriptive_ui(ns("descriptive"))
+      } else {
+        div("Visualization not yet implemented for this analysis type.")
+      }
+    })
+    
+    observe({
+      type <- analysis_type()
+      if (type == "oneway_anova") {
+        visualize_oneway_server("oneway", filtered_data, model_info)
+      } else if (type == "twoway_anova") {
+        visualize_twoway_server("twoway", filtered_data, model_info)
+      } else if (type == "ggpairs") {
+        visualize_ggpairs_server("ggpairs", filtered_data, model_info)
+      } else if (type == "pca") {
+        visualize_pca_server("pca", filtered_data, model_info)
+      } else if (type == "descriptive") {
+        visualize_descriptive_server("descriptive", filtered_data, model_info)
+      }
+    })
+    
+  })
+}
+# ===============================================================
+# 🧱 Visualization Layout Management
+# ===============================================================
+
+initialize_layout_state <- function(input, session) {
+  layout_overrides <- reactiveValues(
+    strata_rows = 0,
+    strata_cols = 0,
+    resp_rows = 0,
+    resp_cols = 0
+  )
+
+  layout_manual <- reactiveValues(
+    strata_rows = FALSE,
+    strata_cols = FALSE,
+    resp_rows = FALSE,
+    resp_cols = FALSE
+  )
+
+  suppress_updates <- reactiveValues(
+    strata_rows = TRUE,
+    strata_cols = TRUE,
+    resp_rows = TRUE,
+    resp_cols = TRUE
+  )
+
+  observe_numeric_input <- function(name) {
+    observeEvent(input[[name]], {
+      if (isTRUE(suppress_updates[[name]])) {
+        suppress_updates[[name]] <- FALSE
+        return()
+      }
+
+      val <- suppressWarnings(as.numeric(input[[name]]))
+      if (is.na(val) || val <= 0) {
+        layout_overrides[[name]] <- 0L
+        layout_manual[[name]] <- FALSE
+      } else {
+        layout_overrides[[name]] <- as.integer(val)
+        layout_manual[[name]] <- TRUE
+      }
+    })
+  }
+  lapply(c("strata_rows", "strata_cols", "resp_rows", "resp_cols"), observe_numeric_input)
+
+  effective_input <- function(name) {
+    if (isTRUE(layout_manual[[name]])) layout_overrides[[name]] else 0
+  }
+
+  default_ui_value <- function(cur_val) {
+    val <- if (is.null(cur_val)) 1 else cur_val
+    ifelse(is.na(val) || val <= 0, 1, val)
+  }
+
+  list(
+    overrides = layout_overrides,
+    manual = layout_manual,
+    suppress = suppress_updates,
+    effective_input = effective_input,
+    default_ui_value = default_ui_value
+  )
+}
+
+observe_layout_synchronization <- function(plot_info_reactive, layout_state, session) {
+  observeEvent(plot_info_reactive(), {
+    info <- plot_info_reactive()
+    if (is.null(info)) return()
+
+    sync_input <- function(id, value, manual_key) {
+      val <- ifelse(is.null(value) || value <= 0, 1, value)
+      if (!isTRUE(layout_state$manual[[manual_key]])) {
+        layout_state$suppress[[id]] <- TRUE
+        updateNumericInput(session, id, value = val)
+      }
+    }
+
+    if (isTRUE(info$has_strata)) {
+      sync_input("strata_rows", info$layout$strata$rows, "strata_rows")
+      sync_input("strata_cols", info$layout$strata$cols, "strata_cols")
+    } else {
+      sync_input("strata_rows", 1, "strata_rows")
+      sync_input("strata_cols", 1, "strata_cols")
+    }
+
+    resp_rows_val <- if (info$n_responses <= 1) 1 else info$layout$responses$nrow
+    resp_cols_val <- if (info$n_responses <= 1) 1 else info$layout$responses$ncol
+
+    sync_input("resp_rows", resp_rows_val, "resp_rows")
+    sync_input("resp_cols", resp_cols_val, "resp_cols")
+  })
+}
+# ===============================================================
+# 🎨 Visualization Plot Builders
+# ===============================================================
+
+build_descriptive_plots <- function(summary_info, original_data = NULL) {
+  summary_data <- resolve_summary_input(summary_info)
+
+  plots <- list()
+
+  metric_plots <- build_descriptive_metric_plots(summary_data)
+  if (length(metric_plots) > 0) {
+    plots$metrics <- metric_plots
+  }
+
+  if (!is.null(original_data)) {
+    factor_plot <- build_descriptive_categorical_plot(original_data)
+    if (!is.null(factor_plot)) {
+      plots$factors <- factor_plot
+    }
+
+    box_plot <- build_descriptive_boxplot(original_data)
+    if (!is.null(box_plot)) {
+      plots$boxplots <- box_plot
+    }
+
+    hist_plot <- build_descriptive_histogram(original_data)
+    if (!is.null(hist_plot)) {
+      plots$histograms <- hist_plot
+    }
+  }
+
+  if (length(plots) == 0) return(NULL)
+
+  plots
+}
+
+
+resolve_summary_input <- function(summary_info) {
+  if (is.null(summary_info)) return(NULL)
+  if (is.function(summary_info)) {
+    return(summary_info())
+  }
+  summary_info
+}
+
+
+build_descriptive_metric_plots <- function(summary_data) {
+  if (is.null(summary_data)) return(list())
+
+  metric_plots <- list(
+    cv = build_descriptive_metric_panel(summary_data$cv, "cv", "CV (%)"),
+    outliers = build_descriptive_metric_panel(summary_data$outliers, "outliers", "Outlier Count"),
+    missing = build_descriptive_metric_panel(summary_data$missing, "missing", "Missing (%)"),
+    shapiro = build_descriptive_metric_panel(summary_data$shapiro, "shapiro", "Shapiro p-value")
+  )
+
+  Filter(Negate(is.null), metric_plots)
+}
+
+
+build_descriptive_metric_panel <- function(df, prefix, y_label) {
+  tidy <- tidy_descriptive_metric(df, prefix)
+  if (is.null(tidy)) return(NULL)
+
+  plot <- build_descriptive_metric_bar_plot(tidy, y_label)
+  plot + ggtitle(paste("Summary Metric:", y_label))
+}
+
+
+tidy_descriptive_metric <- function(df, prefix) {
+  if (is.null(df) || nrow(df) == 0) return(NULL)
+  metric_cols <- grep(paste0("^", prefix, "_"), names(df), value = TRUE)
+  if (length(metric_cols) == 0) return(NULL)
+  group_cols <- setdiff(names(df), metric_cols)
+  has_group <- length(group_cols) > 0
+  group_label <- if (has_group) paste(group_cols, collapse = " / ") else NULL
+  if (!has_group) {
+    df <- df |> dplyr::mutate(.group = "Overall")
+    group_cols <- ".group"
+  }
+  tidy <- df |>
+    tidyr::unite(".group", dplyr::all_of(group_cols), sep = " / ", remove = FALSE) |>
+    tidyr::pivot_longer(
+      cols = dplyr::all_of(metric_cols),
+      names_to = "variable",
+      values_to = "value"
+    ) |>
+    dplyr::mutate(
+      variable = gsub(paste0("^", prefix, "_"), "", .data$variable),
+      value = ifelse(is.finite(.data$value), .data$value, NA_real_),
+      .group = factor(.data$.group, levels = unique(.data$.group))
+    ) |>
+    tidyr::drop_na("value")
+  if (nrow(tidy) == 0) return(NULL)
+  list(data = tidy, has_group = has_group, group_label = group_label)
+}
+
+
+build_descriptive_metric_bar_plot <- function(info, y_label) {
+  if (is.null(info)) return(NULL)
+  df <- info$data
+  has_multiple_groups <- length(unique(df$.group)) > 1
+  p <- ggplot(df, aes(x = variable, y = value))
+  if (has_multiple_groups) {
+    legend_title <- if (!is.null(info$group_label)) info$group_label else "Group"
+    p <- p +
+      geom_col(aes(fill = .group), position = position_dodge(width = 0.75), width = 0.65) +
+      labs(fill = legend_title)
+  } else {
+    p <- p + geom_col(fill = "#2C7FB8", width = 0.65)
+  }
+  p +
+    theme_minimal(base_size = 13) +
+    labs(x = NULL, y = y_label) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+}
+
+
+build_descriptive_categorical_plot <- function(df) {
+  factor_vars <- names(df)[sapply(df, function(x) is.character(x) || is.factor(x))]
+  if (length(factor_vars) == 0) return(NULL)
+  plots <- lapply(factor_vars, function(v) {
+    ggplot(df, aes(x = .data[[v]])) +
+      geom_bar(fill = "#2C7FB8", width = 0.7) +
+      theme_minimal(base_size = 13) +
+      labs(title = v, x = NULL, y = "Count") +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  })
+  patchwork::wrap_plots(plots, ncol = 2) +
+    patchwork::plot_annotation(
+      title = "Categorical Distributions",
+      theme = theme(plot.title = element_text(size = 16, face = "bold"))
+    )
+}
+
+
+build_descriptive_boxplot <- function(df) {
+  num_vars <- names(df)[sapply(df, is.numeric)]
+  if (length(num_vars) == 0) return(NULL)
+  plots <- lapply(num_vars, function(v) {
+    ggplot(df, aes(x = 1, y = .data[[v]])) +
+      geom_boxplot(outlier.shape = NA, fill = "#A6CEE3") +
+      geom_jitter(width = 0.1, alpha = 0.5, color = "#1F78B4") +
+      theme_minimal(base_size = 13) +
+      labs(title = v, x = NULL, y = "Value") +
+      theme(
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank()
+      )
+  })
+  patchwork::wrap_plots(plots, ncol = 2) +
+    patchwork::plot_annotation(
+      title = "Boxplots",
+      theme = theme(plot.title = element_text(size = 16, face = "bold"))
+    )
+}
+
+
+build_descriptive_histogram <- function(df) {
+  num_vars <- names(df)[sapply(df, is.numeric)]
+  if (length(num_vars) == 0) return(NULL)
+  plots <- lapply(num_vars, function(v) {
+    ggplot(df, aes(x = .data[[v]])) +
+      geom_histogram(fill = "#FDBF6F", color = "white", bins = 20) +
+      theme_minimal(base_size = 13) +
+      labs(title = paste(v, "Distribution"), x = NULL, y = "Frequency")
+  })
+  patchwork::wrap_plots(plots, ncol = 2) +
+    patchwork::plot_annotation(
+      title = "Histograms",
+      theme = theme(plot.title = element_text(size = 16, face = "bold"))
+    )
+}
+
+
+build_anova_plot_info <- function(data, info, effective_input) {
+  factor1 <- info$factors$factor1
+  factor2 <- info$factors$factor2
+  order1 <- info$orders$order1
+  order2 <- info$orders$order2
+
+  if (!is.null(factor1) && !is.null(order1)) {
+    data[[factor1]] <- factor(data[[factor1]], levels = order1)
+  }
+  if (!is.null(factor2) && !is.null(order2)) {
+    data[[factor2]] <- factor(data[[factor2]], levels = order2)
+  }
+
+  responses <- info$responses
+  has_strata <- !is.null(info$strata) && !is.null(info$strata$var)
+  strat_var <- if (has_strata) info$strata$var else NULL
+  strata_levels <- if (has_strata) info$strata$levels else character(0)
+  if (has_strata && (is.null(strata_levels) || length(strata_levels) == 0)) {
+    strata_levels <- unique(as.character(stats::na.omit(data[[strat_var]])))
+  }
+
+  response_plots <- list()
+  max_strata_rows <- 1
+  max_strata_cols <- 1
+
+  compute_stats <- function(df_subset, resp_name) {
+    if (is.null(factor2)) {
+      df_subset |>
+        dplyr::group_by(.data[[factor1]]) |>
+        dplyr::summarise(
+          mean = mean(.data[[resp_name]], na.rm = TRUE),
+          se = sd(.data[[resp_name]], na.rm = TRUE) / sqrt(sum(!is.na(.data[[resp_name]]))),
+          .groups = "drop"
+        )
+    } else {
+      df_subset |>
+        dplyr::group_by(.data[[factor1]], .data[[factor2]]) |>
+        dplyr::summarise(
+          mean = mean(.data[[resp_name]], na.rm = TRUE),
+          se = sd(.data[[resp_name]], na.rm = TRUE) / sqrt(sum(!is.na(.data[[resp_name]]))),
+          .groups = "drop"
+        )
+    }
+  }
+
+  build_plot <- function(stats_df, title_text, y_limits) {
+    if (is.null(factor2)) {
+      p <- ggplot(stats_df, aes(x = !!sym(factor1), y = mean)) +
+        geom_line(aes(group = 1), color = "steelblue", linewidth = 1) +
+        geom_point(size = 3, color = "steelblue") +
+        geom_errorbar(aes(ymin = mean - se, ymax = mean + se),
+                      width = 0.15, color = "gray40") +
+        theme_minimal(base_size = 14) +
+        labs(x = factor1, y = "Mean ± SE") +
+        theme(
+          panel.grid.minor = element_blank(),
+          panel.grid.major.x = element_blank()
+        )
+    } else {
+      p <- ggplot(stats_df, aes(
+        x = !!sym(factor1),
+        y = mean,
+        color = !!sym(factor2),
+        group = !!sym(factor2)
+      )) +
+        geom_line(linewidth = 1) +
+        geom_point(size = 3) +
+        geom_errorbar(aes(ymin = mean - se, ymax = mean + se),
+                      width = 0.15) +
+        theme_minimal(base_size = 14) +
+        labs(
+          x = factor1,
+          y = "Mean ± SE",
+          color = factor2
+        ) +
+        theme(
+          panel.grid.minor = element_blank(),
+          panel.grid.major.x = element_blank()
+        )
+    }
+
+    if (!is.null(y_limits) && all(is.finite(y_limits))) {
+      p <- p + scale_y_continuous(limits = y_limits)
+    }
+
+    p + ggtitle(title_text) +
+      theme(plot.title = element_text(size = 12, face = "bold"))
+  }
+
+  for (resp in responses) {
+    if (has_strata) {
+      stratum_plots <- list()
+      y_values <- c()
+
+      for (stratum in strata_levels) {
+        subset_data <- data[!is.na(data[[strat_var]]) & data[[strat_var]] == stratum, , drop = FALSE]
+        if (nrow(subset_data) == 0) next
+
+        stats_df <- compute_stats(subset_data, resp)
+        if (nrow(stats_df) == 0) next
+
+        y_values <- c(y_values, stats_df$mean - stats_df$se, stats_df$mean + stats_df$se)
+        stratum_plots[[stratum]] <- stats_df
+      }
+
+      if (length(stratum_plots) == 0) next
+
+      y_limits <- range(y_values, na.rm = TRUE)
+      if (!all(is.finite(y_limits))) y_limits <- NULL
+
+      strata_plot_list <- lapply(names(stratum_plots), function(stratum_name) {
+        build_plot(stratum_plots[[stratum_name]], stratum_name, y_limits)
+      })
+
+      layout <- compute_grid_layout(
+        length(strata_plot_list),
+        effective_input("strata_rows"),
+        effective_input("strata_cols")
+      )
+
+      max_strata_rows <- max(max_strata_rows, layout$nrow)
+      max_strata_cols <- max(max_strata_cols, layout$ncol)
+
+      combined <- patchwork::wrap_plots(
+        plotlist = strata_plot_list,
+        nrow = layout$nrow,
+        ncol = layout$ncol
+      )
+
+      title_plot <- ggplot() +
+        theme_void() +
+        ggtitle(resp) +
+        theme(
+          plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+          plot.margin = margin(t = 0, r = 0, b = 6, l = 0)
+        )
+
+      response_plots[[resp]] <- title_plot / combined + plot_layout(heights = c(0.08, 1))
+
+    } else {
+      stats_df <- compute_stats(data, resp)
+      if (nrow(stats_df) == 0) {
+        next
+      }
+
+      y_values <- c(stats_df$mean - stats_df$se, stats_df$mean + stats_df$se)
+      y_limits <- range(y_values, na.rm = TRUE)
+      if (!all(is.finite(y_limits))) {
+        y_limits <- NULL
+      }
+
+      response_plots[[resp]] <- build_plot(stats_df, resp, y_limits)
+      max_strata_rows <- max(max_strata_rows, 1)
+      max_strata_cols <- max(max_strata_cols, 1)
+    }
+  }
+
+  if (length(response_plots) == 0) {
+    return(NULL)
+  }
+
+  resp_layout <- compute_grid_layout(
+    length(response_plots),
+    effective_input("resp_rows"),
+    effective_input("resp_cols")
+  )
+
+  final_plot <- if (length(response_plots) == 1) {
+    response_plots[[1]]
+  } else {
+    patchwork::wrap_plots(
+      plotlist = response_plots,
+      nrow = resp_layout$nrow,
+      ncol = resp_layout$ncol
+    ) &
+      patchwork::plot_layout(guides = "collect")
+  }
+
+  list(
+    plot = final_plot,
+    layout = list(
+      strata = list(rows = max_strata_rows, cols = max_strata_cols),
+      responses = resp_layout
+    ),
+    has_strata = has_strata,
+    n_responses = length(response_plots)
+  )
+}
+
+build_ggpairs_plot <- function(data) {
+  GGally::ggpairs(
+    data,
+    progress = FALSE,
+    upper = list(
+      continuous = GGally::wrap("cor", size = 4, color = "steelblue")
+    ),
+    lower = list(
+      continuous = GGally::wrap("points", alpha = 0.6, color = "steelblue", size = 1.5)
+    ),
+    diag = list(
+      continuous = GGally::wrap("densityDiag", fill = "steelblue", alpha = 0.4)
+    )
+  ) +
+    theme_minimal(base_size = 11) +
+    theme(
+      strip.background = element_rect(fill = "gray95", color = NA),
+      strip.text = element_text(face = "bold", size = 9),
+      panel.grid.minor = element_blank(),
+      panel.grid.major.x = element_blank(),
+      panel.grid.major.y = element_blank(),
+      plot.title = element_text(size = 12, face = "bold"),
+      axis.text = element_text(color = "black")
+    )
+}
+
+
+build_pca_biplot <- function(pca_obj, data, color_var = NULL, shape_var = NULL,
+                             label_var = NULL, label_size = 2) {
+  stopifnot(!is.null(pca_obj$x))
+  
+  scores <- as.data.frame(pca_obj$x[, 1:2])
+  names(scores)[1:2] <- c("PC1", "PC2")
+  
+  if (!is.null(data) && nrow(data) == nrow(scores)) {
+    plot_data <- cbind(scores, data)
+  } else {
+    plot_data <- scores
+  }
+  
+  if (!is.null(label_var) && !identical(label_var, "") && !is.null(plot_data[[label_var]])) {
+    label_values <- as.character(plot_data[[label_var]])
+    label_values[is.na(label_values) | trimws(label_values) == ""] <- NA_character_
+    
+    if (any(!is.na(label_values))) {
+      plot_data$label_value <- label_values
+    } else {
+      label_var <- NULL
+    }
+  } else {
+    label_var <- NULL
+  }
+  
+  aes_mapping <- aes(x = PC1, y = PC2)
+  if (!is.null(color_var)) aes_mapping <- modifyList(aes_mapping, aes(color = .data[[color_var]]))
+  if (!is.null(shape_var)) aes_mapping <- modifyList(aes_mapping, aes(shape = .data[[shape_var]]))
+  
+  g <- ggplot(plot_data, aes_mapping) +
+    geom_point(
+      size = 3,
+      shape = if (is.null(shape_var)) 16 else NULL,
+      color = if (is.null(color_var)) "black" else NULL
+    ) +
+    theme_minimal(base_size = 14) +
+    labs(
+      title = "PCA Biplot",
+      x = "PC1",
+      y = "PC2",
+      color = if (!is.null(color_var)) color_var else NULL,
+      shape = if (!is.null(shape_var)) shape_var else NULL
+    ) +
+    theme(
+      plot.title = element_text(size = 16, face = "bold"),
+      legend.position = "right"
+    )
+  
+  if (!is.null(label_var)) {
+    g <- g + ggrepel::geom_text_repel(
+      aes(label = label_value),
+      size = label_size,
+      max.overlaps = Inf,
+      min.segment.length = 0,
+      box.padding = 0.3,
+      point.padding = 0.2,
+      segment.size = 0.2,
+      na.rm = TRUE
+    )
+  }
+  
+  g
+}
+
+
+# ---------------------------------------------------------------
+# Low-level utilities
+# ---------------------------------------------------------------
+
+compute_grid_layout <- function(n_items, rows_input, cols_input) {
+  # Safely handle nulls
+  if (is.null(n_items) || length(n_items) == 0 || is.na(n_items) || n_items <= 0) {
+    return(list(nrow = 1, ncol = 1))
+  }
+  
+  # Replace NULL or NA inputs with 0
+  if (is.null(rows_input) || is.na(rows_input)) rows_input <- 0
+  if (is.null(cols_input) || is.na(cols_input)) cols_input <- 0
+  
+  n_row_input <- suppressWarnings(as.numeric(rows_input))
+  n_col_input <- suppressWarnings(as.numeric(cols_input))
+  
+  # Handle invalid inputs
+  if (is.na(n_row_input)) n_row_input <- 0
+  if (is.na(n_col_input)) n_col_input <- 0
+  
+  if (n_row_input > 0) {
+    n_row_final <- n_row_input
+    if (n_col_input > 0) {
+      n_col_final <- max(n_col_input, ceiling(n_items / max(1, n_row_final)))
+    } else {
+      n_col_final <- ceiling(n_items / max(1, n_row_final))
+    }
+  } else if (n_col_input > 0) {
+    n_col_final <- n_col_input
+    n_row_final <- ceiling(n_items / max(1, n_col_final))
+  } else {
+    # Default heuristic: single row if <=5 items, otherwise two
+    n_row_final <- ifelse(n_items <= 5, 1, 2)
+    n_col_final <- ceiling(n_items / n_row_final)
+  }
+  
+  list(
+    nrow = max(1, as.integer(n_row_final)),
+    ncol = max(1, as.integer(n_col_final))
+  )
+}
+
+# ===============================================================
+# 🧪 Animal Trial Analyzer — Pairwise Correlation Module
+# ===============================================================
+
+ggpairs_ui <- function(id) {
+  ns <- NS(id)
+  list(
+    config = tagList(
+      p("Select numeric variables to include in the correlation matrix."),
+      selectInput(ns("vars"), "Variables:", choices = NULL, multiple = TRUE),
+      br(),
+      fluidRow(
+        column(6, actionButton(ns("run"), "Run", width = "100%")),
+        column(6, downloadButton(ns("download_model"), "Download All Results", width = "100%"))
+      )
+    ),
+    results = tagList(
+      h5("Correlation Matrix"),
+      verbatimTextOutput(ns("summary"))
+    )
+  )
+}
+
+ggpairs_server <- function(id, data_reactive) {
+  moduleServer(id, function(input, output, session) {
+    ns <- session$ns
+    df <- reactive(data_reactive())
+    
+    # ---- Update variable selector ----
+    observe({
+      req(df())
+      num_vars <- names(df())[sapply(df(), is.numeric)]
+      updateSelectInput(session, "vars", choices = num_vars, selected = num_vars)
+    })
+    
+    # ---- Compute correlation matrix ----
+    observeEvent(input$run, {
+      req(df(), input$vars)
+      dat <- df()[, input$vars, drop = FALSE]
+      output$summary <- renderPrint({
+        if (ncol(dat) < 2)
+          return(cat("Need at least two numeric columns."))
+        cor_matrix <- cor(dat, use = "pairwise.complete.obs")
+        print(round(cor_matrix, 2))
+      })
+    })
+    
+    # ---- Return structured output for visualization ----
+    reactive({
+      req(df())
+      num_vars <- names(df())[sapply(df(), is.numeric)]
+      selected_vars <- if (length(input$vars)) input$vars else num_vars
+      dat <- df()[, selected_vars, drop = FALSE]
+      
+      list(
+        type = "ggpairs",
+        models = NULL,
+        responses = selected_vars,
+        strata = NULL,
+        factors = list(factor1 = NULL, factor2 = NULL),
+        orders = list(order1 = NULL, order2 = NULL),
+        data = dat
+      )
+    })
+  })
+}
+# ===============================================================
+# 🧪 Visualization Module — Pairwise Correlation (GGpairs)
+# ===============================================================
+
+visualize_ggpairs_ui <- function(id) {
+  ns <- NS(id)
+  sidebarLayout(
+    sidebarPanel(
+      width = 4,
+      h4("Step 4 — Visualize Pairwise Correlation"),
+      p("Visualize pairwise relationships and correlation coefficients among numeric variables."),
+      hr(),
+      selectInput(
+        ns("plot_type"),
+        label = "Visualization type:",
+        choices = c("Pairwise correlation matrix" = "ggpairs"),  # ✅ single option for now
+        selected = "ggpairs"
+      ),
+      hr(),
+      fluidRow(
+        column(
+          width = 6,
+          numericInput(
+            ns("plot_width"),
+            label = "Plot width (px)",
+            value = 800,
+            min = 400,
+            max = 2000,
+            step = 100
+          )
+        ),
+        column(
+          width = 6,
+          numericInput(
+            ns("plot_height"),
+            label = "Plot height (px)",
+            value = 600,
+            min = 400,
+            max = 2000,
+            step = 100
+          )
+        )
+      ),
+      hr(),
+      downloadButton(ns("download_plot"), "Download Plot")
+    ),
+    mainPanel(
+      width = 8,
+      h4("Plots"),
+      plotOutput(ns("plots"))
+    )
+  )
+}
+
+
+visualize_ggpairs_server <- function(id, filtered_data, model_fit) {
+  moduleServer(id, function(input, output, session) {
+    ns <- session$ns
+    
+    # Reactive data and model
+    df <- reactive(filtered_data())
+    model_info <- reactive(model_fit())
+    
+    # Layout info placeholder
+    output$layout_controls <- renderUI({
+      info <- model_info()
+      if (is.null(info) || info$type != "ggpairs") return(NULL)
+      tagList(
+        p("This plot shows pairwise scatterplots and Pearson correlations among numeric variables.")
+      )
+    })
+    
+    # Determine plot size dynamically
+    plot_size <- reactive({
+      list(w = input$plot_width, h = input$plot_height)
+    })
+    
+    # --- Main Plot Rendering ---
+    output$plots <- renderPlot({
+      info <- model_info()
+      if (is.null(info) || info$type != "ggpairs") return(NULL)
+      validate(need(ncol(info$data) >= 2, "Need at least two numeric columns for ggpairs."))
+      
+      # use visualization type (only one for now)
+      if (input$plot_type == "ggpairs") {
+        build_ggpairs_plot(info$data)
+      }
+    },
+    width  = function() plot_size()$w,
+    height = function() plot_size()$h,
+    res    = 96)
+    
+    # --- Download handler ---
+    output$download_plot <- downloadHandler(
+      filename = function() paste0("ggpairs_plot_", Sys.Date(), ".png"),
+      content = function(file) {
+        info <- model_info()
+        req(info)
+        validate(need(ncol(info$data) >= 2, "Need at least two numeric columns for ggpairs."))
+        
+        g <- if (input$plot_type == "ggpairs") build_ggpairs_plot(info$data)
+        
+        width_in  <- input$plot_width / 96
+        height_in <- input$plot_height / 96
+        
+        ggsave(
+          filename = file,
+          plot = g,
+          device = "png",
+          dpi = 300,
+          width = width_in,
+          height = height_in,
+          units = "in",
+          limitsize = FALSE
+        )
+      }
+    )
+  })
+}
+# ===============================================================
+# 🧪 Animal Trial Analyzer — PCA Module (analysis side only)
+# ===============================================================
+
+pca_ui <- function(id) {
+  ns <- NS(id)
+  list(
+    config = tagList(
+      p("Select numeric variables to include in the PCA. The data will be centered and scaled automatically."),
+      selectInput(ns("vars"), "Variables:", choices = NULL, multiple = TRUE),
+      fluidRow(
+        column(6, actionButton(ns("run_pca"), "Run", width = "100%")),
+        column(6, downloadButton(ns("download_all"), "Download All Results", width = "100%"))
+      )
+    ),
+    results = tagList(
+      h5("PCA Results Summary"),
+      verbatimTextOutput(ns("summary")),
+      DT::dataTableOutput(ns("loadings_table"))
+    )
+  )
+}
+
+pca_server <- function(id, filtered_data) {
+  moduleServer(id, function(input, output, session) {
+    ns <- session$ns
+    df <- reactive(filtered_data())
+    
+    observe({
+      num_vars <- names(df())[sapply(df(), is.numeric)]
+      updateSelectInput(session, "vars", choices = num_vars, selected = num_vars)
+    })
+    
+    pca_result <- eventReactive(input$run_pca, {
+      req(input$vars)
+      dat <- df()[, input$vars, drop = FALSE]
+      prcomp(dat, center = TRUE, scale. = TRUE)
+    })
+    
+    output$summary <- renderPrint({
+      req(pca_result())
+      summary(pca_result())
+    })
+    
+    output$loadings_table <- DT::renderDataTable({
+      req(pca_result())
+      loadings <- as.data.frame(pca_result()$rotation)
+      DT::datatable(round(loadings, 3), options = list(pageLength = 5))
+    })
+    
+    # Return structured output for visualize module
+    reactive({
+      list(
+        type = "pca",
+        model = pca_result(),
+        data = df(),
+        vars = input$vars
+      )
+    })
+  })
+}
+# ===============================================================
+# Visualization Module - PCA (Biplot)
+# ===============================================================
+
+# Helper to detect categorical columns ----------------------------------------
+.is_categorical <- function(x) {
+  is.factor(x) || is.character(x) || is.logical(x)
+}
+
+.pca_aesthetic_choices <- function(data) {
+  if (missing(data) || is.null(data) || !is.data.frame(data) || ncol(data) == 0) {
+    return(c("None" = "None"))
+  }
+
+  keep <- vapply(data, .is_categorical, logical(1))
+  cat_cols <- names(data)[keep]
+
+  if (length(cat_cols) == 0) {
+    return(c("None" = "None"))
+  }
+
+  c("None" = "None", stats::setNames(cat_cols, cat_cols))
+}
+
+visualize_pca_ui <- function(id, filtered_data = NULL) {
+  ns <- NS(id)
+  choices <- .pca_aesthetic_choices(filtered_data)
+
+  sidebarLayout(
+    sidebarPanel(
+      width = 4,
+      h4("Step 4 - Principal Component Analysis (PCA)"),
+      p("Visualize multivariate structure using a PCA biplot."),
+      hr(),
+      selectInput(
+        ns("plot_type"),
+        label = "Visualization type:",
+        choices = c("PCA biplot" = "biplot"),
+        selected = "biplot"
+      ),
+      hr(),
+      selectInput(
+        ns("pca_color"),
+        label = "Color points by:",
+        choices = choices,
+        selected = "None"
+      ),
+      selectInput(
+        ns("pca_shape"),
+        label = "Shape points by:",
+        choices = choices,
+        selected = "None"
+      ),
+      selectInput(
+        ns("pca_label"),
+        label = "Label points by:",
+        choices = choices,
+        selected = "None"
+      ),
+      numericInput(
+        ns("pca_label_size"),
+        label = "Label size:",
+        value = 2,
+        min = 0.5,
+        max = 6,
+        step = 0.5
+      ),
+      hr(),
+      fluidRow(
+        column(
+          width = 6,
+          numericInput(
+            ns("plot_width"),
+            label = "Plot width (px)",
+            value = 800,
+            min = 400,
+            max = 2000,
+            step = 100
+          )
+        ),
+        column(
+          width = 6,
+          numericInput(
+            ns("plot_height"),
+            label = "Plot height (px)",
+            value = 600,
+            min = 400,
+            max = 2000,
+            step = 100
+          )
+        )
+      ),
+      hr(),
+      downloadButton(ns("download_plot"), "Download Plot")
+    ),
+    mainPanel(
+      width = 8,
+      h4("PCA Biplot"),
+      plotOutput(ns("plot"))
+    )
+  )
+}
+
+visualize_pca_server <- function(id, filtered_data, model_fit) {
+  moduleServer(id, function(input, output, session) {
+    # -- Reactives ------------------------------------------------------------
+    df <- reactive({
+      data <- filtered_data()
+      validate(need(!is.null(data) && is.data.frame(data), "No data available."))
+      data
+    })
+
+    model_info <- reactive({
+      info <- model_fit()
+      validate(need(!is.null(info) && identical(info$type, "pca"), "Run PCA first."))
+      validate(need(!is.null(info$model), "PCA model missing."))
+      info
+    })
+
+    categorical_vars <- reactive({
+      data <- df()
+      keep <- vapply(data, .is_categorical, logical(1))
+      names(data)[keep]
+    })
+
+    validate_choice <- function(value, pool) {
+      if (is.null(value) || identical(value, "None") || !nzchar(value)) {
+        return(NULL)
+      }
+      if (length(pool) == 0 || !(value %in% pool)) {
+        return(NULL)
+      }
+      value
+    }
+
+    plot_size <- reactive({
+      width <- suppressWarnings(as.numeric(input$plot_width))
+      height <- suppressWarnings(as.numeric(input$plot_height))
+
+      list(
+        w = ifelse(is.na(width) || width <= 0, 800, width),
+        h = ifelse(is.na(height) || height <= 0, 600, height)
+      )
+    })
+
+    build_current_plot <- reactive({
+      info <- model_info()
+      data <- df()
+      categorical <- categorical_vars()
+
+      color_var <- validate_choice(input$pca_color, categorical)
+      shape_var <- validate_choice(input$pca_shape, categorical)
+      label_var <- validate_choice(input$pca_label, categorical)
+      label_size <- ifelse(is.null(input$pca_label_size) || is.na(input$pca_label_size), 2, input$pca_label_size)
+
+      validate(need(!is.null(info$model$x) && nrow(info$model$x) >= 2, "PCA scores not available."))
+      validate(need(!is.null(input$plot_type) && input$plot_type == "biplot", "Unsupported plot type."))
+
+      build_pca_biplot(
+        pca_obj = info$model,
+        data = data,
+        color_var = color_var,
+        shape_var = shape_var,
+        label_var = label_var,
+        label_size = label_size
+      )
+    })
+
+    output$plot <- renderPlot({
+      build_current_plot()
+    },
+    width = function() plot_size()$w,
+    height = function() plot_size()$h,
+    res = 96)
+
+    output$download_plot <- downloadHandler(
+      filename = function() paste0("pca_biplot_", Sys.Date(), ".png"),
+      content = function(file) {
+        plot_obj <- build_current_plot()
+        size <- plot_size()
+
+        ggsave(
+          filename = file,
+          plot = plot_obj,
+          device = "png",
+          dpi = 300,
+          width = size$w / 96,
+          height = size$h / 96,
+          units = "in",
+          limitsize = FALSE
+        )
+      }
+    )
+  })
+}
+# ===============================================================
+# 🧬 Common module for LM and LMM
+# ===============================================================
+
+regression_ui <- function(id, engine = c("lm", "lmm"), allow_multi_response = FALSE) {
+  ns <- NS(id)
+  engine <- match.arg(engine)
+  allow_multi_response <- isTRUE(allow_multi_response)
+
+  list(
+    config = tagList(
+      uiOutput(ns("response_ui")),
+      uiOutput(ns("fixed_selector")),
+      uiOutput(ns("level_order")),
+      uiOutput(ns("covar_selector")),
+      if (engine == "lmm") uiOutput(ns("random_selector")),
+      uiOutput(ns("interaction_select")),
+      uiOutput(ns("stratification_controls")),
+      hr(),
+      uiOutput(ns("formula_preview")),
+      br(),
+      fluidRow(
+        column(6, actionButton(ns("run"), "Run", width = "100%")),
+        column(6, downloadButton(ns("download_model"), "Download All Results", width = "100%"))
+      )
+    ),
+    results = tagList(
+      uiOutput(ns("results_ui"))
+    )
+  )
+}
+
+regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_response = FALSE) {
+  engine <- match.arg(engine)
+  allow_multi_response <- isTRUE(allow_multi_response)
+
+  moduleServer(id, function(input, output, session) {
+    ns <- session$ns
+
+    output$response_ui <- renderUI({
+      req(data())
+      if (allow_multi_response) {
+        render_response_inputs(ns, data, input)
+      } else {
+        types <- reg_detect_types(data())
+        selectInput(ns("dep"), "Response variable (numeric):", choices = types$num)
+      }
+    })
+
+    output$fixed_selector <- renderUI({
+      req(data())
+      types <- reg_detect_types(data())
+      selectInput(
+        ns("fixed"),
+        "Categorical predictors:",
+        choices = types$fac,
+        multiple = TRUE
+      )
+    })
+
+    output$level_order <- renderUI({
+      req(data())
+      req(input$fixed)
+
+      df <- data()
+      fac_vars <- input$fixed
+      if (engine == "lmm" && !is.null(input$random) && nzchar(input$random)) {
+        fac_vars <- unique(c(fac_vars, input$random))
+      }
+
+      if (length(fac_vars) == 0) return(NULL)
+
+      tagList(
+        lapply(fac_vars, function(var) {
+          values <- df[[var]]
+          if (is.factor(values)) lvls <- levels(values)
+          else {
+            values <- values[!is.na(values)]
+            lvls <- unique(as.character(values))
+          }
+          selectInput(
+            ns(paste0("order_", var)),
+            paste("Order of levels for", var, "(first = reference):"),
+            choices = lvls,
+            selected = lvls,
+            multiple = TRUE
+          )
+        })
+      )
+    })
+
+    output$covar_selector <- renderUI({
+      req(data())
+      types <- reg_detect_types(data())
+      selectInput(
+        ns("covar"),
+        "Numeric predictors:",
+        choices = types$num,
+        multiple = TRUE
+      )
+    })
+
+    if (engine == "lmm") {
+      output$random_selector <- renderUI({
+        req(data())
+        types <- reg_detect_types(data())
+        selectInput(
+          ns("random"),
+          "Random effect (categorical):",
+          choices = types$fac,
+          selected = NULL
+        )
+      })
+    }
+
+    output$interaction_select <- renderUI({
+      req(data())
+      types <- reg_detect_types(data())
+      reg_interactions_ui(ns, input$fixed, types$fac)
+    })
+
+    output$stratification_controls <- renderUI({
+      req(data())
+      render_stratification_controls(ns, data, input)
+    })
+
+    output$strata_order_ui <- renderUI({
+      render_strata_order_input(ns, data, input$stratify_var)
+    })
+
+    selected_responses <- reactive({
+      if (allow_multi_response) {
+        get_selected_responses(input)
+      } else {
+        req(input$dep)
+        input$dep
+      }
+    })
+
+    get_stratification_info <- reactive({
+      req(data())
+      strat_var <- input$stratify_var
+      if (is.null(strat_var) || identical(strat_var, "None")) return(NULL)
+
+      df <- data()
+      if (is.null(df[[strat_var]])) return(NULL)
+
+      available_levels <- unique(as.character(stats::na.omit(df[[strat_var]])))
+      if (length(available_levels) == 0) return(NULL)
+
+      selected_levels <- input$strata_order
+      if (!is.null(selected_levels) && length(selected_levels) > 0) {
+        strata_levels <- selected_levels[selected_levels %in% available_levels]
+        if (length(strata_levels) == 0) strata_levels <- available_levels
+      } else {
+        strata_levels <- available_levels
+      }
+
+      list(var = strat_var, levels = strata_levels)
+    })
+
+    output$formula_preview <- renderUI({
+      responses <- selected_responses()
+      req(length(responses) > 0)
+      rhs <- reg_compose_rhs(
+        input$fixed,
+        input$covar,
+        input$interactions,
+        if (engine == "lmm") input$random else NULL,
+        engine = engine
+      )
+      reg_formula_preview_ui(ns, responses[1], rhs)
+    })
+
+    models <- eventReactive(input$run, {
+      req(data())
+      df <- data()
+      responses <- selected_responses()
+      req(length(responses) > 0)
+
+      rhs <- reg_compose_rhs(
+        input$fixed,
+        input$covar,
+        input$interactions,
+        if (engine == "lmm") input$random else NULL,
+        engine = engine
+      )
+
+      strat_info <- get_stratification_info()
+      safe_fit <- purrr::safely(reg_fit_model)
+
+      fits <- list()
+      success_resps <- character(0)
+      error_resps <- character(0)
+      success_models <- list()
+      error_messages <- list()
+      flat_models <- list()
+      primary_model <- NULL
+      primary_error <- NULL
+
+      for (resp in responses) {
+        if (is.null(strat_info)) {
+          result <- safe_fit(resp, rhs, df, engine = engine)
+          entry <- list(
+            stratified = FALSE,
+            strata = list(list(
+              label = NULL,
+              display = "Overall",
+              model = if (is.null(result$error)) result$result else NULL,
+              error = if (!is.null(result$error)) result$error$message else NULL
+            ))
+          )
+          fits[[resp]] <- entry
+
+          if (is.null(result$error)) {
+            success_resps <- c(success_resps, resp)
+            success_models[[resp]] <- list(Overall = result$result)
+            flat_models[[length(flat_models) + 1]] <- list(
+              response = resp,
+              stratum = NULL,
+              model = result$result
+            )
+            if (is.null(primary_model)) primary_model <- result$result
+          } else {
+            error_resps <- c(error_resps, resp)
+            error_messages[[resp]] <- result$error$message
+            if (is.null(primary_error)) primary_error <- result$error$message
+          }
+        } else {
+          strata_entries <- list()
+          successful_strata <- list()
+
+          for (level in strat_info$levels) {
+            subset_data <- df[df[[strat_info$var]] == level, , drop = FALSE]
+            if (nrow(subset_data) == 0) {
+              msg <- paste0("No observations available for stratum '", level, "'.")
+              strata_entries[[length(strata_entries) + 1]] <- list(
+                label = level,
+                display = level,
+                model = NULL,
+                error = msg
+              )
+              next
+            }
+
+            result <- safe_fit(resp, rhs, subset_data, engine = engine)
+            if (!is.null(result$error)) {
+              strata_entries[[length(strata_entries) + 1]] <- list(
+                label = level,
+                display = level,
+                model = NULL,
+                error = result$error$message
+              )
+            } else {
+              strata_entries[[length(strata_entries) + 1]] <- list(
+                label = level,
+                display = level,
+                model = result$result,
+                error = NULL
+              )
+              successful_strata[[level]] <- result$result
+              flat_models[[length(flat_models) + 1]] <- list(
+                response = resp,
+                stratum = level,
+                model = result$result
+              )
+              if (is.null(primary_model)) primary_model <- result$result
+            }
+          }
+
+          fits[[resp]] <- list(
+            stratified = TRUE,
+            strata = strata_entries
+          )
+
+          if (length(successful_strata) > 0) {
+            success_resps <- c(success_resps, resp)
+            success_models[[resp]] <- successful_strata
+          } else {
+            error_resps <- c(error_resps, resp)
+            errors_vec <- vapply(
+              strata_entries,
+              function(entry) {
+                if (!is.null(entry$error)) {
+                  paste0(entry$display, ": ", entry$error)
+                } else {
+                  NA_character_
+                }
+              },
+              character(1)
+            )
+            errors_vec <- errors_vec[!is.na(errors_vec)]
+            combined_error <- paste(errors_vec, collapse = "\n")
+            if (!nzchar(combined_error)) combined_error <- "Model fitting failed."
+            error_messages[[resp]] <- combined_error
+            if (is.null(primary_error)) primary_error <- combined_error
+          }
+        }
+      }
+
+      list(
+        responses = responses,
+        success_responses = unique(success_resps),
+        error_responses = unique(error_resps),
+        fits = fits,
+        models = success_models,
+        flat_models = flat_models,
+        model = primary_model,
+        errors = error_messages,
+        error = primary_error,
+        rhs = rhs,
+        allow_multi = allow_multi_response,
+        stratification = strat_info
+      )
+    })
+
+    build_panel_content <- function(idx, response, fit_entry) {
+      strata <- fit_entry$strata
+
+      if (!isTRUE(fit_entry$stratified)) {
+        stratum <- strata[[1]]
+        tagList(
+          verbatimTextOutput(ns(paste0("summary_", idx))),
+          br(),
+          h5("Diagnostics"),
+          fluidRow(
+            column(6, plotOutput(ns(paste0("resid_", idx)))),
+            column(6, plotOutput(ns(paste0("qq_", idx))))
+          ),
+          br(),
+          downloadButton(ns(paste0("download_", idx)), "Download Results")
+        )
+      } else {
+          stratum_tabs <- lapply(seq_along(strata), function(j) {
+            stratum <- strata[[j]]
+            label <- if (!is.null(stratum$display)) stratum$display else paste("Stratum", j)
+
+            content <- if (!is.null(stratum$model)) {
+              tagList(
+                verbatimTextOutput(ns(paste0("summary_", idx, "_", j))),
+                br(),
+              h5("Diagnostics"),
+              fluidRow(
+                column(6, plotOutput(ns(paste0("resid_", idx, "_", j)))),
+                column(6, plotOutput(ns(paste0("qq_", idx, "_", j))))
+              ),
+              br(),
+              downloadButton(ns(paste0("download_", idx, "_", j)), "Download Results")
+            )
+          } else {
+            div(
+              class = "alert alert-warning",
+              if (!is.null(stratum$error)) stratum$error else "Model fitting failed."
+            )
+          }
+
+          tabPanel(title = label, content)
+        })
+
+        do.call(
+          tabsetPanel,
+          c(list(id = ns(paste0("strata_tabs_", idx))), stratum_tabs)
+        )
+      }
+    }
+
+    output$results_ui <- renderUI({
+      mod <- models()
+      if (is.null(mod)) return(NULL)
+
+      success_resps <- mod$success_responses
+      error_resps <- mod$error_responses
+      fits <- mod$fits
+
+      error_block <- NULL
+      if (!is.null(error_resps) && length(error_resps) > 0) {
+        error_items <- lapply(error_resps, function(resp) {
+          err <- mod$errors[[resp]]
+          tags$li(tags$strong(resp), ": ", if (!is.null(err)) err else "Model fitting failed.")
+        })
+        error_block <- div(
+          class = "alert alert-warning",
+          strong("Models with errors:"),
+          tags$ul(error_items)
+        )
+      }
+
+      if (is.null(success_resps) || length(success_resps) == 0) {
+        if (!is.null(error_block)) return(tagList(error_block))
+        return(NULL)
+      }
+
+      panels <- lapply(seq_along(success_resps), function(idx) {
+        response <- success_resps[idx]
+        fit_entry <- fits[[response]]
+        content <- build_panel_content(idx, response, fit_entry)
+
+        if (length(success_resps) > 1) {
+          tabPanel(title = response, content)
+        } else {
+          content
+        }
+      })
+
+      results_block <- if (length(success_resps) > 1) {
+        do.call(tabsetPanel, c(list(id = ns("results_tabs")), panels))
+      } else {
+        panels[[1]]
+      }
+
+      tagList(
+        if (!is.null(error_block)) error_block,
+        results_block
+      )
+    })
+
+    observeEvent(models(), {
+      mod <- models()
+      if (is.null(mod)) return()
+
+      success_resps <- mod$success_responses
+      fits <- mod$fits
+      if (is.null(success_resps) || length(success_resps) == 0) return()
+
+      for (idx in seq_along(success_resps)) {
+        local({
+          local_idx <- idx
+          response <- success_resps[local_idx]
+          fit_entry <- fits[[response]]
+
+          if (!isTRUE(fit_entry$stratified)) {
+            stratum <- fit_entry$strata[[1]]
+            model_obj <- stratum$model
+
+            output[[paste0("summary_", local_idx)]] <- renderPrint({
+              if (engine == "lm") {
+                reg_display_lm_summary(model_obj)
+              } else {
+                reg_display_lmm_summary(model_obj)
+              }
+            })
+
+            output[[paste0("resid_", local_idx)]] <- renderPlot({
+              plot(fitted(model_obj), resid(model_obj), xlab = "Fitted values", ylab = "Residuals")
+              abline(h = 0, lty = 2)
+            })
+
+            output[[paste0("qq_", local_idx)]] <- renderPlot({
+              qqnorm(resid(model_obj))
+              qqline(resid(model_obj))
+            })
+
+            output[[paste0("download_", local_idx)]] <- downloadHandler(
+              filename = function() {
+                paste0(
+                  engine,
+                  "_results_",
+                  response,
+                  "_",
+                  Sys.Date(),
+                  ".docx"
+                )
+              },
+              content = function(file) {
+                write_lm_docx(model_obj, file)
+              }
+            )
+          } else {
+            strata <- fit_entry$strata
+            for (j in seq_along(strata)) {
+              local({
+                local_j <- j
+                stratum <- strata[[local_j]]
+                if (is.null(stratum$model)) return()
+                model_obj <- stratum$model
+
+                output[[paste0("summary_", local_idx, "_", local_j)]] <- renderPrint({
+                  if (engine == "lm") {
+                    reg_display_lm_summary(model_obj)
+                  } else {
+                    reg_display_lmm_summary(model_obj)
+                  }
+                })
+
+                output[[paste0("resid_", local_idx, "_", local_j)]] <- renderPlot({
+                  plot(fitted(model_obj), resid(model_obj), xlab = "Fitted values", ylab = "Residuals")
+                  abline(h = 0, lty = 2)
+                })
+
+                output[[paste0("qq_", local_idx, "_", local_j)]] <- renderPlot({
+                  qqnorm(resid(model_obj))
+                  qqline(resid(model_obj))
+                })
+
+                output[[paste0("download_", local_idx, "_", local_j)]] <- downloadHandler(
+                  filename = function() {
+                    paste0(
+                      engine,
+                      "_results_",
+                      response,
+                      "_",
+                      stratum$display,
+                      "_",
+                      Sys.Date(),
+                      ".docx"
+                    )
+                  },
+                  content = function(file) {
+                    write_lm_docx(model_obj, file)
+                  }
+                )
+              })
+            }
+          }
+        })
+      }
+    }, ignoreNULL = FALSE)
+
+    output$download_model <- downloadHandler(
+      filename = function() {
+        mod <- models()
+        if (is.null(mod) || length(mod$flat_models) == 0) {
+          return(paste0(engine, "_results_", Sys.Date(), ".docx"))
+        }
+
+        if (length(mod$flat_models) == 1) {
+          entry <- mod$flat_models[[1]]
+          parts <- c(engine, "results", entry$response)
+          if (!is.null(entry$stratum)) parts <- c(parts, entry$stratum)
+          paste0(paste(parts, collapse = "_"), "_", Sys.Date(), ".docx")
+        } else {
+          paste0(engine, "_all_results_", Sys.Date(), ".docx")
+        }
+      },
+      content = function(file) {
+        mod <- models()
+        if (is.null(mod)) stop("No models available. Please run the analysis first.")
+        flat_models <- mod$flat_models
+        if (length(flat_models) == 0) stop("No models available. Please run the analysis first.")
+
+        if (length(flat_models) == 1) {
+          write_lm_docx(flat_models[[1]]$model, file)
+        } else {
+          doc <- officer::read_docx()
+          for (entry in flat_models) {
+            tmp <- tempfile(fileext = ".docx")
+            write_lm_docx(entry$model, tmp)
+            doc <- officer::body_add_docx(doc, src = tmp)
+            doc <- officer::body_add_par(doc, "", style = "Normal")
+          }
+          print(doc, target = file)
+        }
+      }
+    )
+
+    return(reactive({
+      mod <- models()
+      if (is.null(mod)) return(NULL)
+      attr(mod, "engine") <- engine
+      mod
+    }))
+  })
+}
+# ===============================================================
+# 🔧 Shared helpers for LM/LMM (UI + server utilities)
+# ===============================================================
+
+# ---------------------------------------------------------------
+# UI setup
+# ---------------------------------------------------------------
+
+reg_detect_types <- function(df) {
+  num_vars <- names(df)[sapply(df, is.numeric)]
+  fac_vars <- names(df)[sapply(df, function(x) is.factor(x) || is.character(x))]
+  list(num = num_vars, fac = fac_vars)
+}
+
+reg_variable_selectors_ui <- function(ns, types, allow_random = FALSE) {
+  out <- list(
+    selectInput(ns("dep"), "Response variable (numeric):", choices = types$num),
+    selectInput(ns("fixed"), "Categorical predictors:", choices = types$fac, multiple = TRUE),
+    selectInput(ns("covar"), "Numeric predictors:", choices = types$num, multiple = TRUE)
+  )
+  if (allow_random) {
+    out <- c(out, list(
+      selectInput(ns("random"), "Random effect (categorical):", choices = types$fac, selected = NULL)
+    ))
+  }
+  do.call(tagList, out)
+}
+
+reg_interactions_ui <- function(ns, fixed, fac_vars) {
+  if (is.null(fixed) || length(fixed) < 2) return(NULL)
+  cats_only <- intersect(fixed, fac_vars)
+  if (length(cats_only) < 2) return(NULL)
+  pairs <- combn(cats_only, 2, simplify = FALSE)
+  pair_labels <- vapply(pairs, function(p) paste(p, collapse = " × "), character(1))
+  pair_values <- vapply(pairs, function(p) paste(p, collapse = ":"), character(1))
+  checkboxGroupInput(
+    ns("interactions"),
+    label = "Add 2-way interactions (optional):",
+    choices = stats::setNames(pair_values, pair_labels)
+  )
+}
+
+# ---------------------------------------------------------------
+# Formula construction
+# ---------------------------------------------------------------
+
+reg_compose_rhs <- function(fixed, covar, interactions, random = NULL, engine = c("lm","lmm")) {
+  engine <- match.arg(engine)
+  rhs <- character(0)
+  if (!is.null(fixed) && length(fixed) > 0) rhs <- c(rhs, fixed)
+  if (!is.null(covar) && length(covar) > 0) rhs <- c(rhs, covar)
+  if (!is.null(interactions) && length(interactions) > 0) rhs <- c(rhs, interactions)
+  if (engine == "lmm" && !is.null(random) && nzchar(random)) {
+    rhs <- c(rhs, paste0("(1|", random, ")"))
+  }
+  rhs
+}
+
+reg_formula_preview_ui <- function(ns, dep, rhs) {
+  if (is.null(dep) || !nzchar(dep)) return(NULL)
+  form_txt <- if (length(rhs) == 0) paste(dep, "~ 1") else paste(dep, "~", paste(rhs, collapse = " + "))
+  wellPanel(
+    strong("Model formula: "),
+    code(form_txt)
+  )
+}
+
+# ---------------------------------------------------------------
+# Model computation
+# ---------------------------------------------------------------
+
+reg_fit_model <- function(dep, rhs, data, engine = c("lm","lmm")) {
+  engine <- match.arg(engine)
+  form <- as.formula(if (length(rhs) == 0) paste(dep, "~ 1") else paste(dep, "~", paste(rhs, collapse = " + ")))
+  if (engine == "lm") {
+    lm(form, data = data)
+  } else {
+    # LMM: lme4 + lmerTest for p-values
+    lmerTest::lmer(form, data = data)
+  }
+}
+
+# ---------------------------------------------------------------
+# Output composition
+# ---------------------------------------------------------------
+
+reg_display_lm_summary <- function(m) {
+  aout <- capture.output(car::Anova(m, type = 3))
+  signif_idx <- grep("^Signif\\. codes", aout)
+  if (length(signif_idx) > 0) {
+    remove_idx <- c(signif_idx - 1, signif_idx)
+    aout <- aout[-remove_idx]
+  }
+  cat(paste(aout, collapse = "\n"), "\n\n")
+  
+  sout <- capture.output(summary(m))
+  start <- grep("^Residuals:", sout)[1]
+  stop  <- grep("^Signif\\. codes", sout)[1]
+  if (!is.na(start)) {
+    if (!is.na(stop)) sout <- sout[start:(stop - 2)]
+    else sout <- sout[start:length(sout)]
+  }
+  cat(paste(sout, collapse = "\n"))
+}
+
+reg_display_lmm_summary <- function(m) {
+  aout <- capture.output(anova(m, type = 3))
+  cat(paste(aout, collapse = "\n"), "\n\n")
+  
+  sout <- capture.output(summary(m))
+  start <- grep("^Scaled residuals:", sout)[1]
+  stop  <- grep("^Correlation of Fixed Effects:", sout)[1]
+  if (!is.na(start)) {
+    if (!is.na(stop)) sout <- sout[start:(stop - 1)]
+    else sout <- sout[start:length(sout)]
+  }
+  
+  icc_df <- compute_icc(m)
+  if (!is.null(icc_df) && nrow(icc_df) > 0) {
+    icc_line <- paste(paste0("ICC (", icc_df$Group, "): ", icc_df$ICC), collapse = "; ")
+    random_idx <- grep("^Random effects:", sout)[1]
+    if (!is.na(random_idx)) sout <- append(sout, paste0("\n", icc_line), after = random_idx + 4)
+    else sout <- c(sout, icc_line)
+  }
+  cat(paste(sout, collapse = "\n"))
+}
+
+# ===============================================================
+# Results export
+# ===============================================================
+
+write_lm_docx <- function(model, file) {
+  
+  # Determine model type
+  is_lmm <- inherits(model, "merMod")
+  dep_var <- all.vars(formula(model))[1]
+
+  # Helper for consistent table formatting
+  format_table <- function(df, bold_p = TRUE) {
+    ft <- flextable(df)
+    ft <- fontsize(ft, part = "all", size = 10)
+    ft <- bold(ft, part = "header", bold = TRUE)
+    ft <- color(ft, part = "header", color = "black")
+    ft <- align(ft, align = "center", part = "all")
+    ft <- border_remove(ft)
+    black <- fp_border(color = "black", width = 1)
+    ft <- border(ft, part = "header", border.top = black)
+    ft <- border(ft, part = "header", border.bottom = black)
+    if (nrow(df) > 0) {
+      ft <- border(ft, i = nrow(df), part = "body", border.bottom = black)
+    }
+
+    # Bold significant p-values
+    if (bold_p) {
+      p_cols <- names(df)[grepl("Pr", names(df), fixed = TRUE)]
+      for (pcol in p_cols) {
+        if (is.numeric(df[[pcol]]) || all(grepl("^[0-9.<]+$", df[[pcol]]))) {
+          sig_rows <- suppressWarnings(which(as.numeric(df[[pcol]]) < 0.05))
+          if (length(sig_rows) == 0) {
+            # handle formatted p-values like "<0.001"
+            sig_rows <- grep("<0\\.0*1", df[[pcol]])
+          }
+          if (length(sig_rows) > 0 && pcol %in% ft$col_keys) {
+            ft <- bold(ft, i = sig_rows, j = pcol, bold = TRUE)
+          }
+        }
+      }
+    }
+
+    ft <- set_table_properties(ft, layout = "autofit", width = 0.9)
+    ft <- padding(ft, padding.top = 2, padding.bottom = 2, padding.left = 2, padding.right = 2)
+    ft
+  }
+
+  # Create new Word document
+  doc <- read_docx()
+
+  # ---- Title ----
+  title_text <- sprintf(
+    "%s Results — %s",
+    if (is_lmm) "Linear Mixed Model" else "Linear Model",
+    dep_var
+  )
+  doc <- body_add_fpar(doc, fpar(ftext(title_text, prop = fp_text(bold = TRUE, font.size = 12))))
+  doc <- body_add_par(doc, "")
+
+  # ==========================================================
+  # 🔹 ANOVA (Type III)
+  # ==========================================================
+  doc <- body_add_fpar(doc, fpar(ftext("ANOVA (Type III)", prop = fp_text(bold = TRUE))))
+  doc <- body_add_par(doc, "")
+
+  if (is_lmm) {
+    anova_tbl <- as.data.frame(anova(model, type = 3))
+  } else {
+    anova_tbl <- as.data.frame(car::Anova(model, type = 3))
+  }
+  anova_tbl <- tibble::rownames_to_column(anova_tbl, "Effect")
+
+  # Round numeric columns and format p-values
+  for (col in names(anova_tbl)) {
+    if (is.numeric(anova_tbl[[col]])) anova_tbl[[col]] <- round(anova_tbl[[col]], 3)
+  }
+  p_col <- grep("^Pr", names(anova_tbl), value = TRUE)
+  if (length(p_col) > 0) {
+    colnames(anova_tbl)[colnames(anova_tbl) == p_col[1]] <- "Pr(>F)"
+  }
+
+  ft_anova <- format_table(anova_tbl)
+  doc <- body_add_flextable(doc, ft_anova)
+  doc <- body_add_par(doc, "")
+
+  # ==========================================================
+  # 🔹 Random Effects & ICC (LMM only)
+  # ==========================================================
+  if (is_lmm) {
+    # ---- Random Effects ----
+    doc <- body_add_fpar(doc, fpar(ftext("Random Effects", prop = fp_text(bold = TRUE))))
+    doc <- body_add_par(doc, "")
+
+    rand_df <- as.data.frame(lme4::VarCorr(model))
+    if (nrow(rand_df) > 0) {
+      rand_df <- rand_df[, c("grp", "var1", "var2", "vcov", "sdcor"), drop = FALSE]
+      rand_df$var2 <- ifelse(is.na(rand_df$var2), "-", rand_df$var2)
+      names(rand_df) <- c("Grouping", "Effect 1", "Effect 2", "Variance", "Std. Dev.")
+      rand_df$Variance <- round(rand_df$Variance, 3)
+      rand_df$`Std. Dev.` <- round(rand_df$`Std. Dev.`, 3)
+      ft_rand <- format_table(rand_df, bold_p = FALSE)
+      doc <- body_add_flextable(doc, ft_rand)
+    } else {
+      doc <- body_add_par(doc, "No random-effect variance components were estimated.", style = "Normal")
+    }
+
+    # ---- ICC ----
+    if (exists("compute_icc") && is.function(compute_icc)) {
+      icc_df <- compute_icc(model)
+    } else {
+      icc_df <- NULL
+    }
+    if (!is.null(icc_df) && nrow(icc_df) > 0) {
+      doc <- body_add_par(doc, "")
+      doc <- body_add_fpar(doc, fpar(ftext("Intraclass Correlation (ICC)", prop = fp_text(bold = TRUE))))
+      doc <- body_add_par(doc, "")
+      icc_df$ICC <- round(icc_df$ICC, 3)
+      ft_icc <- format_table(icc_df, bold_p = FALSE)
+      doc <- body_add_flextable(doc, ft_icc)
+    }
+
+    doc <- body_add_par(doc, "")
+  }
+
+  # ==========================================================
+  # 🔹 Model Coefficients
+  # ==========================================================
+  doc <- body_add_fpar(doc, fpar(ftext("Model Coefficients", prop = fp_text(bold = TRUE))))
+  doc <- body_add_par(doc, "")
+
+  coef_tbl <- as.data.frame(summary(model)$coefficients)
+  coef_tbl <- tibble::rownames_to_column(coef_tbl, "Term")
+  names(coef_tbl)[1] <- "Term"
+  names(coef_tbl) <- gsub("Pr\\(>\\|t\\|\\)", "Pr(>|t|)", names(coef_tbl))
+
+  for (col in names(coef_tbl)) {
+    if (is.numeric(coef_tbl[[col]])) coef_tbl[[col]] <- round(coef_tbl[[col]], 4)
+  }
+
+  ft_coef <- format_table(coef_tbl)
+  doc <- body_add_flextable(doc, ft_coef)
+
+  # ==========================================================
+  # 🔹 Footer
+  # ==========================================================
+  doc <- body_add_par(doc, "")
+  doc <- body_add_par(doc, "Significance level: p < 0.05 (bold values).", style = "Normal")
+  doc <- body_add_par(doc, sprintf("Generated by Animal Trial Analyzer on %s", Sys.Date()))
+
+  # Save file
+  print(doc, target = file)
+}
+
+# ===============================================================
+# 🧾 Helper: format regression table in journal style
+# ===============================================================
+format_regression_table <- function(df, bold_p = TRUE) {
+  
+  ft <- flextable(df)
+  ft <- fontsize(ft, part = "all", size = 10)
+  ft <- bold(ft, part = "header", bold = TRUE)
+  ft <- color(ft, part = "header", color = "black")
+  ft <- align(ft, align = "center", part = "all")
+  ft <- border_remove(ft)
+  
+  black <- fp_border(color = "black", width = 1)
+  ft <- border(ft, part = "header", border.top = black)
+  ft <- border(ft, part = "header", border.bottom = black)
+  if (nrow(df) > 0) {
+    ft <- border(ft, i = nrow(df), part = "body", border.bottom = black)
+  }
+
+  if (bold_p && "Pr(>F)" %in% names(df)) {
+    sig_rows <- which(df[["Pr(>F)"]] < 0.05)
+    if (length(sig_rows) > 0) ft <- bold(ft, i = sig_rows, j = "Pr(>F)", bold = TRUE)
+  }
+  if (bold_p && "Pr(>|t|)" %in% names(df)) {
+    sig_rows <- which(df[["Pr(>|t|)"]] < 0.05)
+    if (length(sig_rows) > 0) ft <- bold(ft, i = sig_rows, j = "Pr(>|t|)", bold = TRUE)
+  }
+
+  ft <- set_table_properties(ft, layout = "autofit", width = 0.9)
+  ft <- padding(ft, padding.top = 2, padding.bottom = 2, padding.left = 2, padding.right = 2)
+  ft
+}

@@ -63,7 +63,7 @@ print_summary_sections <- function(results) {
   # Replace the "Variable type: character/numeric" banner lines
   lines <- stringr::str_replace(
     lines,
-    "^\\s*──\\s*Variable type:\\s*character\\s*─+\\s*$",
+    "^\\s*──\\s*Variable type:\\s*factor\\s*─+\\s*$",
     "── Categorical variables ──"
   )
   lines <- stringr::str_replace(
