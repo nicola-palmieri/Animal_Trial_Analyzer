@@ -230,12 +230,14 @@ visualize_oneway_ui <- function(id) {
         column(6, numericInput(ns("plot_height"), "Subplot height (px)", value = 200, min = 200, max = 1200, step = 50))
       ),
       hr(),
-      # --- Reusable Advanced Options ---
       add_color_customization_ui(ns, multi_group = FALSE),
       hr(),
       downloadButton(ns("download_plot"), "Download Plot")
     ),
-    mainPanel(width = 8, plotOutput(ns("plot"), height = "auto"))
+    mainPanel(
+      width = 8,
+      plotOutput(ns("plot"), height = "auto")
+    )
   )
 }
 
@@ -243,14 +245,31 @@ visualize_oneway_ui <- function(id) {
 visualize_oneway_server <- function(id, filtered_data, model_info) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
+    
     df <- reactive(filtered_data())
     layout_state <- initialize_layout_state(input, session)
     
+    # ---- Plug in color customization module (single-color mode) ----
+    custom_colors <- add_color_customization_server(
+      ns = ns,
+      input = input,
+      output = output,
+      data = df,
+      color_var_reactive = reactive(NULL),
+      multi_group = FALSE
+    )
+    
+    # ---- Build plot info ----
     plot_info <- reactive({
       info <- model_info()
-      if (is.null(info) || info$type != "oneway_anova") return(NULL)
+      if (is.null(info)) return(NULL)
       data <- df()
-      build_anova_plot_info(data, info, layout_state$effective_input)
+      build_anova_plot_info(
+        data,
+        info,
+        layout_state$effective_input,
+        line_colors = custom_colors()
+      )
     })
     
     observe_layout_synchronization(plot_info, layout_state, session)
@@ -277,39 +296,20 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
       build_anova_layout_controls(ns, input, info, layout_state$default_ui_value)
     })
     
-    # ---- Shared color logic ----
-    color_var_reactive <- reactive({
-      info <- model_info()
-      if (is.null(info)) return(NULL)
-      info$factors$factor1
-    })
-    
-    custom_color <- add_color_customization_server(
-      ns = ns,
-      input = input,
-      output = output,
-      data = df,
-      color_var_reactive = reactive(NULL),
-      multi_group = FALSE
-    )
-    
-    # ---- Plot rendering ----
+    # ---- Render plot ----
     output$plot <- renderPlot({
       info <- model_info()
-      req(info, input$plot_type, plot_obj())
-      
+      req(info, input$plot_type)
       if (input$plot_type == "mean_se") {
-        color_value <- custom_color()
-        p <- plot_obj() +
-          scale_color_manual(values = c(color_value)) +
-          scale_fill_manual(values = c(color_value))
-        return(p)
+        req(plot_obj())
+        plot_obj()
       }
     },
     width = function() plot_size()$w,
     height = function() plot_size()$h,
     res = 96)
     
+    # ---- Download handler ----
     output$download_plot <- downloadHandler(
       filename = function() paste0("anova_plot_", Sys.Date(), ".png"),
       content = function(file) {
@@ -1201,6 +1201,95 @@ visualize_twoway_server <- function(id, filtered_data, model_fit) {
   })
 }
 # ===============================================================
+# 🎨 Compact dropdown-style color picker (4x4 grid)
+# ===============================================================
+
+# ---- Palette ----
+basic_color_palette <- c(
+  "steelblue", "red", "green", "blue",
+  "orange", "purple", "brown", "gold",
+  "pink", "cyan", "magenta", "yellow",
+  "black", "gray", "darkgreen", "darkred"
+)
+
+# ---- UI Helper ----
+color_dropdown_input <- function(ns, id = "color_choice", palette = basic_color_palette, ncol = 4) {
+  tagList(
+    tags$style(HTML(sprintf("
+      .color-dropdown {
+        position: relative;
+        display: inline-block;
+        width: 150px;
+        user-select: none;
+      }
+      .color-dropdown-button {
+        width: 100%%;
+        height: 32px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        background-color: steelblue;
+        cursor: pointer;
+      }
+      .color-dropdown-grid {
+        display: none;
+        position: absolute;
+        top: 36px;
+        left: 0;
+        z-index: 999;
+        background: white;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        padding: 4px;
+        display: grid;
+        grid-template-columns: repeat(%d, 28px);
+        gap: 2px;
+      }
+      .color-cell {
+        width: 26px; height: 26px;
+        border-radius: 4px;
+        cursor: pointer;
+        border: 1px solid #ccc;
+      }
+      .color-cell:hover {
+        transform: scale(1.1);
+      }
+    ", ncol))),
+    tags$div(
+      class = "color-dropdown",
+      tags$div(
+        id = ns(paste0(id, "_button")),
+        class = "color-dropdown-button"
+      ),
+      tags$div(
+        id = ns(paste0(id, "_grid")),
+        class = "color-dropdown-grid",
+        lapply(palette, function(col) {
+          tags$div(
+            class = "color-cell",
+            title = col,
+            style = sprintf("background-color:%s;", col),
+            onclick = sprintf("
+              $('#%s_button').css('background-color','%s');
+              $('#%s_grid').hide();
+              Shiny.setInputValue('%s','%s',{priority:'event'});
+            ", ns(id), col, ns(id), ns(id), col)
+          )
+        })
+      )
+    ),
+    tags$script(HTML(sprintf("
+      $('#%s_button').on('click', function(e){
+        e.stopPropagation();
+        var grid = $('#%s_grid');
+        $('.color-dropdown-grid').not(grid).hide();
+        grid.toggle();
+      });
+      $(document).on('click', function(){
+        $('.color-dropdown-grid').hide();
+      });
+    ", ns(id), ns(id))))
+  )
+}# ===============================================================
 # 🧾 Animal Trial Analyzer — Descriptive Statistics Module (Aligned Layout)
 # ===============================================================
 
@@ -1802,7 +1891,6 @@ analysis_server <- function(id, filtered_data) {
 # 🎨 Module for colors customization
 # ===============================================================
 
-# ---- UI ----
 add_color_customization_ui <- function(ns, multi_group = TRUE) {
   tags$details(
     tags$summary(strong("Advanced options")),
@@ -1810,20 +1898,20 @@ add_color_customization_ui <- function(ns, multi_group = TRUE) {
   )
 }
 
-# ---- SERVER logic ----
+# ---- SERVER ----
 add_color_customization_server <- function(ns, input, output, data, color_var_reactive, multi_group = TRUE) {
   output$color_custom_ui <- renderUI({
     req(data())
     color_var <- color_var_reactive()
-    if (is.null(color_var)) return(NULL)
     
     if (isTRUE(multi_group)) {
+      if (is.null(color_var)) return(NULL)
       render_color_inputs(ns, data, color_var)
     } else {
-      colourpicker::colourInput(
-        ns("single_color"),
-        label = "Plot color",
-        value = "#1f77b4"
+      tagList(
+        br(),
+        h5("Line color"),
+        color_dropdown_input(ns, "single_color", basic_color_palette, ncol = 4)
       )
     }
   })
@@ -1841,12 +1929,13 @@ add_color_customization_server <- function(ns, input, output, data, color_var_re
       names(cols) <- lvls
       cols
     } else {
-      single_col <- input$single_color
-      if (is.null(single_col)) single_col <- "#1f77b4"
-      single_col
+      selected_color <- input$single_color
+      if (is.null(selected_color)) selected_color <- "steelblue"
+      selected_color
     }
   })
 }
+
 # ===============================================================
 # 🎨 UI helper to assign colors per level of a factor
 # ===============================================================
@@ -2570,7 +2659,7 @@ build_descriptive_histogram <- function(df) {
 }
 
 
-build_anova_plot_info <- function(data, info, effective_input) {
+build_anova_plot_info <- function(data, info, effective_input, line_colors = NULL) {
   factor1 <- info$factors$factor1
   factor2 <- info$factors$factor2
   order1 <- info$orders$order1
@@ -2616,12 +2705,14 @@ build_anova_plot_info <- function(data, info, effective_input) {
   }
 
   build_plot <- function(stats_df, title_text, y_limits) {
+    single_col <- if (!is.null(line_colors) && length(line_colors) == 1) line_colors else "steelblue"
+    
     if (is.null(factor2)) {
       p <- ggplot(stats_df, aes(x = !!sym(factor1), y = mean)) +
-        geom_line(aes(group = 1), color = "steelblue", linewidth = 1) +
-        geom_point(size = 3, color = "steelblue") +
+        geom_line(aes(group = 1), color = single_col, linewidth = 1) +
+        geom_point(size = 3, color = single_col) +
         geom_errorbar(aes(ymin = mean - se, ymax = mean + se),
-                      width = 0.15, color = "gray40") +
+                      width = 0.15, color = single_col) +
         theme_minimal(base_size = 14) +
         labs(x = factor1, y = "Mean ± SE") +
         theme(
@@ -2649,12 +2740,17 @@ build_anova_plot_info <- function(data, info, effective_input) {
           panel.grid.minor = element_blank(),
           panel.grid.major.x = element_blank()
         )
+      
+      if (!is.null(line_colors) && length(line_colors) > 1) {
+        p <- p + scale_color_manual(values = line_colors) +
+          scale_fill_manual(values = line_colors)
+      }
     }
-
+    
     if (!is.null(y_limits) && all(is.finite(y_limits))) {
       p <- p + scale_y_continuous(limits = y_limits)
     }
-
+    
     p + ggtitle(title_text) +
       theme(plot.title = element_text(size = 12, face = "bold"))
   }

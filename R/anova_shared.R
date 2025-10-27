@@ -99,8 +99,24 @@ prepare_stratified_anova <- function(
     df[[factor2_var]] <- factor(as.character(df[[factor2_var]]), levels = factor2_order)
   }
   
-  if (!is.null(stratify_var) && !is.null(strata_order)) {
-    df[[stratify_var]] <- factor(as.character(df[[stratify_var]]), levels = strata_order)
+  if (!is.null(stratify_var) && stratify_var %in% names(df)) {
+    n_levels <- length(unique(na.omit(df[[stratify_var]])))
+    
+    validate(
+      need(
+        n_levels <= 10,
+        paste0(
+          "❌ Stratification variable '", stratify_var,
+          "' has ", n_levels, " levels — please select a variable with at most 10."
+        )
+      )
+    )
+    
+    if (!is.null(strata_order) && length(strata_order) > 0) {
+      df[[stratify_var]] <- factor(as.character(df[[stratify_var]]), levels = strata_order)
+    } else {
+      df[[stratify_var]] <- as.factor(as.character(df[[stratify_var]]))
+    }
   }
   
   strata <- if (!is.null(stratify_var) && stratify_var %in% names(df)) {

@@ -19,8 +19,8 @@ visualize_oneway_ui <- function(id) {
       hr(),
       uiOutput(ns("layout_controls")),
       fluidRow(
-        column(6, numericInput(ns("plot_width"), "Subplot width (px)", value = 300, min = 200, max = 1200, step = 50)),
-        column(6, numericInput(ns("plot_height"), "Subplot height (px)", value = 200, min = 200, max = 1200, step = 50))
+        column(6, numericInput(ns("plot_width"), "Subplot width (px)", value = 400, min = 200, max = 1200, step = 50)),
+        column(6, numericInput(ns("plot_height"), "Subplot height (px)", value = 300, min = 200, max = 1200, step = 50))
       ),
       hr(),
       add_color_customization_ui(ns, multi_group = FALSE),
