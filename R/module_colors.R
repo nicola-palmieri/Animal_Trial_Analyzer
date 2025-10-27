@@ -34,9 +34,15 @@ add_color_customization_server <- function(ns, input, output, data, color_var_re
       req(color_var)
       
       lvls <- levels(as.factor(data()[[color_var]]))
-      cols <- sapply(seq_along(lvls), function(i) {
-        input[[paste0("col_", color_var, "_", i)]]
-      })
+      base_palette <- rep(basic_color_palette, length.out = length(lvls))
+      cols <- vapply(seq_along(lvls), function(i) {
+        input_val <- input[[paste0("col_", color_var, "_", i)]]
+        if (is.null(input_val) || identical(input_val, "")) {
+          base_palette[i]
+        } else {
+          input_val
+        }
+      }, character(1))
       names(cols) <- lvls
       cols
     } else {
