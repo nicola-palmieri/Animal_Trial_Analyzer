@@ -24,6 +24,13 @@ initialize_layout_state <- function(input, session) {
     resp_cols = TRUE
   )
 
+  last_synced <- reactiveValues(
+    strata_rows = NA_integer_,
+    strata_cols = NA_integer_,
+    resp_rows = NA_integer_,
+    resp_cols = NA_integer_
+  )
+
   observe_numeric_input <- function(name) {
     observeEvent(input[[name]], {
       if (isTRUE(suppress_updates[[name]])) {
@@ -35,9 +42,12 @@ initialize_layout_state <- function(input, session) {
       if (is.na(val) || val <= 0) {
         layout_overrides[[name]] <- 0L
         layout_manual[[name]] <- FALSE
+        last_synced[[name]] <- NA_integer_
       } else {
-        layout_overrides[[name]] <- as.integer(val)
+        sanitized <- as.integer(val)
+        layout_overrides[[name]] <- sanitized
         layout_manual[[name]] <- TRUE
+        last_synced[[name]] <- NA_integer_
       }
     })
   }
@@ -56,22 +66,47 @@ initialize_layout_state <- function(input, session) {
     overrides = layout_overrides,
     manual = layout_manual,
     suppress = suppress_updates,
+    last_synced = last_synced,
     effective_input = effective_input,
     default_ui_value = default_ui_value
   )
 }
 
-observe_layout_synchronization <- function(plot_info_reactive, layout_state, session) {
+observe_layout_synchronization <- function(input, plot_info_reactive, layout_state, session) {
   observeEvent(plot_info_reactive(), {
     info <- plot_info_reactive()
     if (is.null(info)) return()
 
     sync_input <- function(id, value, manual_key) {
-      val <- ifelse(is.null(value) || value <= 0, 1, value)
-      if (!isTRUE(layout_state$manual[[manual_key]])) {
-        layout_state$suppress[[id]] <- TRUE
-        updateNumericInput(session, id, value = val)
+      if (isTRUE(layout_state$manual[[manual_key]])) {
+        return()
       }
+
+      val_numeric <- suppressWarnings(as.numeric(value))
+      if (length(val_numeric) != 1 || is.na(val_numeric) || val_numeric <= 0) {
+        val <- 1L
+      } else {
+        val <- as.integer(round(val_numeric))
+      }
+
+      pending_val <- isolate(layout_state$last_synced[[id]])
+      if (isTRUE(layout_state$suppress[[id]]) && !is.na(pending_val) && identical(pending_val, val)) {
+        return()
+      }
+
+      current <- isolate({
+        cur <- suppressWarnings(as.numeric(input[[id]]))
+        if (length(cur) == 0) NA_real_ else cur
+      })
+
+      if (!is.na(current) && identical(as.integer(round(current)), val)) {
+        layout_state$last_synced[[id]] <- val
+        return()
+      }
+
+      layout_state$suppress[[id]] <- TRUE
+      layout_state$last_synced[[id]] <- val
+      updateNumericInput(session, id, value = val)
     }
 
     if (isTRUE(info$has_strata)) {

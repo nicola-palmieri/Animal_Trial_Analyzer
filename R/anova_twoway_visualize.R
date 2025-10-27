@@ -76,7 +76,7 @@ visualize_twoway_server <- function(id, filtered_data, model_fit) {
       )
     })
 
-    observe_layout_synchronization(plot_info, layout_state, session)
+    observe_layout_synchronization(input, plot_info, layout_state, session)
     
     plot_obj <- reactive({
       info <- plot_info()
