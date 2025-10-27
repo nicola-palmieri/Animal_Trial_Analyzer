@@ -6,7 +6,7 @@
 compute_descriptive_summary <- function(data, group_var = NULL) {
   numeric_vars <- names(data)[sapply(data, is.numeric)]
   
-  group_data <- if (!is.null(group_var)) group_by(data, .data[[group_var]]) else data
+  group_data <- if (!is.null(group_var)) group_by(data, .data[[group_var]], .drop = TRUE) else data
   
   skim_out <- if (!is.null(group_var)) {
     group_data %>% skim()
