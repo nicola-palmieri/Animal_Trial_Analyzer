@@ -100,23 +100,22 @@ two_way_anova_server <- function(id, filtered_data) {
     # Model fitting (via shared helper)
     # -----------------------------------------------------------
     models <- eventReactive(input$run, {
-      req(df(), input$response, input$factor1, input$factor2, input$order1, input$order2)
-      responses <- input$response
-      if (!isTRUE(input$multi_resp)) responses <- responses[1]
-      responses <- unique(responses)
-      req(length(responses) > 0)
-      
+      req(df(), input$response, input$factor1, input$order1, input$factor2, input$order2)
+      responses <- get_selected_responses(input)
       prepare_stratified_models(
         df = df(),
         responses = responses,
-        strat_var = input$stratify_var,
-        factor1 = input$factor1,
-        factor2 = input$factor2,
-        orders = list(order1 = input$order1, order2 = input$order2),
-        formula_builder = function(resp, f1, f2) as.formula(paste(resp, "~", f1, "*", f2)),
-        type = "twoway_anova"
+        model = "twoway_anova",
+        factor1_var = input$factor1,
+        factor1_order = input$order1,
+        factor2_var = input$factor2,
+        factor2_order = input$order2,
+        stratify_var = input$stratify_var,
+        strata_order = input$strata_order
       )
     })
+    
+    
     
     # -----------------------------------------------------------
     # Download all results as one combined DOCX

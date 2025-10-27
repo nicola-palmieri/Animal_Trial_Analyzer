@@ -83,19 +83,17 @@ one_way_anova_server <- function(id, filtered_data) {
     models <- eventReactive(input$run, {
       req(df(), input$response, input$group, input$order)
       responses <- get_selected_responses(input)
-      req(length(responses) > 0)
-      
       prepare_stratified_models(
         df = df(),
         responses = responses,
-        strat_var = input$stratify_var,
-        factor1 = input$group,
-        factor2 = NULL,
-        orders = list(order1 = input$order, order2 = NULL),
-        formula_builder = function(resp, f1, f2) as.formula(paste(resp, "~", f1)),
-        type = "oneway_anova"
+        model = "oneway_anova",
+        factor1_var = input$group,
+        factor1_order = input$order,
+        stratify_var = input$stratify_var,
+        strata_order = input$strata_order
       )
     })
+    
     
     # -----------------------------------------------------------
     # Download all results as one combined DOCX

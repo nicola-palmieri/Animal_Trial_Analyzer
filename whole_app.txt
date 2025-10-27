@@ -404,10 +404,13 @@ prepare_stratified_models <- function(df, responses, strat_var, factor1, factor2
   # Handle stratification
   if (!is.null(strat_var) && !identical(strat_var, "None")) {
     if (!is.null(df[[strat_var]])) {
-      strata_counts <- table(df[[strat_var]])
-      strata <- names(strata_counts)[strata_counts > 0]
-    } else strata <- NULL
-  } else strata <- NULL
+      strata <- unique(as.character(df[[strat_var]]))
+    } else {
+      strata <- NULL
+    }
+  } else {
+    strata <- NULL
+  }
   
   # Case 1 — no stratification
   if (is.null(strata)) {
@@ -1202,14 +1205,21 @@ descriptive_server <- function(id, filtered_data) {
     })
     
     output$advanced_options <- renderUI({
-      render_stratification_controls(ns, df, input)
+      tagList(
+        render_stratification_controls(ns, df, input),
+        uiOutput(ns("strata_order_ui"))
+      )
+    })
+    
+    output$strata_order_ui <- renderUI({
+      render_strata_order_input(ns, df, input$stratify_var)
     })
     
     # ------------------------------------------------------------
     # Summary computation
     # ------------------------------------------------------------
     summary_data <- eventReactive(input$run, {
-      data <- df()
+      local_data <- df()  # create a copy to avoid modifying shared reactive
       selected_vars <- unique(c(input$cat_vars, input$num_vars))
       validate(need(length(selected_vars) > 0, "Please select at least one variable."))
       
@@ -1218,13 +1228,23 @@ descriptive_server <- function(id, filtered_data) {
         selected_vars <- c(selected_vars, group_var)
       }
       
-      data <- data[, selected_vars, drop = FALSE]
+      local_data <- local_data[, selected_vars, drop = FALSE]
+      
+      if (!is.null(group_var) && !is.null(input$strata_order)) {
+        if (group_var %in% names(local_data)) {
+          local_data[[group_var]] <- factor(as.character(local_data[[group_var]]),
+                                            levels = input$strata_order)
+        }
+      }
+      
       list(
-        summary = compute_descriptive_summary(data, group_var),
+        summary = compute_descriptive_summary(local_data, group_var),
         selected_vars = selected_vars,
         group_var = group_var
       )
     })
+    
+    
     
     # ------------------------------------------------------------
     # Print summary
@@ -1327,7 +1347,7 @@ print_summary_sections <- function(results) {
   # Replace the "Variable type: character/numeric" banner lines
   lines <- stringr::str_replace(
     lines,
-    "^\\s*──\\s*Variable type:\\s*character\\s*─+\\s*$",
+    "^\\s*──\\s*Variable type:\\s*factor\\s*─+\\s*$",
     "── Categorical variables ──"
   )
   lines <- stringr::str_replace(
@@ -2042,40 +2062,44 @@ upload_server <- function(id) {
     ns <- session$ns
     df <- reactiveVal(NULL)
     
-    # ---- Example layouts ----
-    # ---- Example layouts ----
+    # ---- Load default example on startup ----
+    observe({
+      path <- "data/toy_animal_trial_data_long.xlsx"
+      if (!file.exists(path)) {
+        output$validation_msg <- renderText("⚠️ Default example file not found in data folder.")
+        return()
+      }
+      
+      data <- readxl::read_excel(path)
+      data <- preprocess_uploaded_table(data)
+      df(data)
+      
+      output$validation_msg <- renderText(paste("📂 Loaded default long-format dataset from:", path))
+      output$preview <- renderDT(data, options = list(scrollX = TRUE, pageLength = 5))
+    })
+    
+    # ---- Example layout preview ----
     output$layout_example <- renderUI({
       req(input$layout_type)
       
       long_path <- "data/toy_animal_trial_data_long.xlsx"
       wide_path <- "data/toy_animal_trial_data_wide.xlsx"
-      
       if (!file.exists(long_path) || !file.exists(wide_path))
         return(p("❌ Example files not found in /data folder."))
       
       if (input$layout_type == "long") {
         toy <- readxl::read_excel(long_path, n_max = 5)
-        caption_txt <- paste(
-          "Long format — one row per measurement.",
-          "Each measurement is a separate row; responses (e.g. Cortisol, Glucose, FeedIntake) each have their own column."
-        )
+        caption <- "Long format — one row per measurement."
       } else {
         toy <- readxl::read_excel(wide_path, n_max = 5)
-        
-        # Replace default "...1", "...2", etc. with empty column names
-        bad_names <- grepl("^\\.\\.\\.[0-9]+$", names(toy))
-        names(toy)[bad_names] <- "\t"
-        
-        caption_txt <- paste(
-          "Wide format — two header rows.",
-          "Top row: responses (e.g. FAMACHA, BCS, EPG).",
-          "Bottom row: replicate numbers (1, 2, 3...)."
-        )
+        bad <- grepl("^\\.\\.\\.[0-9]+$", names(toy))
+        names(toy)[bad] <- "\t"
+        caption <- "Wide format — two header rows (top: response, bottom: replicate)."
       }
       
       DT::datatable(
         toy,
-        caption = htmltools::tags$caption(htmltools::tags$b(caption_txt)),
+        caption = htmltools::tags$caption(htmltools::tags$b(caption)),
         elementId = ns("example_dt"),
         options = list(dom = "t", scrollX = TRUE),
         rownames = FALSE,
@@ -2083,20 +2107,17 @@ upload_server <- function(id) {
       )
     })
     
-    
-    # ---- File upload + sheet selection ----
+    # ---- File upload and sheet list ----
     observeEvent(input$file, {
       req(input$file)
-      fpath <- input$file$datapath
       ext <- tolower(tools::file_ext(input$file$name))
-      
       if (!ext %in% c("xlsx", "xls", "xlsm")) {
         output$validation_msg <- renderText("❌ Invalid file type. Please upload .xlsx/.xls/.xlsm.")
         return()
       }
       
-      sheets <- tryCatch(readxl::excel_sheets(fpath), error = function(e) NULL)
-      if (is.null(sheets) || length(sheets) == 0) {
+      sheets <- tryCatch(readxl::excel_sheets(input$file$datapath), error = function(e) NULL)
+      if (is.null(sheets)) {
         output$validation_msg <- renderText("❌ No readable sheets found in the workbook.")
         return()
       }
@@ -2108,37 +2129,34 @@ upload_server <- function(id) {
     }, ignoreInit = TRUE)
     
     # ---- Load selected sheet ----
-    # ---- Load selected sheet ----
     observeEvent(list(input$sheet, input$file$datapath, input$layout_type), {
       req(input$file, input$sheet)
       
-      tmp <- tryCatch(
+      data <- tryCatch(
         readxl::read_excel(input$file$datapath, sheet = input$sheet),
         error = function(e) e
       )
-      if (inherits(tmp, "error")) {
-        output$validation_msg <- renderText(paste("❌ Error loading sheet —", conditionMessage(tmp)))
+      if (inherits(data, "error")) {
+        output$validation_msg <- renderText(paste("❌ Error loading sheet —", conditionMessage(data)))
         return()
       }
       
-      # ---- Detect likely wide-format pattern ----
-      first_row <- suppressMessages(readxl::read_excel(input$file$datapath, sheet = input$sheet, n_max = 1))
+      first_row <- suppressMessages(
+        readxl::read_excel(input$file$datapath, sheet = input$sheet, n_max = 1)
+      )
       if (any(duplicated(unlist(first_row))) && input$layout_type == "long") {
-        output$validation_msg <- renderText(
-          "❌ Wide-format structure detected — please select 'Wide format' before proceeding."
-        )
+        output$validation_msg <- renderText("❌ Wide-format detected — please switch to 'Wide format'.")
         output$preview <- renderDT(data.frame(), options = list(scrollX = TRUE))
         return()
       }
       
-      # ---- Convert or validate ----
       if (input$layout_type == "wide") {
-        tmp <- tryCatch(
+        data <- tryCatch(
           convert_wide_to_long(input$file$datapath, sheet = input$sheet, replicate_col = "Replicate"),
           error = function(e) e
         )
-        if (inherits(tmp, "error")) {
-          output$validation_msg <- renderText(paste("❌ Error converting wide format —", conditionMessage(tmp)))
+        if (inherits(data, "error")) {
+          output$validation_msg <- renderText(paste("❌ Error converting wide format —", conditionMessage(data)))
           return()
         }
         output$validation_msg <- renderText("✅ Wide format detected and reshaped successfully.")
@@ -2146,17 +2164,35 @@ upload_server <- function(id) {
         output$validation_msg <- renderText("✅ Long format detected and loaded successfully.")
       }
       
-      tmp <- janitor::clean_names(tmp)
-      df(tmp)
-      
-      output$preview <- renderDT(tmp, options = list(scrollX = TRUE, pageLength = 5))
+      data <- preprocess_uploaded_table(data)
+      df(data)
+      output$preview <- renderDT(data, options = list(scrollX = TRUE, pageLength = 5))
     })
-    
-    
     
     return(df)
   })
 }
+
+# Clean names + convert characters to ordered factors
+preprocess_uploaded_table <- function(df) {
+  df <- janitor::clean_names(df)
+  df <- df |> mutate(across(where(is.character), auto_factor_order))
+  df
+}
+
+# Convert character to factor with numeric-aware order
+auto_factor_order <- function(x) {
+  if (!is.character(x)) return(x)
+  nums <- suppressWarnings(as.numeric(gsub("\\D", "", x)))
+  if (all(is.na(nums))) {
+    factor(x, levels = sort(unique(x)))
+  } else {
+    x <- factor(x, levels = unique(x[order(nums, na.last = TRUE)]))
+    x
+  }
+}
+
+
 convert_wide_to_long <- function(path, sheet = 1, replicate_col = "Replicate") {
   header_rows <- 2
   

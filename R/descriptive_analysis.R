@@ -45,14 +45,21 @@ descriptive_server <- function(id, filtered_data) {
     })
     
     output$advanced_options <- renderUI({
-      render_stratification_controls(ns, df, input)
+      tagList(
+        render_stratification_controls(ns, df, input),
+        uiOutput(ns("strata_order_ui"))
+      )
+    })
+    
+    output$strata_order_ui <- renderUI({
+      render_strata_order_input(ns, df, input$stratify_var)
     })
     
     # ------------------------------------------------------------
     # Summary computation
     # ------------------------------------------------------------
     summary_data <- eventReactive(input$run, {
-      data <- df()
+      local_data <- df()  # create a copy to avoid modifying shared reactive
       selected_vars <- unique(c(input$cat_vars, input$num_vars))
       validate(need(length(selected_vars) > 0, "Please select at least one variable."))
       
@@ -61,13 +68,23 @@ descriptive_server <- function(id, filtered_data) {
         selected_vars <- c(selected_vars, group_var)
       }
       
-      data <- data[, selected_vars, drop = FALSE]
+      local_data <- local_data[, selected_vars, drop = FALSE]
+      
+      if (!is.null(group_var) && !is.null(input$strata_order)) {
+        if (group_var %in% names(local_data)) {
+          local_data[[group_var]] <- factor(as.character(local_data[[group_var]]),
+                                            levels = input$strata_order)
+        }
+      }
+      
       list(
-        summary = compute_descriptive_summary(data, group_var),
+        summary = compute_descriptive_summary(local_data, group_var),
         selected_vars = selected_vars,
         group_var = group_var
       )
     })
+    
+    
     
     # ------------------------------------------------------------
     # Print summary
