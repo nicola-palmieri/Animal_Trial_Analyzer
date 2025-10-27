@@ -65,7 +65,7 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
       )
     })
     
-    observe_layout_synchronization(plot_info, layout_state, session)
+    observe_layout_synchronization(input, plot_info, layout_state, session)
     
     plot_obj <- reactive({
       info <- plot_info()
@@ -86,7 +86,7 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
     output$layout_controls <- renderUI({
       info <- model_info()
       if (is.null(info) || info$type != "oneway_anova") return(NULL)
-      build_anova_layout_controls(ns, input, info, layout_state$default_ui_value)
+      build_anova_layout_controls(ns, info, layout_state$ui_value)
     })
     
     # ---- Render plot ----

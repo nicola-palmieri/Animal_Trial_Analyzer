@@ -2,7 +2,7 @@
 # 🎨 Visualization Plot Builders
 # ===============================================================
 
-build_descriptive_plots <- function(summary_info, original_data = NULL) {
+build_descriptive_plots <- function(summary_info, original_data = NULL, layout_overrides = NULL) {
   summary_data <- resolve_summary_input(summary_info)
 
   plots <- list()
@@ -13,17 +13,26 @@ build_descriptive_plots <- function(summary_info, original_data = NULL) {
   }
 
   if (!is.null(original_data)) {
-    factor_plot <- build_descriptive_categorical_plot(original_data)
+    factor_plot <- build_descriptive_categorical_plot(
+      original_data,
+      resolve_descriptive_override(layout_overrides, "categorical")
+    )
     if (!is.null(factor_plot)) {
       plots$factors <- factor_plot
     }
 
-    box_plot <- build_descriptive_boxplot(original_data)
+    box_plot <- build_descriptive_boxplot(
+      original_data,
+      resolve_descriptive_override(layout_overrides, "boxplots")
+    )
     if (!is.null(box_plot)) {
       plots$boxplots <- box_plot
     }
 
-    hist_plot <- build_descriptive_histogram(original_data)
+    hist_plot <- build_descriptive_histogram(
+      original_data,
+      resolve_descriptive_override(layout_overrides, "histograms")
+    )
     if (!is.null(hist_plot)) {
       plots$histograms <- hist_plot
     }
@@ -41,6 +50,33 @@ resolve_summary_input <- function(summary_info) {
     return(summary_info())
   }
   summary_info
+}
+
+
+resolve_descriptive_override <- function(layout_overrides, key) {
+  if (is.null(layout_overrides)) return(NULL)
+  if (!is.null(layout_overrides$rows) || !is.null(layout_overrides$cols)) {
+    return(layout_overrides)
+  }
+  layout_overrides[[key]]
+}
+
+
+descriptive_plot_entry <- function(plot, panels = 1L, layout = list(rows = 1L, cols = 1L)) {
+  rows <- layout$rows
+  cols <- layout$cols
+
+  if (is.null(rows) || is.na(rows) || rows <= 0) rows <- 1L
+  if (is.null(cols) || is.na(cols) || cols <= 0) cols <- 1L
+
+  list(
+    plot = plot,
+    panels = max(1L, as.integer(panels)),
+    layout = list(
+      rows = max(1L, as.integer(rows)),
+      cols = max(1L, as.integer(cols))
+    )
+  )
 }
 
 
@@ -63,7 +99,11 @@ build_descriptive_metric_panel <- function(df, prefix, y_label) {
   if (is.null(tidy)) return(NULL)
 
   plot <- build_descriptive_metric_bar_plot(tidy, y_label)
-  plot + ggtitle(paste("Summary Metric:", y_label))
+  descriptive_plot_entry(
+    plot + ggtitle(paste("Summary Metric:", y_label)),
+    panels = 1L,
+    layout = list(rows = 1L, cols = 1L)
+  )
 }
 
 
@@ -116,7 +156,7 @@ build_descriptive_metric_bar_plot <- function(info, y_label) {
 }
 
 
-build_descriptive_categorical_plot <- function(df) {
+build_descriptive_categorical_plot <- function(df, layout_overrides = NULL) {
   factor_vars <- names(df)[sapply(df, function(x) is.character(x) || is.factor(x))]
   if (length(factor_vars) == 0) return(NULL)
   plots <- lapply(factor_vars, function(v) {
@@ -126,15 +166,18 @@ build_descriptive_categorical_plot <- function(df) {
       labs(title = v, x = NULL, y = "Count") +
       theme(axis.text.x = element_text(angle = 45, hjust = 1))
   })
-  patchwork::wrap_plots(plots, ncol = 2) +
+  layout <- compute_descriptive_layout(length(plots), layout_overrides)
+  combined <- patchwork::wrap_plots(plots, ncol = layout$cols, nrow = layout$rows) +
     patchwork::plot_annotation(
       title = "Categorical Distributions",
       theme = theme(plot.title = element_text(size = 16, face = "bold"))
     )
+
+  descriptive_plot_entry(combined, panels = length(plots), layout = layout)
 }
 
 
-build_descriptive_boxplot <- function(df) {
+build_descriptive_boxplot <- function(df, layout_overrides = NULL) {
   num_vars <- names(df)[sapply(df, is.numeric)]
   if (length(num_vars) == 0) return(NULL)
   plots <- lapply(num_vars, function(v) {
@@ -148,15 +191,18 @@ build_descriptive_boxplot <- function(df) {
         axis.ticks.x = element_blank()
       )
   })
-  patchwork::wrap_plots(plots, ncol = 2) +
+  layout <- compute_descriptive_layout(length(plots), layout_overrides)
+  combined <- patchwork::wrap_plots(plots, ncol = layout$cols, nrow = layout$rows) +
     patchwork::plot_annotation(
       title = "Boxplots",
       theme = theme(plot.title = element_text(size = 16, face = "bold"))
     )
+
+  descriptive_plot_entry(combined, panels = length(plots), layout = layout)
 }
 
 
-build_descriptive_histogram <- function(df) {
+build_descriptive_histogram <- function(df, layout_overrides = NULL) {
   num_vars <- names(df)[sapply(df, is.numeric)]
   if (length(num_vars) == 0) return(NULL)
   plots <- lapply(num_vars, function(v) {
@@ -165,11 +211,23 @@ build_descriptive_histogram <- function(df) {
       theme_minimal(base_size = 13) +
       labs(title = paste(v, "Distribution"), x = NULL, y = "Frequency")
   })
-  patchwork::wrap_plots(plots, ncol = 2) +
+  layout <- compute_descriptive_layout(length(plots), layout_overrides)
+  combined <- patchwork::wrap_plots(plots, ncol = layout$cols, nrow = layout$rows) +
     patchwork::plot_annotation(
       title = "Histograms",
       theme = theme(plot.title = element_text(size = 16, face = "bold"))
     )
+
+  descriptive_plot_entry(combined, panels = length(plots), layout = layout)
+}
+
+
+compute_descriptive_layout <- function(n_panels, layout_overrides = NULL) {
+  rows_input <- if (!is.null(layout_overrides)) layout_overrides$rows else 0
+  cols_input <- if (!is.null(layout_overrides)) layout_overrides$cols else 0
+
+  grid <- compute_grid_layout(n_panels, rows_input, cols_input)
+  list(rows = grid$nrow, cols = grid$ncol)
 }
 
 

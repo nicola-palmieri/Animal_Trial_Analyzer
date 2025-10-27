@@ -271,7 +271,7 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
       )
     })
     
-    observe_layout_synchronization(plot_info, layout_state, session)
+    observe_layout_synchronization(input, plot_info, layout_state, session)
     
     plot_obj <- reactive({
       info <- plot_info()
@@ -292,7 +292,7 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
     output$layout_controls <- renderUI({
       info <- model_info()
       if (is.null(info) || info$type != "oneway_anova") return(NULL)
-      build_anova_layout_controls(ns, input, info, layout_state$default_ui_value)
+      build_anova_layout_controls(ns, info, layout_state$ui_value)
     })
     
     # ---- Render plot ----
@@ -331,10 +331,10 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
 # 🧠 Animal Trial Analyzer — Shared ANOVA Module Helpers
 # ===============================================================
 
-build_anova_layout_controls <- function(ns, input, info, default_ui_value) {
+build_anova_layout_controls <- function(ns, info, ui_value) {
   has_strata <- !is.null(info$strata) && !is.null(info$strata$var)
   n_responses <- if (!is.null(info$responses)) length(info$responses) else 0
-  
+
   strata_inputs <- if (has_strata) {
     tagList(
       h5("Across strata:"),
@@ -344,7 +344,7 @@ build_anova_layout_controls <- function(ns, input, info, default_ui_value) {
           numericInput(
             ns("strata_rows"),
             "Grid rows",
-            value = isolate(default_ui_value(input$strata_rows)),
+            value = ui_value("strata_rows"),
             min = 0,
             step = 1
           )
@@ -354,7 +354,7 @@ build_anova_layout_controls <- function(ns, input, info, default_ui_value) {
           numericInput(
             ns("strata_cols"),
             "Grid columns",
-            value = isolate(default_ui_value(input$strata_cols)),
+            value = ui_value("strata_cols"),
             min = 0,
             step = 1
           )
@@ -374,7 +374,7 @@ build_anova_layout_controls <- function(ns, input, info, default_ui_value) {
           numericInput(
             ns("resp_rows"),
             "Grid rows",
-            value = isolate(default_ui_value(input$resp_rows)),
+            value = ui_value("resp_rows"),
             min = 0,
             step = 1
           )
@@ -384,7 +384,7 @@ build_anova_layout_controls <- function(ns, input, info, default_ui_value) {
           numericInput(
             ns("resp_cols"),
             "Grid columns",
-            value = isolate(default_ui_value(input$resp_cols)),
+            value = ui_value("resp_cols"),
             min = 0,
             step = 1
           )
@@ -1160,7 +1160,7 @@ visualize_twoway_server <- function(id, filtered_data, model_fit) {
       build_anova_plot_info(data, info, layout_state$effective_input)
     })
     
-    observe_layout_synchronization(plot_info, layout_state, session)
+    observe_layout_synchronization(input, plot_info, layout_state, session)
     
     # ---- color customization ----
     color_var_reactive <- reactive({
@@ -1197,7 +1197,7 @@ visualize_twoway_server <- function(id, filtered_data, model_fit) {
     output$layout_controls <- renderUI({
       info <- model_info()
       if (is.null(info) || info$type != "twoway_anova") return(NULL)
-      build_anova_layout_controls(ns, input, info, layout_state$default_ui_value)
+      build_anova_layout_controls(ns, info, layout_state$ui_value)
     })
     
     # ✅ simpler, consistent naming and structure
@@ -1566,21 +1566,30 @@ visualize_descriptive_ui <- function(id) {
         selected = "boxplots"
       ),
       hr(),
-      numericInput(
-        ns("plot_width"),
-        label = "Plot width (px)",
-        value = 800,
-        min = 400,
-        max = 2000,
-        step = 100
-      ),
-      numericInput(
-        ns("plot_height"),
-        label = "Plot height (px)",
-        value = 600,
-        min = 400,
-        max = 2000,
-        step = 100
+      uiOutput(ns("layout_controls")),
+      fluidRow(
+        column(
+          6,
+          numericInput(
+            ns("plot_width"),
+            label = "Subplot width (px)",
+            value = 400,
+            min = 200,
+            max = 2000,
+            step = 50
+          )
+        ),
+        column(
+          6,
+          numericInput(
+            ns("plot_height"),
+            label = "Subplot height (px)",
+            value = 300,
+            min = 200,
+            max = 2000,
+            step = 50
+          )
+        )
       ),
       hr(),
       downloadButton(ns("download_plot"), "Download Plot")
@@ -1588,7 +1597,7 @@ visualize_descriptive_ui <- function(id) {
     mainPanel(
       width = 8,
       h4("Descriptive Visualization"),
-      plotOutput(ns("plot"))
+      plotOutput(ns("plot"), height = "auto")
     )
   )
 }
@@ -1596,7 +1605,7 @@ visualize_descriptive_ui <- function(id) {
 
 visualize_descriptive_server <- function(id, filtered_data, descriptive_summary) {
   moduleServer(id, function(input, output, session) {
-    
+
     # ------------------------------------------------------------
     # 1️⃣ Base reactive: Data + summary check
     # ------------------------------------------------------------
@@ -1605,53 +1614,141 @@ visualize_descriptive_server <- function(id, filtered_data, descriptive_summary)
       validate(need(!is.null(data) && is.data.frame(data), "No data available."))
       data
     })
-    
+
     summary_info <- reactive({
       info <- descriptive_summary()
       validate(need(!is.null(info), "Run descriptive summary first."))
       validate(need(!is.null(info$summary), "Summary not available."))
       info
     })
-    
-    plot_size <- reactive({
-      w <- suppressWarnings(as.numeric(input$plot_width))
-      h <- suppressWarnings(as.numeric(input$plot_height))
-      list(
-        w = ifelse(is.na(w) || w <= 0, 800, w),
-        h = ifelse(is.na(h) || h <= 0, 600, h)
-      )
+
+    layout_state <- initialize_layout_state(input, session)
+
+    dimension_defaults <- list(width = 400L, height = 300L)
+    dimension_state <- reactiveVal(list())
+
+    sanitize_dimension <- function(value, default) {
+      val <- suppressWarnings(as.numeric(value))
+      if (length(val) == 0 || is.na(val) || val < 200) {
+        as.integer(default)
+      } else {
+        as.integer(round(val))
+      }
+    }
+
+    ensure_dimensions <- function(key) {
+      if (is.null(key) || key == "") key <- "default"
+      dims_map <- dimension_state()
+      if (is.null(dims_map[[key]])) {
+        dims_map[[key]] <- dimension_defaults
+        dimension_state(dims_map)
+        dims_map <- dimension_state()
+      }
+      dims_map[[key]]
+    }
+
+    get_dimensions <- function(key) {
+      if (is.null(key) || key == "") key <- "default"
+      ensure_dimensions(key)
+      dimension_state()[[key]]
+    }
+
+    set_dimension <- function(key, name, value) {
+      if (is.null(key) || key == "") key <- "default"
+      dims <- ensure_dimensions(key)
+      sanitized <- sanitize_dimension(value, dimension_defaults[[name]])
+      if (!identical(dims[[name]], sanitized)) {
+        dims[[name]] <- sanitized
+        dims_map <- dimension_state()
+        dims_map[[key]] <- dims
+        dimension_state(dims_map)
+      }
+    }
+
+    sync_dimension_inputs <- function(key) {
+      dims <- get_dimensions(key)
+
+      current_w <- suppressWarnings(as.numeric(input$plot_width))
+      current_w_int <- if (length(current_w) == 0 || is.na(current_w)) NA_integer_ else as.integer(round(current_w))
+      if (!identical(current_w_int, dims$width)) {
+        updateNumericInput(session, "plot_width", value = dims$width)
+      }
+
+      current_h <- suppressWarnings(as.numeric(input$plot_height))
+      current_h_int <- if (length(current_h) == 0 || is.na(current_h)) NA_integer_ else as.integer(round(current_h))
+      if (!identical(current_h_int, dims$height)) {
+        updateNumericInput(session, "plot_height", value = dims$height)
+      }
+    }
+
+    observeEvent(input$plot_type, {
+      type <- input$plot_type
+      if (is.null(type) || length(type) == 0) return()
+      key <- as.character(type[[1]])
+      layout_state$set_active_key(key, sync_ui = TRUE)
+      sync_dimension_inputs(key)
+    }, ignoreNULL = FALSE)
+
+    observeEvent(input$plot_width, {
+      key <- layout_state$active_key()
+      set_dimension(key, "width", input$plot_width)
     })
-    
+
+    observeEvent(input$plot_height, {
+      key <- layout_state$active_key()
+      set_dimension(key, "height", input$plot_height)
+    })
+
     # ------------------------------------------------------------
     # 2️⃣ Build all plots using the shared helper
     # ------------------------------------------------------------
     plots_all <- reactive({
       info <- summary_info()
-      
+
       summary_data <- info$summary
       if (is.reactive(summary_data)) summary_data <- summary_data()
-      
+
       selected_vars <- info$selected_vars
       if (is.reactive(selected_vars)) selected_vars <- selected_vars()
-      
+
       data_subset <- df()
       if (!is.null(selected_vars)) {
         data_subset <- data_subset[, intersect(names(data_subset), selected_vars), drop = FALSE]
       }
-      
-      build_descriptive_plots(summary_data, data_subset)
+
+      layout_for <- function(key) {
+        layout_state$ensure_key(key)
+        list(
+          rows = layout_state$effective_input("resp_rows", key),
+          cols = layout_state$effective_input("resp_cols", key)
+        )
+      }
+
+      layout_overrides <- list(
+        categorical = layout_for("categorical"),
+        boxplots = layout_for("boxplots"),
+        histograms = layout_for("histograms")
+      )
+
+      build_descriptive_plots(summary_data, data_subset, layout_overrides)
     })
-    
+
     # ------------------------------------------------------------
     # 3️⃣ Pick correct plot based on selection
     # ------------------------------------------------------------
     build_current_plot <- reactive({
       plots <- plots_all()
       validate(need(!is.null(plots), "No plots available."))
-      
+
+      req(!is.null(input$plot_type))
+
+      plot_choice <- as.character(input$plot_type)
+      validate(need(length(plot_choice) == 1, "Select a single plot type."))
+      plot_choice <- plot_choice[[1]]
+
       metrics <- plots$metrics
-      switch(
-        input$plot_type,
+      entry <- switch(
+        plot_choice,
         categorical = plots$factors,
         boxplots = plots$boxplots,
         histograms = plots$histograms,
@@ -1661,34 +1758,133 @@ visualize_descriptive_server <- function(id, filtered_data, descriptive_summary)
         shapiro = if (!is.null(metrics)) metrics$shapiro else NULL,
         NULL
       )
+
+      if (!is.null(entry)) {
+        entry$key <- plot_choice
+      }
+      entry
     })
-    
+
+    plot_entry <- reactive({
+      entry <- build_current_plot()
+      if (is.null(entry)) return(NULL)
+
+      if (!is.list(entry) || is.null(entry$plot)) {
+        return(list(
+          plot = entry,
+          panels = 1L,
+          layout = list(rows = 1L, cols = 1L),
+          key = layout_state$active_key()
+        ))
+      }
+
+      if (is.null(entry$key)) {
+        entry$key <- layout_state$active_key()
+      }
+
+      entry
+    })
+
+    plot_size <- reactive({
+      entry <- plot_entry()
+
+      if (is.null(entry)) {
+        dims_default <- get_dimensions(layout_state$active_key())
+        return(list(w = dims_default$width, h = dims_default$height))
+      }
+
+      key <- if (!is.null(entry$key)) entry$key else layout_state$active_key()
+      dims <- get_dimensions(key)
+
+      subplot_w <- dims$width
+      subplot_h <- dims$height
+
+      if (is.null(entry$layout)) {
+        return(list(w = subplot_w, h = subplot_h))
+      }
+
+      list(
+        w = subplot_w * max(1, entry$layout$cols),
+        h = subplot_h * max(1, entry$layout$rows)
+      )
+    })
+
+    output$layout_controls <- renderUI({
+      entry <- plot_entry()
+      if (is.null(entry) || is.null(entry$panels) || entry$panels <= 1) {
+        return(NULL)
+      }
+
+      tagList(
+        h4("Layout Controls"),
+        fluidRow(
+          column(
+            width = 6,
+            numericInput(
+              session$ns("resp_rows"),
+              "Grid rows",
+              value = layout_state$ui_value("resp_rows", entry$key),
+              min = 0,
+              step = 1
+            )
+          ),
+          column(
+            width = 6,
+            numericInput(
+              session$ns("resp_cols"),
+              "Grid columns",
+              value = layout_state$ui_value("resp_cols", entry$key),
+              min = 0,
+              step = 1
+            )
+          )
+        )
+      )
+    })
+
+    layout_info <- reactive({
+      entry <- plot_entry()
+      if (is.null(entry)) return(NULL)
+
+      list(
+        has_strata = FALSE,
+        layout = list(
+          strata = list(rows = 1L, cols = 1L),
+          responses = list(nrow = entry$layout$rows, ncol = entry$layout$cols)
+        ),
+        n_responses = entry$panels,
+        key = entry$key
+      )
+    })
+
+    observe_layout_synchronization(input, layout_info, layout_state, session)
+
     # ------------------------------------------------------------
     # 4️⃣ Render plot safely
     # ------------------------------------------------------------
     output$plot <- renderPlot({
-      p <- build_current_plot()
-      validate(need(!is.null(p), "Selected plot not available."))
+      entry <- plot_entry()
+      validate(need(!is.null(entry), "Selected plot not available."))
       # patchwork objects are fine with print()
-      print(p)
+      print(entry$plot)
     },
     width = function() plot_size()$w,
     height = function() plot_size()$h,
     res = 96)
-    
+
     # ------------------------------------------------------------
     # 5️⃣ Download
     # ------------------------------------------------------------
     output$download_plot <- downloadHandler(
       filename = function() paste0("descriptive_plot_", Sys.Date(), ".png"),
       content = function(file) {
-        p <- build_current_plot()
-        validate(need(!is.null(p), "No plot available to download."))
-        
+        entry <- plot_entry()
+        validate(need(!is.null(entry), "No plot available to download."))
+
         size <- plot_size()
         ggsave(
           filename = file,
-          plot = p,
+          plot = entry$plot,
           device = "png",
           dpi = 300,
           width = size$w / 96,
@@ -2434,75 +2630,231 @@ visualize_server <- function(id, filtered_data, model_fit) {
 # ===============================================================
 
 initialize_layout_state <- function(input, session) {
-  layout_overrides <- reactiveValues(
-    strata_rows = 0,
-    strata_cols = 0,
-    resp_rows = 0,
-    resp_cols = 0
-  )
+  default_key <- "default"
+  state_map <- reactiveVal(list())
+  active_key <- reactiveVal(default_key)
 
-  layout_manual <- reactiveValues(
-    strata_rows = FALSE,
-    strata_cols = FALSE,
-    resp_rows = FALSE,
-    resp_cols = FALSE
-  )
+  base_state <- function() {
+    list(
+      overrides = list(
+        strata_rows = 0L,
+        strata_cols = 0L,
+        resp_rows = 0L,
+        resp_cols = 0L
+      ),
+      manual = list(
+        strata_rows = FALSE,
+        strata_cols = FALSE,
+        resp_rows = FALSE,
+        resp_cols = FALSE
+      ),
+      suppress = list(
+        strata_rows = TRUE,
+        strata_cols = TRUE,
+        resp_rows = TRUE,
+        resp_cols = TRUE
+      ),
+      last_synced = list(
+        strata_rows = NA_integer_,
+        strata_cols = NA_integer_,
+        resp_rows = NA_integer_,
+        resp_cols = NA_integer_
+      )
+    )
+  }
 
-  suppress_updates <- reactiveValues(
-    strata_rows = TRUE,
-    strata_cols = TRUE,
-    resp_rows = TRUE,
-    resp_cols = TRUE
-  )
+  ensure_state <- function(key) {
+    if (is.null(key) || key == "") key <- default_key
+    map <- state_map()
+    if (is.null(map[[key]])) {
+      map[[key]] <- base_state()
+      state_map(map)
+    }
+    invisible(key)
+  }
+
+  get_state <- function(key = active_key()) {
+    key <- ensure_state(key)
+    state_map()[[key]]
+  }
+
+  update_state <- function(key, mutate_fn) {
+    key <- ensure_state(key)
+    map <- state_map()
+    entry <- map[[key]]
+    entry <- mutate_fn(entry)
+    map[[key]] <- entry
+    state_map(map)
+    invisible(entry)
+  }
+
+  get_state_field <- function(key, field, name) {
+    entry <- get_state(key)
+    entry[[field]][[name]]
+  }
+
+  set_state_field <- function(key, field, name, value) {
+    update_state(key, function(entry) {
+      entry[[field]][[name]] <- value
+      entry
+    })
+  }
+
+  sanitize_positive_int <- function(value, default = 1L) {
+    val_numeric <- suppressWarnings(as.numeric(value))
+    if (length(val_numeric) != 1 || is.na(val_numeric) || val_numeric <= 0) {
+      as.integer(default)
+    } else {
+      as.integer(round(val_numeric))
+    }
+  }
 
   observe_numeric_input <- function(name) {
     observeEvent(input[[name]], {
-      if (isTRUE(suppress_updates[[name]])) {
-        suppress_updates[[name]] <- FALSE
+      key <- active_key()
+      if (is.null(key) || key == "") key <- default_key
+
+      if (isTRUE(get_state_field(key, "suppress", name))) {
+        set_state_field(key, "suppress", name, FALSE)
         return()
       }
 
       val <- suppressWarnings(as.numeric(input[[name]]))
       if (is.na(val) || val <= 0) {
-        layout_overrides[[name]] <- 0L
-        layout_manual[[name]] <- FALSE
+        set_state_field(key, "overrides", name, 0L)
+        set_state_field(key, "manual", name, FALSE)
+        set_state_field(key, "last_synced", name, NA_integer_)
       } else {
-        layout_overrides[[name]] <- as.integer(val)
-        layout_manual[[name]] <- TRUE
+        sanitized <- as.integer(round(val))
+        set_state_field(key, "overrides", name, sanitized)
+        set_state_field(key, "manual", name, TRUE)
+        set_state_field(key, "last_synced", name, NA_integer_)
       }
     })
   }
+
   lapply(c("strata_rows", "strata_cols", "resp_rows", "resp_cols"), observe_numeric_input)
 
-  effective_input <- function(name) {
-    if (isTRUE(layout_manual[[name]])) layout_overrides[[name]] else 0
+  effective_input <- function(name, key = active_key()) {
+    key <- ensure_state(key)
+    if (isTRUE(get_state_field(key, "manual", name))) {
+      get_state_field(key, "overrides", name)
+    } else {
+      0L
+    }
   }
 
-  default_ui_value <- function(cur_val) {
-    val <- if (is.null(cur_val)) 1 else cur_val
-    ifelse(is.na(val) || val <= 0, 1, val)
+  ui_value <- function(name, key = active_key()) {
+    key <- ensure_state(key)
+    entry <- get_state(key)
+    candidate <- if (isTRUE(entry$manual[[name]])) {
+      entry$overrides[[name]]
+    } else {
+      entry$last_synced[[name]]
+    }
+    if (is.null(candidate) || is.na(candidate) || candidate <= 0) 1L else as.integer(candidate)
+  }
+
+  is_manual <- function(name, key = active_key()) {
+    key <- ensure_state(key)
+    isTRUE(get_state_field(key, "manual", name))
+  }
+
+  get_last_synced <- function(name, key = active_key()) {
+    key <- ensure_state(key)
+    get_state_field(key, "last_synced", name)
+  }
+
+  set_last_synced <- function(name, value, key = active_key()) {
+    key <- ensure_state(key)
+    set_state_field(key, "last_synced", name, as.integer(value))
+  }
+
+  get_suppress <- function(name, key = active_key()) {
+    key <- ensure_state(key)
+    isTRUE(get_state_field(key, "suppress", name))
+  }
+
+  set_suppress <- function(name, value, key = active_key()) {
+    key <- ensure_state(key)
+    set_state_field(key, "suppress", name, isTRUE(value))
+  }
+
+  sync_ui_inputs <- function(key = active_key()) {
+    key <- ensure_state(key)
+    entry <- get_state(key)
+    for (name in names(entry$overrides)) {
+      target <- ui_value(name, key)
+      current <- suppressWarnings(as.numeric(input[[name]]))
+      current_int <- if (length(current) == 0 || is.na(current)) NA_integer_ else as.integer(round(current))
+      if (!identical(current_int, target)) {
+        set_suppress(name, TRUE, key)
+        updateNumericInput(session, name, value = target)
+      }
+    }
+  }
+
+  set_active_key <- function(key, sync_ui = FALSE) {
+    key <- ensure_state(key)
+    active_key(key)
+    if (isTRUE(sync_ui)) {
+      sync_ui_inputs(key)
+    }
+    invisible(key)
   }
 
   list(
-    overrides = layout_overrides,
-    manual = layout_manual,
-    suppress = suppress_updates,
+    ensure_key = ensure_state,
+    set_active_key = set_active_key,
+    active_key = function() active_key(),
     effective_input = effective_input,
-    default_ui_value = default_ui_value
+    ui_value = ui_value,
+    is_manual = is_manual,
+    get_last_synced = get_last_synced,
+    set_last_synced = set_last_synced,
+    get_suppress = get_suppress,
+    set_suppress = set_suppress,
+    sync_ui_inputs = sync_ui_inputs,
+    sanitize_value = sanitize_positive_int
   )
 }
 
-observe_layout_synchronization <- function(plot_info_reactive, layout_state, session) {
+observe_layout_synchronization <- function(input, plot_info_reactive, layout_state, session) {
   observeEvent(plot_info_reactive(), {
     info <- plot_info_reactive()
     if (is.null(info)) return()
 
+    target_key <- info$key
+    if (is.null(target_key) || target_key == "") {
+      target_key <- layout_state$active_key()
+    }
+    layout_state$ensure_key(target_key)
+
     sync_input <- function(id, value, manual_key) {
-      val <- ifelse(is.null(value) || value <= 0, 1, value)
-      if (!isTRUE(layout_state$manual[[manual_key]])) {
-        layout_state$suppress[[id]] <- TRUE
-        updateNumericInput(session, id, value = val)
+      if (layout_state$is_manual(manual_key, target_key)) {
+        return()
       }
+
+      val <- layout_state$sanitize_value(value)
+
+      pending_val <- layout_state$get_last_synced(id, target_key)
+      if (layout_state$get_suppress(id, target_key) && !is.na(pending_val) && identical(pending_val, val)) {
+        return()
+      }
+
+      current <- isolate({
+        cur <- suppressWarnings(as.numeric(input[[id]]))
+        if (length(cur) == 0) NA_real_ else cur
+      })
+
+      if (!is.na(current) && identical(as.integer(round(current)), val)) {
+        layout_state$set_last_synced(id, val, target_key)
+        return()
+      }
+
+      layout_state$set_suppress(id, TRUE, target_key)
+      layout_state$set_last_synced(id, val, target_key)
+      updateNumericInput(session, id, value = val)
     }
 
     if (isTRUE(info$has_strata)) {
@@ -2518,13 +2870,17 @@ observe_layout_synchronization <- function(plot_info_reactive, layout_state, ses
 
     sync_input("resp_rows", resp_rows_val, "resp_rows")
     sync_input("resp_cols", resp_cols_val, "resp_cols")
+
+    if (identical(layout_state$active_key(), target_key)) {
+      layout_state$sync_ui_inputs(target_key)
+    }
   })
 }
 # ===============================================================
 # 🎨 Visualization Plot Builders
 # ===============================================================
 
-build_descriptive_plots <- function(summary_info, original_data = NULL) {
+build_descriptive_plots <- function(summary_info, original_data = NULL, layout_overrides = NULL) {
   summary_data <- resolve_summary_input(summary_info)
 
   plots <- list()
@@ -2535,17 +2891,26 @@ build_descriptive_plots <- function(summary_info, original_data = NULL) {
   }
 
   if (!is.null(original_data)) {
-    factor_plot <- build_descriptive_categorical_plot(original_data)
+    factor_plot <- build_descriptive_categorical_plot(
+      original_data,
+      resolve_descriptive_override(layout_overrides, "categorical")
+    )
     if (!is.null(factor_plot)) {
       plots$factors <- factor_plot
     }
 
-    box_plot <- build_descriptive_boxplot(original_data)
+    box_plot <- build_descriptive_boxplot(
+      original_data,
+      resolve_descriptive_override(layout_overrides, "boxplots")
+    )
     if (!is.null(box_plot)) {
       plots$boxplots <- box_plot
     }
 
-    hist_plot <- build_descriptive_histogram(original_data)
+    hist_plot <- build_descriptive_histogram(
+      original_data,
+      resolve_descriptive_override(layout_overrides, "histograms")
+    )
     if (!is.null(hist_plot)) {
       plots$histograms <- hist_plot
     }
@@ -2554,6 +2919,15 @@ build_descriptive_plots <- function(summary_info, original_data = NULL) {
   if (length(plots) == 0) return(NULL)
 
   plots
+}
+
+
+resolve_descriptive_override <- function(layout_overrides, key) {
+  if (is.null(layout_overrides)) return(NULL)
+  if (!is.null(layout_overrides$rows) || !is.null(layout_overrides$cols)) {
+    return(layout_overrides)
+  }
+  layout_overrides[[key]]
 }
 
 
@@ -2638,7 +3012,25 @@ build_descriptive_metric_bar_plot <- function(info, y_label) {
 }
 
 
-build_descriptive_categorical_plot <- function(df) {
+descriptive_plot_entry <- function(plot, panels = 1L, layout = list(rows = 1L, cols = 1L)) {
+  rows <- layout$rows
+  cols <- layout$cols
+
+  if (is.null(rows) || is.na(rows) || rows <= 0) rows <- 1L
+  if (is.null(cols) || is.na(cols) || cols <= 0) cols <- 1L
+
+  list(
+    plot = plot,
+    panels = max(1L, as.integer(panels)),
+    layout = list(
+      rows = max(1L, as.integer(rows)),
+      cols = max(1L, as.integer(cols))
+    )
+  )
+}
+
+
+build_descriptive_categorical_plot <- function(df, layout_overrides = NULL) {
   factor_vars <- names(df)[sapply(df, function(x) is.character(x) || is.factor(x))]
   if (length(factor_vars) == 0) return(NULL)
   plots <- lapply(factor_vars, function(v) {
@@ -2648,15 +3040,18 @@ build_descriptive_categorical_plot <- function(df) {
       labs(title = v, x = NULL, y = "Count") +
       theme(axis.text.x = element_text(angle = 45, hjust = 1))
   })
-  patchwork::wrap_plots(plots, ncol = 2) +
+  layout <- compute_descriptive_layout(length(plots), layout_overrides)
+  combined <- patchwork::wrap_plots(plots, ncol = layout$cols, nrow = layout$rows) +
     patchwork::plot_annotation(
       title = "Categorical Distributions",
       theme = theme(plot.title = element_text(size = 16, face = "bold"))
     )
+
+  descriptive_plot_entry(combined, panels = length(plots), layout = layout)
 }
 
 
-build_descriptive_boxplot <- function(df) {
+build_descriptive_boxplot <- function(df, layout_overrides = NULL) {
   num_vars <- names(df)[sapply(df, is.numeric)]
   if (length(num_vars) == 0) return(NULL)
   plots <- lapply(num_vars, function(v) {
@@ -2670,15 +3065,18 @@ build_descriptive_boxplot <- function(df) {
         axis.ticks.x = element_blank()
       )
   })
-  patchwork::wrap_plots(plots, ncol = 2) +
+  layout <- compute_descriptive_layout(length(plots), layout_overrides)
+  combined <- patchwork::wrap_plots(plots, ncol = layout$cols, nrow = layout$rows) +
     patchwork::plot_annotation(
       title = "Boxplots",
       theme = theme(plot.title = element_text(size = 16, face = "bold"))
     )
+
+  descriptive_plot_entry(combined, panels = length(plots), layout = layout)
 }
 
 
-build_descriptive_histogram <- function(df) {
+build_descriptive_histogram <- function(df, layout_overrides = NULL) {
   num_vars <- names(df)[sapply(df, is.numeric)]
   if (length(num_vars) == 0) return(NULL)
   plots <- lapply(num_vars, function(v) {
@@ -2687,11 +3085,23 @@ build_descriptive_histogram <- function(df) {
       theme_minimal(base_size = 13) +
       labs(title = paste(v, "Distribution"), x = NULL, y = "Frequency")
   })
-  patchwork::wrap_plots(plots, ncol = 2) +
+  layout <- compute_descriptive_layout(length(plots), layout_overrides)
+  combined <- patchwork::wrap_plots(plots, ncol = layout$cols, nrow = layout$rows) +
     patchwork::plot_annotation(
       title = "Histograms",
       theme = theme(plot.title = element_text(size = 16, face = "bold"))
     )
+
+  descriptive_plot_entry(combined, panels = length(plots), layout = layout)
+}
+
+
+compute_descriptive_layout <- function(n_panels, layout_overrides = NULL) {
+  rows_input <- if (!is.null(layout_overrides)) layout_overrides$rows else 0
+  cols_input <- if (!is.null(layout_overrides)) layout_overrides$cols else 0
+
+  grid <- compute_grid_layout(n_panels, rows_input, cols_input)
+  list(rows = grid$nrow, cols = grid$ncol)
 }
 
 

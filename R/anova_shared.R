@@ -2,10 +2,10 @@
 # 🧠 Animal Trial Analyzer — Shared ANOVA Module Helpers
 # ===============================================================
 
-build_anova_layout_controls <- function(ns, input, info, default_ui_value) {
+build_anova_layout_controls <- function(ns, info, ui_value) {
   has_strata <- !is.null(info$strata) && !is.null(info$strata$var)
   n_responses <- if (!is.null(info$responses)) length(info$responses) else 0
-  
+
   strata_inputs <- if (has_strata) {
     tagList(
       h5("Across strata:"),
@@ -15,7 +15,7 @@ build_anova_layout_controls <- function(ns, input, info, default_ui_value) {
           numericInput(
             ns("strata_rows"),
             "Grid rows",
-            value = isolate(default_ui_value(input$strata_rows)),
+            value = ui_value("strata_rows"),
             min = 0,
             step = 1
           )
@@ -25,7 +25,7 @@ build_anova_layout_controls <- function(ns, input, info, default_ui_value) {
           numericInput(
             ns("strata_cols"),
             "Grid columns",
-            value = isolate(default_ui_value(input$strata_cols)),
+            value = ui_value("strata_cols"),
             min = 0,
             step = 1
           )
@@ -45,7 +45,7 @@ build_anova_layout_controls <- function(ns, input, info, default_ui_value) {
           numericInput(
             ns("resp_rows"),
             "Grid rows",
-            value = isolate(default_ui_value(input$resp_rows)),
+            value = ui_value("resp_rows"),
             min = 0,
             step = 1
           )
@@ -55,7 +55,7 @@ build_anova_layout_controls <- function(ns, input, info, default_ui_value) {
           numericInput(
             ns("resp_cols"),
             "Grid columns",
-            value = isolate(default_ui_value(input$resp_cols)),
+            value = ui_value("resp_cols"),
             min = 0,
             step = 1
           )
