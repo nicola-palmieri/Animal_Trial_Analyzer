@@ -11,8 +11,8 @@ one_way_anova_ui <- function(id) {
       uiOutput(ns("advanced_options")),
       br(),
       fluidRow(
-        column(6, actionButton(ns("run"), "Run", width = "100%")),
-        column(6, downloadButton(ns("download_all"), "Download All Results", width = "100%"))
+        column(6, actionButton(ns("run"), "Show results", width = "100%")),
+        column(6, downloadButton(ns("download_all"), "Download all results", width = "100%"))
       )
     ),
     results = tagList(
@@ -43,7 +43,7 @@ one_way_anova_server <- function(id, filtered_data) {
         uiOutput(ns("response_inputs")),
         selectInput(
           ns("group"),
-          "Categorical predictor:",
+          "Select categorical predictor:",
           choices = cat_cols,
           selected = if (length(cat_cols) > 0) cat_cols[1] else NULL
         )

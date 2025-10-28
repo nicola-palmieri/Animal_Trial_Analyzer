@@ -71,7 +71,7 @@ build_anova_layout_controls <- function(ns, input, info, default_ui_value) {
   }
   
   tagList(
-    h4("Layout Controls"),
+    h4("Layout controls"),
     strata_inputs,
     response_inputs
   )
@@ -318,7 +318,7 @@ render_response_selector <- function(ns, df, input) {
   if (isTRUE(input$multi_resp)) {
     selectizeInput(
       ns("response"),
-      "Response variables (numeric):",
+      "Select response variables (numeric):",
       choices = num_cols,
       selected = head(num_cols, 1),
       multiple = TRUE,
@@ -327,7 +327,7 @@ render_response_selector <- function(ns, df, input) {
   } else {
     selectInput(
       ns("response"),
-      "Response variable (numeric):",
+      "Select response variable (numeric):",
       choices = num_cols,
       selected = if (length(num_cols) > 0) num_cols[1] else NULL
     )

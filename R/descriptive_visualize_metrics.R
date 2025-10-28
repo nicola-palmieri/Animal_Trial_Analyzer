@@ -17,7 +17,7 @@ metric_panel_ui <- function(id, default_width = 400, default_height = 300,
       column(6, numericInput(ns("n_cols"), "Grid columns", value = default_cols, min = 1, max = 10, step = 1))
     ),
     hr(),
-    downloadButton(ns("download_plot"), "Download Plot")
+    downloadButton(ns("download_plot"), "Download plot")
   )
 }
 
@@ -269,6 +269,7 @@ visualize_cv_server <- function(id, filtered_data, summary_info) {
     summary_info = summary_info,
     metric_key = "cv",
     y_label = "CV (%)",
+    title = "Coefficient of variation (CV%)",
     filename_prefix = "cv_summary"
   )
 }
@@ -279,7 +280,8 @@ visualize_outliers_server <- function(id, filtered_data, summary_info) {
     filtered_data = filtered_data,
     summary_info = summary_info,
     metric_key = "outliers",
-    y_label = "Outlier Count",
+    y_label = "Outlier count",
+    title = "Outlier counts (1.5×IQR rule)",
     filename_prefix = "outlier_summary"
   )
 }
