@@ -62,8 +62,7 @@ build_descriptive_metric_panel <- function(df, prefix, y_label) {
   tidy <- tidy_descriptive_metric(df, prefix)
   if (is.null(tidy)) return(NULL)
 
-  plot <- build_descriptive_metric_bar_plot(tidy, y_label)
-  plot + ggtitle(paste("Summary Metric:", y_label))
+  build_descriptive_metric_bar_plot(tidy, y_label)
 }
 
 
@@ -236,11 +235,7 @@ build_descriptive_categorical_plot <- function(df,
     cols_input = suppressWarnings(as.numeric(ncol_input))
   )
   
-  combined <- patchwork::wrap_plots(plots, nrow = layout$nrow, ncol = layout$ncol) +
-    patchwork::plot_annotation(
-      title = "Categorical Distributions",
-      theme = theme(plot.title = element_text(size = 16, face = "bold"))
-    )
+  combined <- patchwork::wrap_plots(plots, nrow = layout$nrow, ncol = layout$ncol)
   
   list(
     plot = combined,
@@ -306,11 +301,7 @@ build_descriptive_numeric_boxplot <- function(df,
     cols_input = suppressWarnings(as.numeric(ncol_input))
   )
   
-  combined <- patchwork::wrap_plots(plots, nrow = layout$nrow, ncol = layout$ncol) +
-    patchwork::plot_annotation(
-      title = "Numeric Distributions (Boxplots)",
-      theme = theme(plot.title = element_text(size = 16, face = "bold"))
-    )
+  combined <- patchwork::wrap_plots(plots, nrow = layout$nrow, ncol = layout$ncol)
   
   list(
     plot = combined,
@@ -408,17 +399,7 @@ build_descriptive_numeric_histogram <- function(df,
     cols_input = suppressWarnings(as.numeric(ncol_input))
   )
 
-  title_text <- if (isTRUE(use_density)) {
-    "Numeric Distributions (Density)"
-  } else {
-    "Numeric Distributions (Histograms)"
-  }
-
-  combined <- patchwork::wrap_plots(plots, nrow = layout$nrow, ncol = layout$ncol) +
-    patchwork::plot_annotation(
-      title = title_text,
-      theme = theme(plot.title = element_text(size = 16, face = "bold"))
-    )
+  combined <- patchwork::wrap_plots(plots, nrow = layout$nrow, ncol = layout$ncol)
 
   list(
     plot = combined,
@@ -437,11 +418,7 @@ build_descriptive_histogram <- function(df) {
       theme_minimal(base_size = 13) +
       labs(title = paste(v, "Distribution"), x = NULL, y = "Frequency")
   })
-  patchwork::wrap_plots(plots, ncol = 2) +
-    patchwork::plot_annotation(
-      title = "Histograms",
-      theme = theme(plot.title = element_text(size = 16, face = "bold"))
-    )
+  patchwork::wrap_plots(plots, ncol = 2)
 }
 
 
@@ -490,9 +467,9 @@ build_anova_plot_info <- function(data, info, effective_input, line_colors = NUL
     }
   }
 
-  build_plot <- function(stats_df, title_text, y_limits) {
+  build_plot <- function(stats_df, panel_title, y_limits) {
     single_col <- if (!is.null(line_colors) && length(line_colors) == 1) line_colors else "steelblue"
-    
+
     if (is.null(factor2)) {
       p <- ggplot(stats_df, aes(x = !!sym(factor1), y = mean)) +
         geom_line(aes(group = 1), color = single_col, linewidth = 1) +
@@ -536,9 +513,13 @@ build_anova_plot_info <- function(data, info, effective_input, line_colors = NUL
     if (!is.null(y_limits) && all(is.finite(y_limits))) {
       p <- p + scale_y_continuous(limits = y_limits)
     }
-    
-    p + ggtitle(title_text) +
-      theme(plot.title = element_text(size = 12, face = "bold"))
+
+    if (!is.null(panel_title) && !identical(panel_title, "")) {
+      p <- p + ggtitle(panel_title) +
+        theme(plot.title = element_text(size = 12, face = "bold"))
+    }
+
+    p
   }
 
   for (resp in responses) {
@@ -662,7 +643,6 @@ build_ggpairs_plot <- function(data) {
       panel.grid.minor = element_blank(),
       panel.grid.major.x = element_blank(),
       panel.grid.major.y = element_blank(),
-      plot.title = element_text(size = 12, face = "bold"),
       axis.text = element_text(color = "black")
     )
 }
@@ -706,14 +686,12 @@ build_pca_biplot <- function(pca_obj, data, color_var = NULL, shape_var = NULL,
     ) +
     theme_minimal(base_size = 14) +
     labs(
-      title = "PCA Biplot",
       x = "PC1",
       y = "PC2",
       color = if (!is.null(color_var)) color_var else NULL,
       shape = if (!is.null(shape_var)) shape_var else NULL
     ) +
     theme(
-      plot.title = element_text(size = 16, face = "bold"),
       legend.position = "right"
     )
   
