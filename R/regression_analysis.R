@@ -180,17 +180,8 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
       
       # ---- Validate stratification complexity ----
       strat_var <- input$stratify_var
-      if (!is.null(strat_var) && strat_var != "None" && strat_var %in% names(df)) {
-        n_levels <- length(unique(na.omit(df[[strat_var]])))
-        validate(
-          need(
-            n_levels <= 10,
-            paste0(
-              "❌ Stratification variable '", strat_var,
-              "' has ", n_levels, " levels — please select a variable with at most 10."
-            )
-          )
-        )
+      if (!guard_stratification_levels(df, strat_var)) {
+        return(NULL)
       }
 
       rhs <- reg_compose_rhs(
