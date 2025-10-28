@@ -30,7 +30,7 @@ visualize_server <- function(id, filtered_data, model_fit) {
         visualize_oneway_ui(ns("oneway"))
       } else if (type == "twoway_anova") {
         visualize_twoway_ui(ns("twoway"))
-      } else if (type == "ggpairs") {
+      } else if (type == "pairwise_correlation") {
         visualize_ggpairs_ui(ns("ggpairs"))
       } else if (type == "pca") {
         visualize_pca_ui(ns("pca"), filtered_data())
@@ -47,7 +47,7 @@ visualize_server <- function(id, filtered_data, model_fit) {
         visualize_oneway_server("oneway", filtered_data, model_info)
       } else if (type == "twoway_anova") {
         visualize_twoway_server("twoway", filtered_data, model_info)
-      } else if (type == "ggpairs") {
+      } else if (type == "pairwise_correlation") {
         visualize_ggpairs_server("ggpairs", filtered_data, model_info)
       } else if (type == "pca") {
         visualize_pca_server("pca", filtered_data, model_info)

@@ -88,7 +88,7 @@ analysis_server <- function(id, filtered_data) {
         id = "ggpairs",
         ui = ggpairs_ui,
         server = ggpairs_server,
-        type = "ggpairs"
+        type = "pairwise_correlation"
       ),
       "PCA" = list(
         id = "pca",

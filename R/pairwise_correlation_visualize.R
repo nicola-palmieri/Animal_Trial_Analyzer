@@ -17,6 +17,8 @@ visualize_ggpairs_ui <- function(id) {
         selected = "ggpairs"
       ),
       hr(),
+      uiOutput(ns("strata_selector")),
+      hr(),
       fluidRow(
         column(
           width = 6,
@@ -58,51 +60,93 @@ visualize_ggpairs_server <- function(id, filtered_data, model_fit) {
     ns <- session$ns
     
     # Reactive data and model
-    df <- reactive(filtered_data())
     model_info <- reactive(model_fit())
-    
-    # Layout info placeholder
-    output$layout_controls <- renderUI({
+
+    stratified_results <- reactive({
       info <- model_info()
-      if (is.null(info) || info$type != "ggpairs") return(NULL)
-      tagList(
-        p("This plot shows pairwise scatterplots and Pearson correlations among numeric variables.")
+      if (is.null(info) || info$type != "pairwise_correlation") return(NULL)
+      res_accessor <- info$results
+      if (is.null(res_accessor) || !is.function(res_accessor)) return(NULL)
+      res_accessor()
+    })
+
+    available_strata <- reactive({
+      results <- stratified_results()
+      if (is.null(results) || is.null(results$plots)) return(NULL)
+      plots <- results$plots
+      if (is.null(plots) || length(plots) == 0) return(NULL)
+      nm <- names(plots)
+      if (is.null(nm) || length(nm) == 0) {
+        nm <- rep("Overall", length(plots))
+        names(plots) <- nm
+      }
+      nm <- nm[nzchar(nm)]
+      if (length(nm) == 0) return(NULL)
+      nm
+    })
+
+    output$strata_selector <- renderUI({
+      choices <- available_strata()
+      if (is.null(choices)) return(NULL)
+      selectInput(
+        ns("selected_stratum"),
+        label = "Select stratum:",
+        choices = choices,
+        selected = choices[[1]]
       )
     })
-    
+
     # Determine plot size dynamically
     plot_size <- reactive({
       list(w = input$plot_width, h = input$plot_height)
     })
-    
+
     # --- Main Plot Rendering ---
     output$plots <- renderPlot({
       info <- model_info()
-      if (is.null(info) || info$type != "ggpairs") return(NULL)
-      validate(need(ncol(info$data) >= 2, "Need at least two numeric columns for ggpairs."))
-      
+      if (is.null(info) || info$type != "pairwise_correlation") return(NULL)
+      results <- stratified_results()
+      if (is.null(results) || is.null(results$plots) || length(results$plots) == 0) {
+        validate(need(FALSE, "No correlation results available."))
+      }
+
       # use visualization type (only one for now)
       if (input$plot_type == "ggpairs") {
-        build_ggpairs_plot(info$data)
+        stratum <- input$selected_stratum
+        plots <- results$plots
+        if (is.null(stratum) || !stratum %in% names(plots)) {
+          stratum <- names(plots)[[1]]
+        }
+        plot_obj <- plots[[stratum]]
+        validate(need(!is.null(plot_obj), "Selected stratum has no data to plot."))
+        print(plot_obj)
       }
     },
     width  = function() plot_size()$w,
     height = function() plot_size()$h,
     res    = 96)
-    
+
     # --- Download handler ---
     output$download_plot <- downloadHandler(
       filename = function() paste0("ggpairs_plot_", Sys.Date(), ".png"),
       content = function(file) {
         info <- model_info()
         req(info)
-        validate(need(ncol(info$data) >= 2, "Need at least two numeric columns for ggpairs."))
-        
-        g <- if (input$plot_type == "ggpairs") build_ggpairs_plot(info$data)
-        
+        validate(need(info$type == "pairwise_correlation", "Pairwise correlation results are not available."))
+        results <- stratified_results()
+        req(results)
+        plots <- results$plots
+        req(plots)
+        stratum <- input$selected_stratum
+        if (is.null(stratum) || !stratum %in% names(plots)) {
+          stratum <- names(plots)[[1]]
+        }
+        g <- plots[[stratum]]
+        validate(need(!is.null(g), "Selected stratum has no data to plot."))
+
         width_in  <- input$plot_width / 96
         height_in <- input$plot_height / 96
-        
+
         ggsave(
           filename = file,
           plot = g,
