@@ -12,8 +12,8 @@ visualize_numeric_boxplots_ui <- function(id) {
     ),
     hr(),
     fluidRow(
-      column(6, numericInput(ns("n_rows"), "Grid rows",    value = 1, min = 1, step = 1)),
-      column(6, numericInput(ns("n_cols"), "Grid columns", value = 6, min = 1, step = 1))
+      column(6, numericInput(ns("n_rows"), "Grid rows",    value = 1, min = 1, max = 10, step = 1)),
+      column(6, numericInput(ns("n_cols"), "Grid columns", value = 6, min = 1, max = 10, step = 1))
     ),
     hr(),
     downloadButton(ns("download_plot"), "Download Plot")
@@ -63,7 +63,7 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info) {
       # Derive safe maxima and gently clamp control values so the visible
       # settings always match the rendered layout (removing the grid flicker).
       n_panels <- out$panels
-      max_val  <- max(1, as.integer(n_panels))
+      max_val  <- 10L
 
       layout_info <- out$layout
       if (is.null(layout_info) || !is.list(layout_info)) {
@@ -73,8 +73,12 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info) {
       safe_rows <- layout_info$nrow
       safe_cols <- layout_info$ncol
 
-      if (is.null(safe_rows) || !is.finite(safe_rows)) safe_rows <- max_val
-      if (is.null(safe_cols) || !is.finite(safe_cols)) safe_cols <- max_val
+      if (is.null(safe_rows) || !is.finite(safe_rows)) {
+        safe_rows <- min(10L, max(1L, as.integer(n_panels)))
+      }
+      if (is.null(safe_cols) || !is.finite(safe_cols)) {
+        safe_cols <- min(10L, max(1L, ceiling(as.integer(n_panels) / max(1L, safe_rows))))
+      }
 
       safe_rows <- min(max(1L, as.integer(safe_rows)), max_val)
       safe_cols <- min(max(1L, as.integer(safe_cols)), max_val)
@@ -87,15 +91,15 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info) {
 
       isolate({
         if (!identical(current_rows, safe_rows)) {
-          updateNumericInput(session, "n_rows", value = safe_rows, max = max_val)
+          updateNumericInput(session, "n_rows", value = safe_rows, min = 1, max = max_val)
         } else {
-          updateNumericInput(session, "n_rows", max = max_val)
+          updateNumericInput(session, "n_rows", min = 1, max = max_val)
         }
 
         if (!identical(current_cols, safe_cols)) {
-          updateNumericInput(session, "n_cols", value = safe_cols, max = max_val)
+          updateNumericInput(session, "n_cols", value = safe_cols, min = 1, max = max_val)
         } else {
-          updateNumericInput(session, "n_cols", max = max_val)
+          updateNumericInput(session, "n_cols", min = 1, max = max_val)
         }
       })
       

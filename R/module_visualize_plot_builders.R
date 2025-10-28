@@ -230,7 +230,7 @@ build_descriptive_categorical_plot <- function(df,
   if (length(plots) == 0) return(NULL)
   
   # ✅ Use the common layout helper; clamp without changing inputs
-  layout <- compute_grid_layout(
+  layout <- resolve_grid_layout(
     n_items   = length(plots),
     rows_input = suppressWarnings(as.numeric(nrow_input)),
     cols_input = suppressWarnings(as.numeric(ncol_input))
@@ -285,7 +285,7 @@ build_descriptive_numeric_boxplot <- function(df,
   plots <- Filter(Negate(is.null), plots)
   if (length(plots) == 0) return(NULL)
   
-  layout <- compute_grid_layout(
+  layout <- resolve_grid_layout(
     n_items = length(plots),
     rows_input = suppressWarnings(as.numeric(nrow_input)),
     cols_input = suppressWarnings(as.numeric(ncol_input))
@@ -443,10 +443,10 @@ build_anova_plot_info <- function(data, info, effective_input, line_colors = NUL
         build_plot(stratum_plots[[stratum_name]], stratum_name, y_limits)
       })
 
-      layout <- compute_grid_layout(
-        length(strata_plot_list),
-        effective_input("strata_rows"),
-        effective_input("strata_cols")
+      layout <- resolve_grid_layout(
+        n_items = length(strata_plot_list),
+        rows_input = effective_input("strata_rows"),
+        cols_input = effective_input("strata_cols")
       )
 
       max_strata_rows <- max(max_strata_rows, layout$nrow)
@@ -490,10 +490,10 @@ build_anova_plot_info <- function(data, info, effective_input, line_colors = NUL
     return(NULL)
   }
 
-  resp_layout <- compute_grid_layout(
-    length(response_plots),
-    effective_input("resp_rows"),
-    effective_input("resp_cols")
+  resp_layout <- resolve_grid_layout(
+    n_items = length(response_plots),
+    rows_input = effective_input("resp_rows"),
+    cols_input = effective_input("resp_cols")
   )
 
   final_plot <- if (length(response_plots) == 1) {
@@ -615,64 +615,48 @@ build_pca_biplot <- function(pca_obj, data, color_var = NULL, shape_var = NULL,
 # Low-level utilities
 # ---------------------------------------------------------------
 
-compute_grid_layout <- function(n_items, rows_input, cols_input) {
-  # Safely handle nulls
-  if (is.null(n_items) || length(n_items) == 0) {
-    return(list(nrow = 1, ncol = 1))
-  }
+resolve_grid_value <- function(value) {
+  if (is.null(value) || length(value) == 0) return(NA_integer_)
+  val <- suppressWarnings(as.integer(value[1]))
+  if (is.na(val) || val < 1) return(NA_integer_)
+  max(1L, min(10L, val))
+}
 
-  n_items <- suppressWarnings(as.numeric(n_items[1]))
+resolve_grid_layout <- function(n_items, rows_input = NULL, cols_input = NULL) {
+  n_items <- suppressWarnings(as.integer(n_items[1]))
   if (is.na(n_items) || n_items <= 0) {
-    return(list(nrow = 1, ncol = 1))
+    n_items <- 1L
   }
 
-  normalize_dim_input <- function(x) {
-    if (is.null(x) || length(x) == 0) {
-      return(0)
-    }
+  rows <- resolve_grid_value(rows_input)
+  cols <- resolve_grid_value(cols_input)
 
-    x <- suppressWarnings(as.numeric(x[1]))
-
-    if (is.na(x) || x < 0) {
-      return(0)
-    }
-
-    x
-  }
-
-  n_row_input <- normalize_dim_input(rows_input)
-  n_col_input <- normalize_dim_input(cols_input)
-  
-  if (n_row_input > 0) {
-    n_row_final <- min(n_row_input, n_items)
-    min_cols_needed <- ceiling(n_items / max(1, n_row_final))
-    if (n_col_input > 0) {
-      n_col_final <- min(max(n_col_input, min_cols_needed), n_items)
-    } else {
-      n_col_final <- min(min_cols_needed, n_items)
-    }
-  } else if (n_col_input > 0) {
-    n_col_final <- min(n_col_input, n_items)
-    n_row_final <- ceiling(n_items / max(1, n_col_final))
+  if (is.na(rows) && is.na(cols)) {
+    rows <- min(10L, max(1L, ceiling(sqrt(n_items))))
+    cols <- min(10L, max(1L, ceiling(n_items / rows)))
+  } else if (is.na(rows)) {
+    cols <- min(10L, max(1L, cols))
+    rows <- min(10L, max(1L, ceiling(n_items / cols)))
+  } else if (is.na(cols)) {
+    rows <- min(10L, max(1L, rows))
+    cols <- min(10L, max(1L, ceiling(n_items / rows)))
   } else {
-    # Default heuristic: single row if <=5 items, otherwise two
-    n_row_final <- ifelse(n_items <= 5, 1, 2)
-    n_col_final <- ceiling(n_items / n_row_final)
+    rows <- min(10L, max(1L, rows))
+    cols <- min(10L, max(1L, cols))
   }
 
-  # Trim any empty trailing rows/columns so we do not momentarily render
-  # layouts larger than the number of panels. This avoids the brief "jump"
-  # to a big grid before the inputs are clamped by updateNumericInput().
-  while (n_row_final > 1 && (n_row_final - 1) * n_col_final >= n_items) {
-    n_row_final <- n_row_final - 1
-  }
-  while (n_col_final > 1 && n_row_final * (n_col_final - 1) >= n_items) {
-    n_col_final <- n_col_final - 1
+  while (rows * cols < n_items) {
+    if (cols < rows && cols < 10L) {
+      cols <- cols + 1L
+    } else if (rows < 10L) {
+      rows <- rows + 1L
+    } else if (cols < 10L) {
+      cols <- cols + 1L
+    } else {
+      break
+    }
   }
 
-  list(
-    nrow = max(1, as.integer(n_row_final)),
-    ncol = max(1, as.integer(n_col_final))
-  )
+  list(nrow = rows, ncol = cols)
 }
 
