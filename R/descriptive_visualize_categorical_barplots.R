@@ -61,6 +61,15 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
       if (is.null(h) || !is.numeric(h) || is.na(h)) 300 else h
     })
     
+    custom_colors <- add_color_customization_server(
+      ns = ns,
+      input = input,
+      output = output,
+      data = filtered_data,
+      color_var_reactive = reactive(NULL),  # no grouping variable
+      multi_group = FALSE
+    )
+
     plot_info <- reactive({
       info <- summary_info()
 
@@ -82,7 +91,8 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
         strata_levels = strata_levels,
         show_proportions = isTRUE(input$show_proportions),
         nrow_input = input$n_rows,
-        ncol_input = input$n_cols
+        ncol_input = input$n_cols,
+        fill_colors = custom_colors()
       )
       validate(need(!is.null(out), "No categorical variables available for plotting."))
       out
@@ -99,15 +109,6 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
         )
       }
     })
-    
-    custom_colors <- add_color_customization_server(
-      ns = ns,
-      input = input,
-      output = output,
-      data = filtered_data,
-      color_var_reactive = reactive(NULL),  # no grouping variable
-      multi_group = FALSE
-    )
     
     output$download_plot <- downloadHandler(
       filename = function() paste0("categorical_barplots_", Sys.Date(), ".png"),
