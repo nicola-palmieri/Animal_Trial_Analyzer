@@ -144,14 +144,20 @@ build_metric_plot <- function(metric_info, y_label, title, n_rows, n_cols) {
   n_rows <- safe_numeric_input(n_rows, default = 1L)
   n_cols <- safe_numeric_input(n_cols, default = 1L)
 
+  primary_color <- get_primary_color()
+
   if (has_group) {
     legend_title <- if (!is.null(metric_info$group_label)) metric_info$group_label else "Group"
+    group_colors <- get_palette_for_values(df$.group)
     p <- ggplot(df, aes(x = .group, y = value, fill = .group)) +
       geom_col(position = "dodge", width = 0.65) +
       labs(fill = legend_title)
+    if (length(group_colors) > 0) {
+      p <- p + scale_fill_manual(values = group_colors)
+    }
   } else {
     p <- ggplot(df, aes(x = .group, y = value)) +
-      geom_col(width = 0.65, fill = "#2C7FB8") +
+      geom_col(width = 0.65, fill = primary_color) +
       guides(fill = "none")
   }
 

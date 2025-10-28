@@ -3,52 +3,28 @@
 # ===============================================================
 
 add_color_customization_ui <- function(ns, multi_group = TRUE) {
-  tags$details(
-    tags$summary(strong("Advanced options")),
-    uiOutput(ns("color_custom_ui"))
-  )
+  helpText("All plots use the fixed TableAnalyzer color palette.")
 }
 
 # ---- SERVER ----
 add_color_customization_server <- function(ns, input, output, data, color_var_reactive, multi_group = TRUE) {
-  output$color_custom_ui <- renderUI({
-    req(data())
-    color_var <- color_var_reactive()
-    
-    if (isTRUE(multi_group)) {
-      if (is.null(color_var)) return(NULL)
-      render_color_inputs(ns, data, color_var)
-    } else {
-      tagList(
-        br(),
-        h5("Line color"),
-        color_dropdown_input(ns, "single_color", basic_color_palette, ncol = 4)
-      )
-    }
-  })
-  
   reactive({
-    if (isTRUE(multi_group)) {
-      req(data())
-      color_var <- color_var_reactive()
-      req(color_var)
-      
-      lvls <- levels(as.factor(data()[[color_var]]))
-      base_palette <- rep(basic_color_palette, length.out = length(lvls))
-      cols <- vapply(seq_along(lvls), function(i) {
-        input_val <- input[[paste0("col_", color_var, "_", i)]]
-        if (is.null(input_val) || identical(input_val, "")) {
-          base_palette[i]
-        } else {
-          input_val
-        }
-      }, character(1))
-      names(cols) <- lvls
-      cols
+    if (!isTRUE(multi_group)) {
+      return(get_primary_color())
+    }
+
+    dat <- data()
+    color_var <- color_var_reactive()
+
+    if (is.null(dat) || is.null(color_var) || !nzchar(color_var) || !color_var %in% names(dat)) {
+      return(get_palette_for_n(1L))
+    }
+
+    colors <- get_palette_for_values(dat[[color_var]])
+    if (length(colors) == 0) {
+      get_palette_for_n(1L)
     } else {
-      selected_color <- input$single_color
-      if (is.null(selected_color)) selected_color <- "steelblue"
-      selected_color
+      colors
     }
   })
 }
