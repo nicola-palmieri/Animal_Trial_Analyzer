@@ -32,11 +32,12 @@ initialize_layout_state <- function(input, session) {
       }
 
       val <- suppressWarnings(as.numeric(input[[name]]))
-      if (is.na(val) || val <= 0) {
+      if (is.na(val) || val < 1) {
         layout_overrides[[name]] <- 0L
         layout_manual[[name]] <- FALSE
       } else {
-        layout_overrides[[name]] <- as.integer(val)
+        clamped <- as.integer(max(1, min(10, val)))
+        layout_overrides[[name]] <- clamped
         layout_manual[[name]] <- TRUE
       }
     })
@@ -49,7 +50,7 @@ initialize_layout_state <- function(input, session) {
 
   default_ui_value <- function(cur_val) {
     val <- if (is.null(cur_val)) 1 else cur_val
-    ifelse(is.na(val) || val <= 0, 1, val)
+    ifelse(is.na(val) || val <= 0, 1, min(10, val))
   }
 
   list(
@@ -67,10 +68,10 @@ observe_layout_synchronization <- function(plot_info_reactive, layout_state, ses
     if (is.null(info)) return()
 
     sync_input <- function(id, value, manual_key) {
-      val <- ifelse(is.null(value) || value <= 0, 1, value)
+      val <- ifelse(is.null(value) || value <= 0, 1, min(10, value))
       if (!isTRUE(layout_state$manual[[manual_key]])) {
         layout_state$suppress[[id]] <- TRUE
-        updateNumericInput(session, id, value = val)
+        updateNumericInput(session, id, value = val, min = 1, max = 10)
       }
     }
 
