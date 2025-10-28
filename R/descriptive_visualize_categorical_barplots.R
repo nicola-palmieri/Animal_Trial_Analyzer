@@ -39,19 +39,24 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
     })
     
     plot_info <- reactive({
-      dat <- filtered_data()
       info <- summary_info()
-      
-      validate(need(!is.null(dat) && is.data.frame(dat) && nrow(dat) > 0, "No data available."))
+
       validate(need(!is.null(info), "Summary not available."))
-      
+
+      processed <- resolve_input_value(info$processed_data)
+      dat <- if (!is.null(processed)) processed else filtered_data()
+
+      validate(need(!is.null(dat) && is.data.frame(dat) && nrow(dat) > 0, "No data available."))
+
       selected_vars <- resolve_input_value(info$selected_vars)
       group_var     <- resolve_input_value(info$group_var)
-      
+      strata_levels <- resolve_input_value(info$strata_levels)
+
       out <- build_descriptive_categorical_plot(
         df = dat,
         selected_vars = selected_vars,
         group_var = group_var,
+        strata_levels = strata_levels,
         show_proportions = isTRUE(input$show_proportions),
         nrow_input = input$n_rows,
         ncol_input = input$n_cols
