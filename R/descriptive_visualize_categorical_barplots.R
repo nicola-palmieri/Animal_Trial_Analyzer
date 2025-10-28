@@ -44,8 +44,26 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
   moduleServer(id, function(input, output, session) {
     
     resolve_input_value <- function(x) {
-      if (is.null(x)) return(NULL)
-      if (is.reactive(x)) x() else x
+      if (is.null(x)) {
+        return(NULL)
+      }
+
+      if (shiny::is.reactive(x)) {
+        return(x())
+      }
+
+      if (is.function(x)) {
+        res <- tryCatch(
+          list(value = x(), ok = TRUE),
+          error = function(e) list(value = NULL, ok = FALSE)
+        )
+        if (isTRUE(res$ok)) {
+          return(res$value)
+        }
+        return(NULL)
+      }
+
+      x
     }
     
     plot_width <- reactive({

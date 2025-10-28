@@ -37,8 +37,26 @@ visualize_missing_ui <- function(id) {
 
 # ---- Shared computation helpers ----
 resolve_metric_input <- function(x) {
-  if (is.null(x)) return(NULL)
-  if (is.reactive(x)) x() else x
+  if (is.null(x)) {
+    return(NULL)
+  }
+
+  if (shiny::is.reactive(x)) {
+    return(x())
+  }
+
+  if (is.function(x)) {
+    res <- tryCatch(
+      list(value = x(), ok = TRUE),
+      error = function(e) list(value = NULL, ok = FALSE)
+    )
+    if (isTRUE(res$ok)) {
+      return(res$value)
+    }
+    return(NULL)
+  }
+
+  x
 }
 
 safe_numeric_input <- function(value, default = 1L) {
