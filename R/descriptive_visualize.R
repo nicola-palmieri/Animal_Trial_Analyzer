@@ -1,5 +1,5 @@
 # ===============================================================
-# Visualization Module — Descriptive Statistics
+# Visualization Module — Descriptive Statistics (Dispatcher)
 # ===============================================================
 
 visualize_descriptive_ui <- function(id) {
@@ -15,147 +15,67 @@ visualize_descriptive_ui <- function(id) {
         label = "Visualization type:",
         choices = c(
           "Categorical Distributions" = "categorical",
-          "Numeric Boxplots" = "boxplots",
-          "Numeric Histograms" = "histograms",
-          "CV (%)" = "cv",
-          "Outlier Counts" = "outliers",
-          "Missingness (%)" = "missing",
-          "Shapiro–Wilk p-values" = "shapiro"
+          "Numeric Boxplots"          = "boxplots",
+          "Numeric Histograms"        = "histograms",
+          "CV (%)"                    = "cv",
+          "Outlier Counts"            = "outliers",
+          "Missingness (%)"           = "missing",
+          "Shapiro–Wilk p-values"     = "shapiro"
         ),
-        selected = "boxplots"
+        selected = "categorical"
       ),
       hr(),
-      numericInput(
-        ns("plot_width"),
-        label = "Plot width (px)",
-        value = 800,
-        min = 400,
-        max = 2000,
-        step = 100
-      ),
-      numericInput(
-        ns("plot_height"),
-        label = "Plot height (px)",
-        value = 600,
-        min = 400,
-        max = 2000,
-        step = 100
-      ),
-      hr(),
-      downloadButton(ns("download_plot"), "Download Plot")
+      uiOutput(ns("sub_controls"))  # controls from active submodule
     ),
     mainPanel(
       width = 8,
-      h4("Descriptive Visualization"),
-      plotOutput(ns("plot"))
+      plotOutput(ns("plot"), height = "auto")  # parent-owned plotOutput
     )
   )
 }
 
-
 visualize_descriptive_server <- function(id, filtered_data, descriptive_summary) {
   moduleServer(id, function(input, output, session) {
+    ns <- session$ns
     
-    # ------------------------------------------------------------
-    # 1️⃣ Base reactive: Data + summary check
-    # ------------------------------------------------------------
-    df <- reactive({
-      data <- filtered_data()
-      validate(need(!is.null(data) && is.data.frame(data), "No data available."))
-      data
-    })
+    # holder for the active submodule's returned reactives
+    active <- reactiveVal(NULL)
     
-    summary_info <- reactive({
-      info <- descriptive_summary()
-      validate(need(!is.null(info), "Run descriptive summary first."))
-      validate(need(!is.null(info$summary), "Summary not available."))
-      info
-    })
-    
-    plot_size <- reactive({
-      w <- suppressWarnings(as.numeric(input$plot_width))
-      h <- suppressWarnings(as.numeric(input$plot_height))
-      list(
-        w = ifelse(is.na(w) || w <= 0, 800, w),
-        h = ifelse(is.na(h) || h <= 0, 600, h)
+    # Insert the submodule controls into the same sidebar
+    output$sub_controls <- renderUI({
+      switch(input$plot_type,
+             "categorical" = visualize_categorical_barplots_ui(ns("categorical")),
+             "boxplots"    = h5("Boxplot controls not yet implemented."),
+             "histograms"  = h5("Histogram controls not yet implemented."),
+             "cv"          = h5("CV controls not yet implemented."),
+             "outliers"    = h5("Outlier controls not yet implemented."),
+             "missing"     = h5("Missingness controls not yet implemented."),
+             "shapiro"     = h5("Shapiro–Wilk controls not yet implemented.")
       )
     })
     
-    # ------------------------------------------------------------
-    # 2️⃣ Build all plots using the shared helper
-    # ------------------------------------------------------------
-    plots_all <- reactive({
-      info <- summary_info()
+    # Start/replace the submodule server and capture its return
+    observeEvent(input$plot_type, {
+      type <- input$plot_type
+      if (is.null(type) || length(type) == 0) return()
       
-      summary_data <- info$summary
-      if (is.reactive(summary_data)) summary_data <- summary_data()
-      
-      selected_vars <- info$selected_vars
-      if (is.reactive(selected_vars)) selected_vars <- selected_vars()
-      
-      data_subset <- df()
-      if (!is.null(selected_vars)) {
-        data_subset <- data_subset[, intersect(names(data_subset), selected_vars), drop = FALSE]
-      }
-      
-      build_descriptive_plots(summary_data, data_subset)
-    })
-    
-    # ------------------------------------------------------------
-    # 3️⃣ Pick correct plot based on selection
-    # ------------------------------------------------------------
-    build_current_plot <- reactive({
-      plots <- plots_all()
-      validate(need(!is.null(plots), "No plots available."))
-      
-      metrics <- plots$metrics
-      switch(
-        input$plot_type,
-        categorical = plots$factors,
-        boxplots = plots$boxplots,
-        histograms = plots$histograms,
-        cv = if (!is.null(metrics)) metrics$cv else NULL,
-        outliers = if (!is.null(metrics)) metrics$outliers else NULL,
-        missing = if (!is.null(metrics)) metrics$missing else NULL,
-        shapiro = if (!is.null(metrics)) metrics$shapiro else NULL,
-        NULL
+      handle <- switch(type[[1]],
+                       "categorical" = visualize_categorical_barplots_server("categorical", filtered_data, descriptive_summary),
+                       NULL
       )
-    })
+      active(handle)
+    }, ignoreInit = FALSE)
     
-    # ------------------------------------------------------------
-    # 4️⃣ Render plot safely
-    # ------------------------------------------------------------
+    # Parent renders the plot using the submodule's returned reactives
     output$plot <- renderPlot({
-      p <- build_current_plot()
-      validate(need(!is.null(p), "Selected plot not available."))
-      # patchwork objects are fine with print()
+      h <- active()
+      req(h)
+      p <- h$plot()
+      validate(need(!is.null(p), "No plot available."))
       print(p)
     },
-    width = function() plot_size()$w,
-    height = function() plot_size()$h,
+    width  = function() { h <- active(); if (is.null(h)) 800 else h$width()  },
+    height = function() { h <- active(); if (is.null(h)) 600 else h$height() },
     res = 96)
-    
-    # ------------------------------------------------------------
-    # 5️⃣ Download
-    # ------------------------------------------------------------
-    output$download_plot <- downloadHandler(
-      filename = function() paste0("descriptive_plot_", Sys.Date(), ".png"),
-      content = function(file) {
-        p <- build_current_plot()
-        validate(need(!is.null(p), "No plot available to download."))
-        
-        size <- plot_size()
-        ggsave(
-          filename = file,
-          plot = p,
-          device = "png",
-          dpi = 300,
-          width = size$w / 96,
-          height = size$h / 96,
-          units = "in",
-          limitsize = FALSE
-        )
-      }
-    )
   })
 }

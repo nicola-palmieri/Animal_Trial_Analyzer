@@ -1152,23 +1152,14 @@ visualize_twoway_server <- function(id, filtered_data, model_fit) {
     model_info <- reactive(model_fit())
     
     layout_state <- initialize_layout_state(input, session)
-    
-    plot_info <- reactive({
-      info <- model_info()
-      if (is.null(info) || info$type != "twoway_anova") return(NULL)
-      data <- df()
-      build_anova_plot_info(data, info, layout_state$effective_input)
-    })
-    
-    observe_layout_synchronization(plot_info, layout_state, session)
-    
+
     # ---- color customization ----
     color_var_reactive <- reactive({
       info <- model_info()
       if (is.null(info)) return(NULL)
       info$factors$factor2   # color lines by factor2
     })
-    
+
     custom_colors <- add_color_customization_server(
       ns = ns,
       input = input,
@@ -1177,6 +1168,24 @@ visualize_twoway_server <- function(id, filtered_data, model_fit) {
       color_var_reactive = color_var_reactive,
       multi_group = TRUE
     )
+
+    plot_info <- reactive({
+      info <- model_info()
+      if (is.null(info) || info$type != "twoway_anova") return(NULL)
+      data <- df()
+      line_colors <- custom_colors()
+      if (is.null(line_colors) || length(line_colors) == 0) {
+        line_colors <- NULL
+      }
+      build_anova_plot_info(
+        data,
+        info,
+        layout_state$effective_input,
+        line_colors = line_colors
+      )
+    })
+
+    observe_layout_synchronization(plot_info, layout_state, session)
     
     plot_obj <- reactive({
       info <- plot_info()
@@ -1203,14 +1212,11 @@ visualize_twoway_server <- function(id, filtered_data, model_fit) {
     # ✅ simpler, consistent naming and structure
     output$plot <- renderPlot({
       info <- model_info()
-      req(info, input$plot_type, plot_obj())
+      req(info, input$plot_type)
 
       if (input$plot_type == "mean_se") {
-        cols <- custom_colors()
-        p <- plot_obj() +
-          ggplot2::scale_color_manual(values = cols) +
-          ggplot2::scale_fill_manual(values = cols)
-        p
+        req(plot_obj())
+        plot_obj()
       }
     },
     width = function() plot_size()$w,
@@ -1249,7 +1255,10 @@ basic_color_palette <- c(
 )
 
 # ---- UI Helper ----
-color_dropdown_input <- function(ns, id = "color_choice", palette = basic_color_palette, ncol = 4) {
+color_dropdown_input <- function(ns, id = "color_choice", palette = basic_color_palette,
+                                 ncol = 4, selected = NULL) {
+  selected_color <- if (is.null(selected)) palette[1] else selected
+
   tagList(
     tags$style(HTML(sprintf("
       .color-dropdown {
@@ -1263,7 +1272,6 @@ color_dropdown_input <- function(ns, id = "color_choice", palette = basic_color_
         height: 32px;
         border: 1px solid #ccc;
         border-radius: 4px;
-        background-color: steelblue;
         cursor: pointer;
       }
       .color-dropdown-grid {
@@ -1294,7 +1302,8 @@ color_dropdown_input <- function(ns, id = "color_choice", palette = basic_color_
       class = "color-dropdown",
       tags$div(
         id = ns(paste0(id, "_button")),
-        class = "color-dropdown-button"
+        class = "color-dropdown-button",
+        style = sprintf("background-color:%s;", selected_color)
       ),
       tags$div(
         id = ns(paste0(id, "_grid")),
@@ -1323,9 +1332,11 @@ color_dropdown_input <- function(ns, id = "color_choice", palette = basic_color_
       $(document).on('click', function(){
         $('.color-dropdown-grid').hide();
       });
-    ", ns(id), ns(id))))
+      Shiny.setInputValue('%s','%s',{priority:'event'});
+    ", ns(id), ns(id), ns(id), selected_color)))
   )
-}# ===============================================================
+}
+# ===============================================================
 # 🧾 Animal Trial Analyzer — Descriptive Statistics Module (Aligned Layout)
 # ===============================================================
 
@@ -1391,8 +1402,22 @@ descriptive_server <- function(id, filtered_data) {
       validate(need(length(selected_vars) > 0, "Please select at least one variable."))
       
       group_var <- if (is.null(input$stratify_var) || input$stratify_var == "None") NULL else input$stratify_var
-      if (!is.null(group_var) && !(group_var %in% selected_vars)) {
-        selected_vars <- c(selected_vars, group_var)
+      if (!is.null(group_var)) {
+        # make sure the group var is present
+        if (!(group_var %in% names(local_data))) {
+          selected_vars <- unique(c(selected_vars, group_var))
+          local_data <- local_data[, selected_vars, drop = FALSE]
+        }
+        
+        # keep ONLY selected levels, in the exact order; drop NA and unused levels
+        sel <- input$strata_order
+        if (!is.null(sel) && length(sel) > 0) {
+          local_data <- dplyr::filter(local_data, .data[[group_var]] %in% sel)
+          local_data[[group_var]] <- factor(as.character(local_data[[group_var]]), levels = sel)
+        } else {
+          local_data[[group_var]] <- factor(as.character(local_data[[group_var]]))
+        }
+        local_data <- droplevels(local_data)
       }
       
       local_data <- local_data[, selected_vars, drop = FALSE]
@@ -1457,7 +1482,7 @@ descriptive_server <- function(id, filtered_data) {
 compute_descriptive_summary <- function(data, group_var = NULL) {
   numeric_vars <- names(data)[sapply(data, is.numeric)]
   
-  group_data <- if (!is.null(group_var)) group_by(data, .data[[group_var]]) else data
+  group_data <- if (!is.null(group_var)) group_by(data, .data[[group_var]], .drop = TRUE) else data
   
   skim_out <- if (!is.null(group_var)) {
     group_data %>% skim()
@@ -1563,32 +1588,14 @@ visualize_descriptive_ui <- function(id) {
           "Missingness (%)" = "missing",
           "Shapiro–Wilk p-values" = "shapiro"
         ),
-        selected = "boxplots"
+        selected = "categorical"
       ),
       hr(),
-      numericInput(
-        ns("plot_width"),
-        label = "Plot width (px)",
-        value = 800,
-        min = 400,
-        max = 2000,
-        step = 100
-      ),
-      numericInput(
-        ns("plot_height"),
-        label = "Plot height (px)",
-        value = 600,
-        min = 400,
-        max = 2000,
-        step = 100
-      ),
-      hr(),
-      downloadButton(ns("download_plot"), "Download Plot")
+      uiOutput(ns("sub_controls"))  # 👈 placeholder for submodule-specific controls
     ),
     mainPanel(
       width = 8,
-      h4("Descriptive Visualization"),
-      plotOutput(ns("plot"))
+      plotOutput(ns("plot"), height = "auto")
     )
   )
 }
@@ -1596,37 +1603,84 @@ visualize_descriptive_ui <- function(id) {
 
 visualize_descriptive_server <- function(id, filtered_data, descriptive_summary) {
   moduleServer(id, function(input, output, session) {
+    ns <- session$ns
     
-    # ------------------------------------------------------------
-    # 1️⃣ Base reactive: Data + summary check
-    # ------------------------------------------------------------
-    df <- reactive({
-      data <- filtered_data()
-      validate(need(!is.null(data) && is.data.frame(data), "No data available."))
-      data
-    })
-    
-    summary_info <- reactive({
-      info <- descriptive_summary()
-      validate(need(!is.null(info), "Run descriptive summary first."))
-      validate(need(!is.null(info$summary), "Summary not available."))
-      info
-    })
-    
-    plot_size <- reactive({
-      w <- suppressWarnings(as.numeric(input$plot_width))
-      h <- suppressWarnings(as.numeric(input$plot_height))
-      list(
-        w = ifelse(is.na(w) || w <= 0, 800, w),
-        h = ifelse(is.na(h) || h <= 0, 600, h)
+    # --- Submodule controls in the same sidebar ---
+    output$sub_controls <- renderUI({
+      switch(input$plot_type,
+             "categorical" = visualize_categorical_barplots_ui(ns("categorical")),
+             "boxplots"    = h5("Boxplot controls not yet implemented."),
+             "histograms"  = h5("Histogram controls not yet implemented."),
+             "cv"          = h5("CV controls not yet implemented."),
+             "outliers"    = h5("Outlier controls not yet implemented."),
+             "missing"     = h5("Missingness controls not yet implemented."),
+             "shapiro"     = h5("Shapiro–Wilk controls not yet implemented.")
       )
     })
     
-    # ------------------------------------------------------------
-    # 2️⃣ Build all plots using the shared helper
-    # ------------------------------------------------------------
-    plots_all <- reactive({
+    # --- Route plot rendering to active submodule ---
+    observeEvent(input$plot_type, {
+      plot_type <- input$plot_type
+      if (is.null(plot_type) || length(plot_type) == 0) return(NULL)
+      plot_type <- plot_type[[1]]
+      
+      switch(plot_type,
+             "categorical" = visualize_categorical_barplots_server("categorical", filtered_data, descriptive_summary),
+             NULL
+      )
+    })
+    
+    
+  })
+}
+
+# ===============================================================
+# 🟦 Descriptive Visualization — Categorical Barplots
+# ===============================================================
+
+visualize_categorical_barplots_ui <- function(id) {
+  ns <- NS(id)
+  tagList(
+    checkboxInput(ns("show_proportions"), "Show proportions instead of counts", FALSE),
+    fluidRow(
+      column(
+        6,
+        numericInput(ns("plot_width"), "Subplot width (px)", 400, 200, 2000, 50)
+      ),
+      column(
+        6,
+        numericInput(ns("plot_height"), "Subplot height (px)", 300, 200, 2000, 50)
+      )
+    ),
+    downloadButton(ns("download_plot"), "Download Plot")
+  )
+}
+
+
+visualize_categorical_barplots_server <- function(id, filtered_data, summary_info) {
+  moduleServer(id, function(input, output, session) {
+    ns <- session$ns
+    
+    df <- reactive({
+      data <- filtered_data()
+      validate(need(!is.null(data), "No data available."))
+      data
+    })
+    
+    summary_df <- reactive({
       info <- summary_info()
+      if (is.reactive(info$summary)) info <- info$summary()
+      info
+    })
+    
+    # ------------------------------------------------------------
+    # Build categorical barplots
+    # ------------------------------------------------------------
+    plot_obj <- reactive({
+      data <- filtered_data()
+      info <- summary_info()
+      validate(need(!is.null(data), "No data available."))
+      validate(need(!is.null(info), "Summary not available."))
       
       summary_data <- info$summary
       if (is.reactive(summary_data)) summary_data <- summary_data()
@@ -1634,65 +1688,35 @@ visualize_descriptive_server <- function(id, filtered_data, descriptive_summary)
       selected_vars <- info$selected_vars
       if (is.reactive(selected_vars)) selected_vars <- selected_vars()
       
-      data_subset <- df()
-      if (!is.null(selected_vars)) {
-        data_subset <- data_subset[, intersect(names(data_subset), selected_vars), drop = FALSE]
-      }
-      
-      build_descriptive_plots(summary_data, data_subset)
-    })
-    
-    # ------------------------------------------------------------
-    # 3️⃣ Pick correct plot based on selection
-    # ------------------------------------------------------------
-    build_current_plot <- reactive({
-      plots <- plots_all()
-      validate(need(!is.null(plots), "No plots available."))
-      
-      metrics <- plots$metrics
-      switch(
-        input$plot_type,
-        categorical = plots$factors,
-        boxplots = plots$boxplots,
-        histograms = plots$histograms,
-        cv = if (!is.null(metrics)) metrics$cv else NULL,
-        outliers = if (!is.null(metrics)) metrics$outliers else NULL,
-        missing = if (!is.null(metrics)) metrics$missing else NULL,
-        shapiro = if (!is.null(metrics)) metrics$shapiro else NULL,
-        NULL
+      # --- Call the existing app helper ---
+      build_descriptive_categorical_plot(
+        summary_data = summary_data,
+        raw_data = data,
+        show_proportions = input$show_proportions,
+        width_px = input$plot_width,
+        height_px = input$plot_height
       )
     })
     
-    # ------------------------------------------------------------
-    # 4️⃣ Render plot safely
-    # ------------------------------------------------------------
     output$plot <- renderPlot({
-      p <- build_current_plot()
-      validate(need(!is.null(p), "Selected plot not available."))
-      # patchwork objects are fine with print()
-      print(p)
+      obj <- plot_obj()
+      validate(need(!is.null(obj), "Plot object not available."))
+      print(obj$plot)
     },
-    width = function() plot_size()$w,
-    height = function() plot_size()$h,
+    width = function() input$plot_width,
+    height = function() input$plot_height,
     res = 96)
     
-    # ------------------------------------------------------------
-    # 5️⃣ Download
-    # ------------------------------------------------------------
     output$download_plot <- downloadHandler(
-      filename = function() paste0("descriptive_plot_", Sys.Date(), ".png"),
+      filename = function() paste0("categorical_barplots_", Sys.Date(), ".png"),
       content = function(file) {
-        p <- build_current_plot()
-        validate(need(!is.null(p), "No plot available to download."))
-        
-        size <- plot_size()
         ggsave(
           filename = file,
-          plot = p,
+          plot = plot_obj(),
           device = "png",
           dpi = 300,
-          width = size$w / 96,
-          height = size$h / 96,
+          width = input$plot_width / 96,
+          height = input$plot_height / 96,
           units = "in",
           limitsize = FALSE
         )
@@ -1959,9 +1983,15 @@ add_color_customization_server <- function(ns, input, output, data, color_var_re
       req(color_var)
       
       lvls <- levels(as.factor(data()[[color_var]]))
-      cols <- sapply(seq_along(lvls), function(i) {
-        input[[paste0("col_", color_var, "_", i)]]
-      })
+      base_palette <- rep(basic_color_palette, length.out = length(lvls))
+      cols <- vapply(seq_along(lvls), function(i) {
+        input_val <- input[[paste0("col_", color_var, "_", i)]]
+        if (is.null(input_val) || identical(input_val, "")) {
+          base_palette[i]
+        } else {
+          input_val
+        }
+      }, character(1))
       names(cols) <- lvls
       cols
     } else {
@@ -1983,14 +2013,23 @@ render_color_inputs <- function(ns, data, color_var) {
   values <- data()[[color_var]]
   lvls <- if (is.factor(values)) levels(values) else unique(as.character(values))
   lvls <- lvls[!is.na(lvls)]
-  
+  default_palette <- rep(basic_color_palette, length.out = length(lvls))
+
   tagList(
-    h5(paste("Customize colors for", color_var)),
+    br(),
+    h5(paste("Line colors for", color_var)),
     lapply(seq_along(lvls), function(i) {
-      colourpicker::colourInput(
-        ns(paste0("col_", color_var, "_", i)),
-        label = lvls[i],
-        value = RColorBrewer::brewer.pal(8, "Set2")[i %% 8 + 1]
+      selected <- default_palette[i]
+      tags$div(
+        style = "margin-bottom: 8px;",
+        tags$label(lvls[i], style = "display:block; margin-bottom: 4px;"),
+        color_dropdown_input(
+          ns,
+          id = paste0("col_", color_var, "_", i),
+          palette = basic_color_palette,
+          ncol = 4,
+          selected = selected
+        )
       )
     })
   )
