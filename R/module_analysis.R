@@ -7,8 +7,8 @@ analysis_ui <- function(id) {
   sidebarLayout(
     sidebarPanel(
       width = 4,
-      h4("Step 3 — Analyze Results"),
-      p("Choose the statistical approach that fits your trial design, then inspect the summaries on the right."),
+      h4("Step 3 — Select analysis"),
+      p("Select the statistical approach that fits your trial design, then inspect the summaries on the right."),
       hr(),
       tags$style(HTML(sprintf("
         /* Make only this input's dropdown tall enough to show all items */
@@ -41,7 +41,7 @@ analysis_ui <- function(id) {
     ),
     mainPanel(
       width = 8,
-      h4("Analysis Results"),
+      h4("Analysis results"),
       uiOutput(ns("results_panel"))
     )
   )

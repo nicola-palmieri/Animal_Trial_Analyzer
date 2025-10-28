@@ -48,7 +48,7 @@ guard_stratification_levels <- function(data, stratify_var,
 # ---------------------------------------------------------------
 render_stratification_controls <- function(ns, data, input,
                                            section_title = "Advanced options",
-                                           stratify_label = "Stratify by:",
+                                           stratify_label = "Select stratification variable:",
                                            none_label = "None") {
   df <- .resolve_data(data)
   req(df)
@@ -96,7 +96,7 @@ render_strata_order_input <- function(ns, data, strat_var,
   if (length(strata_levels) == 0) return(NULL)
   
   if (is.null(order_label)) {
-    order_label <- paste("Order of levels for", strat_var, "(strata):")
+    order_label <- paste("Order of levels (first = reference):", strat_var)
   }
   
   selectInput(

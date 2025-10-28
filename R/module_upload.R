@@ -7,12 +7,12 @@ upload_ui <- function(id) {
   sidebarLayout(
     sidebarPanel(
       width = 4,
-      h4("Step 1 — Upload Data"),
-      p("Upload your Excel file, choose the worksheet to analyze, and ensure the data follow either the long or wide format shown below."),
+      h4("Step 1 — Select data file"),
+      p("Select your Excel file, choose the worksheet to analyze, and ensure the data follow either the long or wide format shown below."),
       hr(),
       radioButtons(
         ns("layout_type"),
-        label = "Data layout:",
+        label = "Select data layout:",
         choices = c(
           "Long format (one row per measurement)" = "long",
           "Wide format (replicates in columns)" = "wide"
@@ -23,14 +23,14 @@ upload_ui <- function(id) {
       hr(),
       fileInput(
         ns("file"),
-        "Upload Excel file (.xlsx / .xls / .xlsm)",
+        "Select Excel file (.xlsx/.xls/.xlsm)",
         accept = c(".xlsx", ".xls", ".xlsm")
       ),
       uiOutput(ns("sheet_selector"))
     ),
     mainPanel(
       width = 8,
-      h4("Data Preview"),
+      h4("Data preview"),
       verbatimTextOutput(ns("validation_msg")),
       DTOutput(ns("preview"))
     )
