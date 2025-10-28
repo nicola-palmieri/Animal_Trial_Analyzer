@@ -21,7 +21,7 @@ add_color_customization_server <- function(ns, input, output, data, color_var_re
     } else {
       tagList(
         br(),
-        h5("Line color"),
+        h5("Color"),
         color_dropdown_input(ns, "single_color", basic_color_palette, ncol = 4)
       )
     }
