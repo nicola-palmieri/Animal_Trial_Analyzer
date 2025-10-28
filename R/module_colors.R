@@ -14,26 +14,41 @@ add_color_customization_server <- function(ns, input, output, data, color_var_re
   output$color_custom_ui <- renderUI({
     req(data())
     color_var <- color_var_reactive()
-    
+
+    single_color_ui <- tagList(
+      br(),
+      h5("Line color"),
+      color_dropdown_input(ns, "single_color", basic_color_palette, ncol = 4)
+    )
+
     if (isTRUE(multi_group)) {
-      if (is.null(color_var)) return(NULL)
-      render_color_inputs(ns, data, color_var)
+      if (is.null(color_var) || identical(color_var, "") || identical(color_var, "None")) {
+        single_color_ui
+      } else {
+        render_color_inputs(ns, data, color_var)
+      }
     } else {
-      tagList(
-        br(),
-        h5("Line color"),
-        color_dropdown_input(ns, "single_color", basic_color_palette, ncol = 4)
-      )
+      single_color_ui
     }
   })
-  
+
   reactive({
     if (isTRUE(multi_group)) {
-      req(data())
       color_var <- color_var_reactive()
-      req(color_var)
-      
-      lvls <- levels(as.factor(data()[[color_var]]))
+      if (is.null(color_var) || identical(color_var, "") || identical(color_var, "None")) {
+        selected_color <- input$single_color
+        if (is.null(selected_color) || identical(selected_color, "")) selected_color <- "steelblue"
+        return(selected_color)
+      }
+
+      dataset <- data()
+      if (is.null(dataset) || !color_var %in% names(dataset)) {
+        selected_color <- input$single_color
+        if (is.null(selected_color) || identical(selected_color, "")) selected_color <- "steelblue"
+        return(selected_color)
+      }
+
+      lvls <- levels(as.factor(dataset[[color_var]]))
       base_palette <- rep(basic_color_palette, length.out = length(lvls))
       cols <- vapply(seq_along(lvls), function(i) {
         input_val <- input[[paste0("col_", color_var, "_", i)]]
