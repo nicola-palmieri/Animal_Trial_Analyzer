@@ -40,12 +40,15 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info) {
     })
     
     plot_info <- reactive({
-      dat <- filtered_data()
       info <- summary_info()
-      
-      validate(need(!is.null(dat) && is.data.frame(dat) && nrow(dat) > 0, "No data available."))
+
       validate(need(!is.null(info), "Summary not available."))
-      
+
+      processed <- resolve_input_value(info$processed_data)
+      dat <- if (!is.null(processed)) processed else filtered_data()
+
+      validate(need(!is.null(dat) && is.data.frame(dat) && nrow(dat) > 0, "No data available."))
+
       selected_vars <- resolve_input_value(info$selected_vars)
       group_var     <- resolve_input_value(info$group_var)
       
