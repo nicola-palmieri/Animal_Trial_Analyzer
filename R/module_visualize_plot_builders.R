@@ -229,7 +229,7 @@ build_descriptive_categorical_plot <- function(df,
   plots <- Filter(Negate(is.null), plots)
   if (length(plots) == 0) return(NULL)
   
-  # ✅ Use the common layout helper; clamp without changing inputs
+  # ✅ Use the common layout helper to arrange plots using the requested grid
   layout <- resolve_grid_layout(
     n_items   = length(plots),
     rows_input = suppressWarnings(as.numeric(nrow_input)),
@@ -635,7 +635,7 @@ resolve_grid_value <- function(value) {
   if (is.null(value) || length(value) == 0) return(NA_integer_)
   val <- suppressWarnings(as.integer(value[1]))
   if (is.na(val) || val < 1) return(NA_integer_)
-  max(1L, min(10L, val))
+  val
 }
 
 resolve_grid_layout <- function(n_items, rows_input = NULL, cols_input = NULL) {
@@ -644,32 +644,40 @@ resolve_grid_layout <- function(n_items, rows_input = NULL, cols_input = NULL) {
     n_items <- 1L
   }
 
-  rows <- resolve_grid_value(rows_input)
-  cols <- resolve_grid_value(cols_input)
+  rows_raw <- resolve_grid_value(rows_input)
+  cols_raw <- resolve_grid_value(cols_input)
+
+  rows <- rows_raw
+  cols <- cols_raw
 
   if (is.na(rows) && is.na(cols)) {
-    rows <- min(10L, max(1L, ceiling(sqrt(n_items))))
-    cols <- min(10L, max(1L, ceiling(n_items / rows)))
+    rows <- ceiling(sqrt(n_items))
+    cols <- ceiling(n_items / rows)
   } else if (is.na(rows)) {
-    cols <- min(10L, max(1L, cols))
-    rows <- min(10L, max(1L, ceiling(n_items / cols)))
+    cols <- cols_raw
+    if (is.na(cols) || cols <= 0) {
+      rows <- ceiling(sqrt(n_items))
+      cols <- ceiling(n_items / rows)
+    } else {
+      rows <- ceiling(n_items / cols)
+    }
   } else if (is.na(cols)) {
-    rows <- min(10L, max(1L, rows))
-    cols <- min(10L, max(1L, ceiling(n_items / rows)))
-  } else {
-    rows <- min(10L, max(1L, rows))
-    cols <- min(10L, max(1L, cols))
+    rows <- rows_raw
+    if (is.na(rows) || rows <= 0) {
+      rows <- ceiling(sqrt(n_items))
+      cols <- ceiling(n_items / rows)
+    } else {
+      cols <- ceiling(n_items / rows)
+    }
   }
 
-  while (rows * cols < n_items) {
-    if (cols < rows && cols < 10L) {
-      cols <- cols + 1L
-    } else if (rows < 10L) {
-      rows <- rows + 1L
-    } else if (cols < 10L) {
-      cols <- cols + 1L
-    } else {
-      break
+  if ((is.na(rows_raw) || is.na(cols_raw)) && !is.na(rows) && !is.na(cols)) {
+    while (rows * cols < n_items) {
+      if (cols <= rows) {
+        cols <- cols + 1L
+      } else {
+        rows <- rows + 1L
+      }
     }
   }
 
