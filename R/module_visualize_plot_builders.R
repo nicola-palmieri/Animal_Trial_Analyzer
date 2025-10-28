@@ -644,21 +644,32 @@ compute_grid_layout <- function(n_items, rows_input, cols_input) {
   n_col_input <- normalize_dim_input(cols_input)
   
   if (n_row_input > 0) {
-    n_row_final <- n_row_input
+    n_row_final <- min(n_row_input, n_items)
+    min_cols_needed <- ceiling(n_items / max(1, n_row_final))
     if (n_col_input > 0) {
-      n_col_final <- max(n_col_input, ceiling(n_items / max(1, n_row_final)))
+      n_col_final <- min(max(n_col_input, min_cols_needed), n_items)
     } else {
-      n_col_final <- ceiling(n_items / max(1, n_row_final))
+      n_col_final <- min(min_cols_needed, n_items)
     }
   } else if (n_col_input > 0) {
-    n_col_final <- n_col_input
+    n_col_final <- min(n_col_input, n_items)
     n_row_final <- ceiling(n_items / max(1, n_col_final))
   } else {
     # Default heuristic: single row if <=5 items, otherwise two
     n_row_final <- ifelse(n_items <= 5, 1, 2)
     n_col_final <- ceiling(n_items / n_row_final)
   }
-  
+
+  # Trim any empty trailing rows/columns so we do not momentarily render
+  # layouts larger than the number of panels. This avoids the brief "jump"
+  # to a big grid before the inputs are clamped by updateNumericInput().
+  while (n_row_final > 1 && (n_row_final - 1) * n_col_final >= n_items) {
+    n_row_final <- n_row_final - 1
+  }
+  while (n_col_final > 1 && n_row_final * (n_col_final - 1) >= n_items) {
+    n_col_final <- n_col_final - 1
+  }
+
   list(
     nrow = max(1, as.integer(n_row_final)),
     ncol = max(1, as.integer(n_col_final))
