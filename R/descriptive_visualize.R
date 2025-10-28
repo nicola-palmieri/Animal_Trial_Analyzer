@@ -19,8 +19,7 @@ visualize_descriptive_ui <- function(id) {
           "Numeric Histograms"        = "histograms",
           "CV (%)"                    = "cv",
           "Outlier Counts"            = "outliers",
-          "Missingness (%)"           = "missing",
-          "Shapiro–Wilk p-values"     = "shapiro"
+          "Missingness (%)"           = "missing"
         ),
         selected = "categorical"
       ),
@@ -50,10 +49,9 @@ visualize_descriptive_server <- function(id, filtered_data, descriptive_summary)
              "categorical" = visualize_categorical_barplots_ui(ns("categorical")),
              "boxplots"    = visualize_numeric_boxplots_ui(ns("boxplots")),
              "histograms"  = visualize_numeric_histograms_ui(ns("histograms")),
-             "cv"          = h5("CV controls not yet implemented."),
-             "outliers"    = h5("Outlier controls not yet implemented."),
-             "missing"     = h5("Missingness controls not yet implemented."),
-             "shapiro"     = h5("Shapiro–Wilk controls not yet implemented.")
+             "cv"          = visualize_cv_ui(ns("cv")),
+             "outliers"    = visualize_outliers_ui(ns("outliers")),
+             "missing"     = visualize_missing_ui(ns("missing"))
       )
     })
     
@@ -68,6 +66,9 @@ visualize_descriptive_server <- function(id, filtered_data, descriptive_summary)
                        "categorical" = visualize_categorical_barplots_server("categorical", filtered_data, descriptive_summary),
                        "boxplots"    = visualize_numeric_boxplots_server("boxplots", filtered_data, descriptive_summary),
                        "histograms"  = visualize_numeric_histograms_server("histograms", filtered_data, descriptive_summary),
+                       "cv"          = visualize_cv_server("cv", filtered_data, descriptive_summary),
+                       "outliers"    = visualize_outliers_server("outliers", filtered_data, descriptive_summary),
+                       "missing"     = visualize_missing_server("missing", filtered_data, descriptive_summary),
                        NULL
       )
       active(handle)
