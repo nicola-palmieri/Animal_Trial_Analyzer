@@ -59,11 +59,17 @@ descriptive_server <- function(id, filtered_data) {
     # Summary computation
     # ------------------------------------------------------------
     summary_data <- eventReactive(input$run, {
-      local_data <- df()  # create a copy to avoid modifying shared reactive
+      req(df())
+      raw_data <- df()
+      local_data <- raw_data  # create a copy to avoid modifying shared reactive
       selected_vars <- unique(c(input$cat_vars, input$num_vars))
       validate(need(length(selected_vars) > 0, "Please select at least one variable."))
 
       group_var <- if (is.null(input$stratify_var) || input$stratify_var == "None") NULL else input$stratify_var
+      if (!guard_stratification_levels(raw_data, group_var)) {
+        return(NULL)
+      }
+
       if (!is.null(group_var)) {
         # make sure the group var is present
         if (!(group_var %in% names(local_data))) {
@@ -122,9 +128,11 @@ descriptive_server <- function(id, filtered_data) {
     output$download_summary <- downloadHandler(
       filename = function() paste0("Descriptive_Statistics_", Sys.Date(), ".txt"),
       content = function(file) {
+        results <- summary_data()
+        req(results)
         sink(file)
-        print_summary_sections(summary_data()$summary)
-        sink()
+        on.exit(sink(), add = TRUE)
+        print_summary_sections(results$summary)
       }
     )
     
@@ -132,14 +140,19 @@ descriptive_server <- function(id, filtered_data) {
     # Return full model info
     # ------------------------------------------------------------
     return(reactive({
+      details <- summary_data()
+      if (is.null(details)) {
+        return(NULL)
+      }
+
       list(
         type = "descriptive",
         data = df,
-        summary = reactive(summary_data()$summary),
-        selected_vars = reactive(summary_data()$selected_vars),
-        group_var = reactive(summary_data()$group_var),
-        processed_data = reactive(summary_data()$processed_data),
-        strata_levels = reactive(summary_data()$strata_levels)
+        summary = reactive({ details <- summary_data(); req(details); details$summary }),
+        selected_vars = reactive({ details <- summary_data(); req(details); details$selected_vars }),
+        group_var = reactive({ details <- summary_data(); req(details); details$group_var }),
+        processed_data = reactive({ details <- summary_data(); req(details); details$processed_data }),
+        strata_levels = reactive({ details <- summary_data(); req(details); details$strata_levels })
       )
     }))
     
