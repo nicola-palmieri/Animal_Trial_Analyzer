@@ -144,7 +144,6 @@ ggpairs_server <- function(id, data_reactive) {
     output$summary <- renderPrint({
       results <- correlation_store()
       if (is.null(results)) {
-        cat("No correlation results available. Click 'Show correlation matrix' to run the analysis.")
         return(invisible(NULL))
       }
 
@@ -155,7 +154,6 @@ ggpairs_server <- function(id, data_reactive) {
 
       matrices <- results$matrices
       if (is.null(matrices) || length(matrices) == 0) {
-        cat("No correlation results available.")
         return(invisible(NULL))
       }
 

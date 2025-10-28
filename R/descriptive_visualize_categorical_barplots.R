@@ -36,12 +36,15 @@ visualize_categorical_barplots_ui <- function(id) {
       )
     ),
     hr(),
+    add_color_customization_ui(ns, multi_group = FALSE),
+    hr(),
     downloadButton(ns("download_plot"), "Download plot")
   )
 }
 
 visualize_categorical_barplots_server <- function(id, filtered_data, summary_info) {
   moduleServer(id, function(input, output, session) {
+    ns <- session$ns
     
     resolve_input_value <- function(x) {
       if (is.null(x)) return(NULL)
@@ -96,6 +99,15 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
         )
       }
     })
+    
+    custom_colors <- add_color_customization_server(
+      ns = ns,
+      input = input,
+      output = output,
+      data = filtered_data,
+      color_var_reactive = reactive(NULL),  # no grouping variable
+      multi_group = FALSE
+    )
     
     output$download_plot <- downloadHandler(
       filename = function() paste0("categorical_barplots_", Sys.Date(), ".png"),

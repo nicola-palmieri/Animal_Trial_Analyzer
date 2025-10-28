@@ -124,7 +124,8 @@ build_descriptive_categorical_plot <- function(df,
                                                strata_levels = NULL,
                                                show_proportions = FALSE,
                                                nrow_input = NULL,
-                                               ncol_input = NULL) {
+                                               ncol_input = NULL,
+                                               fill_colors = NULL) {
   if (is.null(df) || !is.data.frame(df) || nrow(df) == 0) return(NULL)
   
   factor_vars <- names(df)[vapply(df, function(x) {
@@ -191,8 +192,13 @@ build_descriptive_categorical_plot <- function(df,
       count_df[[var]] <- factor(as.character(count_df[[var]]), levels = level_order)
       group_levels <- levels(droplevels(var_data[[group_col]]))
       count_df[[group_col]] <- factor(as.character(count_df[[group_col]]), levels = group_levels)
-      palette <- resolve_palette_for_levels(group_levels)
-
+      
+      palette <- if (!is.null(fill_colors) && length(fill_colors) >= length(group_levels)) {
+        unname(fill_colors[seq_along(group_levels)])
+      } else {
+        resolve_palette_for_levels(group_levels)
+      }
+      
       p <- ggplot(count_df, aes(x = .data[[var]], y = .data$value, fill = .data[[group_col]])) +
         geom_col(position = position_dodge(width = 0.75), width = 0.65) +
         scale_fill_manual(values = palette) +
@@ -218,11 +224,18 @@ build_descriptive_categorical_plot <- function(df,
       
       count_df[[var]] <- factor(as.character(count_df[[var]]), levels = level_order)
       
+      single_fill <- if (!is.null(fill_colors) && length(fill_colors) > 0) {
+        fill_colors[1]
+      } else {
+        resolve_single_color()
+      }
+      
       p <- ggplot(count_df, aes(x = .data[[var]], y = .data$value)) +
-        geom_col(fill = resolve_single_color(), width = 0.65) +
+        geom_col(fill = single_fill, width = 0.65) +
         theme_minimal(base_size = 13) +
         labs(title = var, x = NULL, y = y_label) +
         theme(axis.text.x = element_text(angle = 45, hjust = 1))
+      
       
       if (isTRUE(show_proportions)) {
         p <- p + scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0, 1))

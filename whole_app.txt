@@ -86,8 +86,8 @@ one_way_anova_ui <- function(id) {
       uiOutput(ns("advanced_options")),
       br(),
       fluidRow(
-        column(6, actionButton(ns("run"), "Run", width = "100%")),
-        column(6, downloadButton(ns("download_all"), "Download All Results", width = "100%"))
+        column(6, actionButton(ns("run"), "Show results", width = "100%")),
+        column(6, downloadButton(ns("download_all"), "Download all results", width = "100%"))
       )
     ),
     results = tagList(
@@ -213,12 +213,12 @@ visualize_oneway_ui <- function(id) {
   sidebarLayout(
     sidebarPanel(
       width = 4,
-      h4("Step 4 — Visualize One-way ANOVA"),
+      h4("Step 4 — Visualize one-way ANOVA"),
       p("Select visualization type and adjust subplot layout, axis scaling, and figure size."),
       hr(),
       selectInput(
         ns("plot_type"),
-        label = "Visualization type:",
+        label = "Select visualization type:",
         choices = c("Mean ± SE" = "mean_se"),
         selected = "mean_se"
       ),
@@ -231,7 +231,7 @@ visualize_oneway_ui <- function(id) {
       hr(),
       add_color_customization_ui(ns, multi_group = FALSE),
       hr(),
-      downloadButton(ns("download_plot"), "Download Plot")
+      downloadButton(ns("download_plot"), "Download plot")
     ),
     mainPanel(
       width = 8,
@@ -400,7 +400,7 @@ build_anova_layout_controls <- function(ns, input, info, default_ui_value) {
   }
   
   tagList(
-    h4("Layout Controls"),
+    h4("Layout controls"),
     strata_inputs,
     response_inputs
   )
@@ -962,8 +962,8 @@ two_way_anova_ui <- function(id) {
       uiOutput(ns("advanced_options")),
       br(),
       fluidRow(
-        column(6, actionButton(ns("run"), "Run", width = "100%")),
-        column(6, downloadButton(ns("download_all"), "Download All Results"))
+        column(6, actionButton(ns("run"), "Show results", width = "100%")),
+        column(6, downloadButton(ns("download_all"), "Download all results"))
       )
     ),
     results = tagList(
@@ -990,7 +990,7 @@ two_way_anova_server <- function(id, filtered_data) {
       cat_cols <- names(data)[sapply(data, function(x) is.character(x) || is.factor(x))]
       
       tagList(
-        checkboxInput(ns("multi_resp"), "Enable multiple response variables", value = FALSE),
+        checkboxInput(ns("multi_resp"), "Allow multiple response variables", value = FALSE),
         uiOutput(ns("response_selector")),
         selectInput(
           ns("factor1"),
@@ -1027,7 +1027,7 @@ two_way_anova_server <- function(id, filtered_data) {
       levels1 <- unique(as.character(df()[[input$factor1]]))
       selectInput(
         ns("order1"),
-        paste("Order of levels for", input$factor1, "(x-axis):"),
+        paste("Order of levels (first = reference):", input$factor1, "(x-axis)"),
         choices = levels1,
         selected = levels1,
         multiple = TRUE
@@ -1039,7 +1039,7 @@ two_way_anova_server <- function(id, filtered_data) {
       levels2 <- unique(as.character(df()[[input$factor2]]))
       selectInput(
         ns("order2"),
-        paste("Order of levels for", input$factor2, "(lines):"),
+        paste("Order of levels (first = reference):", input$factor2, "(lines)"),
         choices = levels2,
         selected = levels2,
         multiple = TRUE
@@ -1112,12 +1112,12 @@ visualize_twoway_ui <- function(id) {
   sidebarLayout(
     sidebarPanel(
       width = 4,
-      h4("Step 4 — Visualize Two-way ANOVA"),
+      h4("Step 4 — Visualize two-way ANOVA"),
       p("Select visualization type and adjust subplot layout, axis scaling, and figure size."),
       hr(),
       selectInput(
         ns("plot_type"),
-        label = "Visualization type:",
+        label = "Select visualization type:",
         choices = c("Mean ± SE" = "mean_se"),
         selected = "mean_se"
       ),
@@ -1130,7 +1130,7 @@ visualize_twoway_ui <- function(id) {
       hr(),
       add_color_customization_ui(ns, multi_group = TRUE),
       hr(),
-      downloadButton(ns("download_plot"), "Download Plot")
+      downloadButton(ns("download_plot"), "Download plot")
     ),
     mainPanel(
       width = 8,
@@ -1344,8 +1344,8 @@ descriptive_ui <- function(id) {
       uiOutput(ns("advanced_options")),
       br(),
       fluidRow(
-        column(6, actionButton(ns("run"), "Run", width = "100%")),
-        column(6, downloadButton(ns("download_summary"), "Download Summary", width = "100%"))
+        column(6, actionButton(ns("run"), "Show summary", width = "100%")),
+        column(6, downloadButton(ns("download_summary"), "Download summary", width = "100%"))
       ),
       hr()
     ),
@@ -1370,11 +1370,9 @@ descriptive_server <- function(id, filtered_data) {
       num_cols <- names(data)[vapply(data, is.numeric, logical(1))]
       
       tagList(
-        h5("Categorical variables:"),
-        selectInput(ns("cat_vars"), label = NULL, choices = cat_cols, selected = cat_cols, multiple = TRUE),
+        selectInput(ns("cat_vars"), label = "Categorical variables:", choices = cat_cols, selected = cat_cols, multiple = TRUE),
         br(),
-        h5("Numeric variables:"),
-        selectInput(ns("num_vars"), label = NULL, choices = num_cols, selected = num_cols, multiple = TRUE)
+        selectInput(ns("num_vars"), label = "Numeric variables:", choices = num_cols, selected = num_cols, multiple = TRUE)
       )
     })
     
@@ -1592,18 +1590,18 @@ visualize_descriptive_ui <- function(id) {
   sidebarLayout(
     sidebarPanel(
       width = 4,
-      h4("Step 5 — Visualize Descriptive Statistics"),
+      h4("Step 5 — Visualize descriptive statistics"),
       p("Explore distributions, variability, and normality across variables."),
       hr(),
       selectInput(
         ns("plot_type"),
-        label = "Visualization type:",
+        label = "Select visualization type:",
         choices = c(
-          "Categorical Distributions" = "categorical",
-          "Numeric Boxplots"          = "boxplots",
-          "Numeric Histograms"        = "histograms",
+          "Categorical distributions" = "categorical",
+          "Numeric boxplots"          = "boxplots",
+          "Numeric histograms"        = "histograms",
           "CV (%)"                    = "cv",
-          "Outlier Counts"            = "outliers",
+          "Outlier counts"            = "outliers",
           "Missingness (%)"           = "missing"
         ),
         selected = "categorical"
@@ -1712,7 +1710,7 @@ visualize_categorical_barplots_ui <- function(id) {
       )
     ),
     hr(),
-    downloadButton(ns("download_plot"), "Download Plot")
+    downloadButton(ns("download_plot"), "Download plot")
   )
 }
 
@@ -1818,7 +1816,7 @@ metric_panel_ui <- function(id, default_width = 400, default_height = 300,
       column(6, numericInput(ns("n_cols"), "Grid columns", value = default_cols, min = 1, max = 10, step = 1))
     ),
     hr(),
-    downloadButton(ns("download_plot"), "Download Plot")
+    downloadButton(ns("download_plot"), "Download plot")
   )
 }
 
@@ -1947,12 +1945,14 @@ build_metric_plot <- function(metric_info, y_label, title, n_rows, n_cols) {
 
   if (has_group) {
     legend_title <- if (!is.null(metric_info$group_label)) metric_info$group_label else "Group"
+    palette <- resolve_palette_for_levels(levels(df$.group))
     p <- ggplot(df, aes(x = .group, y = value, fill = .group)) +
       geom_col(position = "dodge", width = 0.65) +
+      scale_fill_manual(values = palette) +
       labs(fill = legend_title)
   } else {
     p <- ggplot(df, aes(x = .group, y = value)) +
-      geom_col(width = 0.65, fill = "#2C7FB8") +
+      geom_col(width = 0.65, fill = resolve_single_color()) +
       guides(fill = "none")
   }
 
@@ -1996,7 +1996,7 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
       if (!is.null(selected_vars) && length(selected_vars) > 0) {
         numeric_vars <- intersect(numeric_vars, selected_vars)
       }
-      validate(need(length(numeric_vars) > 0, "No numeric variables selected."))
+      validate(need(length(numeric_vars) > 0, "No numeric variables available for plotting."))
 
       metric_info <- prepare_metric_data(
         data = dat,
@@ -2136,7 +2136,7 @@ visualize_numeric_boxplots_ui <- function(id) {
       )
     ),
     hr(),
-    downloadButton(ns("download_plot"), "Download Plot")
+    downloadButton(ns("download_plot"), "Download plot")
   )
 }
 
@@ -2241,7 +2241,7 @@ visualize_numeric_histograms_ui <- function(id) {
       column(6, numericInput(ns("n_cols"), "Grid columns", value = 3, min = 1, max = 10, step = 1))
     ),
     hr(),
-    downloadButton(ns("download_plot"), "Download Plot")
+    downloadButton(ns("download_plot"), "Download plot")
   )
 }
 
@@ -2423,8 +2423,8 @@ analysis_ui <- function(id) {
   sidebarLayout(
     sidebarPanel(
       width = 4,
-      h4("Step 3 — Analyze Results"),
-      p("Choose the statistical approach that fits your trial design, then inspect the summaries on the right."),
+      h4("Step 3 — Analyze results"),
+      p("Select the statistical approach that fits your trial design, then inspect the summaries on the right."),
       hr(),
       tags$style(HTML(sprintf("
         /* Make only this input's dropdown tall enough to show all items */
@@ -2457,7 +2457,7 @@ analysis_ui <- function(id) {
     ),
     mainPanel(
       width = 8,
-      h4("Analysis Results"),
+      h4("Analysis results"),
       uiOutput(ns("results_panel"))
     )
   )
@@ -2504,7 +2504,7 @@ analysis_server <- function(id, filtered_data) {
         id = "ggpairs",
         ui = ggpairs_ui,
         server = ggpairs_server,
-        type = "ggpairs"
+        type = "pairwise_correlation"
       ),
       "PCA" = list(
         id = "pca",
@@ -2657,7 +2657,7 @@ add_color_customization_server <- function(ns, input, output, data, color_var_re
 render_color_inputs <- function(ns, data, color_var) {
   if (is.null(color_var) || color_var == "None") return(NULL)
   if (!color_var %in% names(data())) return(NULL)
-  
+
   values <- data()[[color_var]]
   lvls <- if (is.factor(values)) levels(values) else unique(as.character(values))
   lvls <- lvls[!is.na(lvls)]
@@ -2682,6 +2682,44 @@ render_color_inputs <- function(ns, data, color_var) {
     })
   )
 }
+
+resolve_single_color <- function() {
+  basic_color_palette[1]
+}
+
+resolve_palette_for_levels <- function(levels, custom = NULL) {
+  if (is.null(levels) || length(levels) == 0) {
+    return(resolve_single_color())
+  }
+
+  unique_levels <- unique(as.character(levels))
+  palette_size <- length(basic_color_palette)
+  n_levels <- length(unique_levels)
+
+  if (n_levels > palette_size) {
+    stop(
+      sprintf(
+        "Palette can assign at most %d groups but received %d levels.",
+        palette_size,
+        n_levels
+      ),
+      call. = FALSE
+    )
+  }
+
+  if (!is.null(custom) && length(custom) > 0) {
+    if (!is.null(names(custom))) {
+      ordered <- custom[unique_levels]
+      if (all(!is.na(ordered))) {
+        return(ordered)
+      }
+    } else if (length(custom) >= n_levels) {
+      return(stats::setNames(custom[seq_len(n_levels)], unique_levels))
+    }
+  }
+
+  stats::setNames(basic_color_palette[seq_len(n_levels)], unique_levels)
+}
 # ===============================================================
 # 🧪 Animal Trial Analyzer — Filter Module (cleaned, identical behavior)
 # ===============================================================
@@ -2691,8 +2729,8 @@ filter_ui <- function(id) {
   sidebarLayout(
     sidebarPanel(
       width = 4,
-      h4("Step 2 — Filter Records"),
-      p("Pick the columns to focus on and adjust the filters to refine the dataset for analysis."),
+      h4("Step 2 — Filter records"),
+      p("Select the columns to focus on and adjust the filters to refine the dataset for analysis."),
       hr(),
       uiOutput(ns("column_selector")),
       hr(),
@@ -2700,7 +2738,7 @@ filter_ui <- function(id) {
     ),
     mainPanel(
       width = 8,
-      h4("Filtered Data Preview"),
+      h4("Filtered data preview"),
       DTOutput(ns("filtered_preview"))
     )
   )
@@ -2842,7 +2880,7 @@ upload_ui <- function(id) {
   sidebarLayout(
     sidebarPanel(
       width = 4,
-      h4("Step 1 — Upload Data"),
+      h4("Step 1 — Upload data"),
       p("Upload your Excel file, choose the worksheet to analyze, and ensure the data follow either the long or wide format shown below."),
       hr(),
       radioButtons(
@@ -2865,7 +2903,7 @@ upload_ui <- function(id) {
     ),
     mainPanel(
       width = 8,
-      h4("Data Preview"),
+      h4("Data preview"),
       verbatimTextOutput(ns("validation_msg")),
       DTOutput(ns("preview"))
     )
@@ -3088,7 +3126,7 @@ visualize_server <- function(id, filtered_data, model_fit) {
         visualize_oneway_ui(ns("oneway"))
       } else if (type == "twoway_anova") {
         visualize_twoway_ui(ns("twoway"))
-      } else if (type == "ggpairs") {
+      } else if (type == "pairwise_correlation") {
         visualize_ggpairs_ui(ns("ggpairs"))
       } else if (type == "pca") {
         visualize_pca_ui(ns("pca"), filtered_data())
@@ -3105,7 +3143,7 @@ visualize_server <- function(id, filtered_data, model_fit) {
         visualize_oneway_server("oneway", filtered_data, model_info)
       } else if (type == "twoway_anova") {
         visualize_twoway_server("twoway", filtered_data, model_info)
-      } else if (type == "ggpairs") {
+      } else if (type == "pairwise_correlation") {
         visualize_ggpairs_server("ggpairs", filtered_data, model_info)
       } else if (type == "pca") {
         visualize_pca_server("pca", filtered_data, model_info)
@@ -3294,11 +3332,13 @@ build_descriptive_metric_bar_plot <- function(info, y_label) {
   p <- ggplot(df, aes(x = variable, y = value))
   if (has_multiple_groups) {
     legend_title <- if (!is.null(info$group_label)) info$group_label else "Group"
+    palette <- resolve_palette_for_levels(levels(df$.group))
     p <- p +
       geom_col(aes(fill = .group), position = position_dodge(width = 0.75), width = 0.65) +
+      scale_fill_manual(values = palette) +
       labs(fill = legend_title)
   } else {
-    p <- p + geom_col(fill = "#2C7FB8", width = 0.65)
+    p <- p + geom_col(fill = resolve_single_color(), width = 0.65)
   }
   p +
     theme_minimal(base_size = 13) +
@@ -3378,9 +3418,13 @@ build_descriptive_categorical_plot <- function(df,
       }
 
       count_df[[var]] <- factor(as.character(count_df[[var]]), levels = level_order)
+      group_levels <- levels(droplevels(var_data[[group_col]]))
+      count_df[[group_col]] <- factor(as.character(count_df[[group_col]]), levels = group_levels)
+      palette <- resolve_palette_for_levels(group_levels)
 
       p <- ggplot(count_df, aes(x = .data[[var]], y = .data$value, fill = .data[[group_col]])) +
         geom_col(position = position_dodge(width = 0.75), width = 0.65) +
+        scale_fill_manual(values = palette) +
         theme_minimal(base_size = 13) +
         labs(title = var, x = NULL, y = y_label, fill = group_col) +
         theme(axis.text.x = element_text(angle = 45, hjust = 1))
@@ -3404,7 +3448,7 @@ build_descriptive_categorical_plot <- function(df,
       count_df[[var]] <- factor(as.character(count_df[[var]]), levels = level_order)
       
       p <- ggplot(count_df, aes(x = .data[[var]], y = .data$value)) +
-        geom_col(fill = "#2C7FB8", width = 0.65) +
+        geom_col(fill = resolve_single_color(), width = 0.65) +
         theme_minimal(base_size = 13) +
         labs(title = var, x = NULL, y = y_label) +
         theme(axis.text.x = element_text(angle = 45, hjust = 1))
@@ -3468,20 +3512,29 @@ build_descriptive_numeric_boxplot <- function(df,
     if (all(is.na(vec))) return(NULL)
     
     if (!is.null(group_var)) {
+      group_levels <- levels(df[[group_var]])
+      palette <- resolve_palette_for_levels(group_levels)
       p <- ggplot(df, aes(x = .data[[group_var]], y = .data[[var]], fill = .data[[group_var]])) +
         geom_boxplot(outlier.shape = NA, width = 0.6) +
+        scale_fill_manual(values = palette) +
         theme_minimal(base_size = 13) +
         labs(title = var, x = NULL, y = var) +
         theme(axis.text.x = element_text(angle = 45, hjust = 1))
-      if (isTRUE(show_points)) p <- p + geom_jitter(width = 0.2, alpha = 0.5, size = 1)
+      if (isTRUE(show_points)) {
+        p <- p +
+          geom_jitter(aes(color = .data[[group_var]]), width = 0.2, alpha = 0.5, size = 1) +
+          scale_color_manual(values = palette, guide = "none")
+      }
     } else {
       # ✅ always provide an x aesthetic
       p <- ggplot(df, aes(x = factor(1), y = .data[[var]])) +
-        geom_boxplot(fill = "#2C7FB8", width = 0.3) +
+        geom_boxplot(fill = resolve_single_color(), width = 0.3) +
         theme_minimal(base_size = 13) +
         labs(title = var, x = NULL, y = var) +
         theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
-      if (isTRUE(show_points)) p <- p + geom_jitter(width = 0.05, alpha = 0.5, size = 1)
+      if (isTRUE(show_points)) {
+        p <- p + geom_jitter(color = resolve_single_color(), width = 0.05, alpha = 0.5, size = 1)
+      }
     }
     
     if (inherits(p, "gg")) p else NULL
@@ -3562,9 +3615,13 @@ build_descriptive_numeric_histogram <- function(df,
     y_label <- if (density_mode) "Density" else "Count"
 
     if (!is.null(group_var)) {
+      group_levels <- levels(plot_data[[group_var]])
+      palette <- resolve_palette_for_levels(group_levels)
       if (density_mode) {
         p <- base +
           geom_density(aes(color = .data[[group_var]], fill = .data[[group_var]]), alpha = 0.3) +
+          scale_color_manual(values = palette) +
+          scale_fill_manual(values = palette) +
           labs(color = group_var, fill = group_var)
       } else {
         p <- base +
@@ -3572,16 +3629,17 @@ build_descriptive_numeric_histogram <- function(df,
             aes(fill = .data[[group_var]]),
             position = "identity",
             alpha = 0.5,
-            bins = 30,
-            color = "white"
+            bins = 30
           ) +
+          scale_fill_manual(values = palette) +
           labs(fill = group_var)
       }
     } else {
+      single_color <- resolve_single_color()
       if (density_mode) {
-        p <- base + geom_density(fill = "#2C7FB8", color = "#2C7FB8", alpha = 0.35)
+        p <- base + geom_density(fill = single_color, color = single_color, alpha = 0.35)
       } else {
-        p <- base + geom_histogram(fill = "#FDBF6F", color = "white", bins = 30)
+        p <- base + geom_histogram(fill = single_color, color = single_color, bins = 30)
       }
     }
 
@@ -3624,7 +3682,7 @@ build_descriptive_histogram <- function(df) {
   if (length(num_vars) == 0) return(NULL)
   plots <- lapply(num_vars, function(v) {
     ggplot(df, aes(x = .data[[v]])) +
-      geom_histogram(fill = "#FDBF6F", color = "white", bins = 20) +
+      geom_histogram(fill = resolve_single_color(), color = resolve_single_color(), bins = 20) +
       theme_minimal(base_size = 13) +
       labs(title = paste(v, "Distribution"), x = NULL, y = "Frequency")
   })
@@ -3682,14 +3740,17 @@ build_anova_plot_info <- function(data, info, effective_input, line_colors = NUL
   }
 
   build_plot <- function(stats_df, title_text, y_limits) {
-    single_col <- if (!is.null(line_colors) && length(line_colors) == 1) line_colors else "steelblue"
-    
     if (is.null(factor2)) {
+      color_value <- if (!is.null(line_colors) && length(line_colors) > 0) {
+        unname(line_colors)[1]
+      } else {
+        resolve_single_color()
+      }
       p <- ggplot(stats_df, aes(x = !!sym(factor1), y = mean)) +
-        geom_line(aes(group = 1), color = single_col, linewidth = 1) +
-        geom_point(size = 3, color = single_col) +
+        geom_line(aes(group = 1), color = color_value, linewidth = 1) +
+        geom_point(size = 3, color = color_value) +
         geom_errorbar(aes(ymin = mean - se, ymax = mean + se),
-                      width = 0.15, color = single_col) +
+                      width = 0.15, color = color_value) +
         theme_minimal(base_size = 14) +
         labs(x = factor1, y = "Mean ± SE") +
         theme(
@@ -3697,6 +3758,14 @@ build_anova_plot_info <- function(data, info, effective_input, line_colors = NUL
           panel.grid.major.x = element_blank()
         )
     } else {
+      group_levels <- if (is.factor(stats_df[[factor2]])) {
+        levels(stats_df[[factor2]])
+      } else {
+        unique(as.character(stats_df[[factor2]]))
+      }
+      group_levels <- group_levels[!is.na(group_levels)]
+      palette <- resolve_palette_for_levels(group_levels, custom = line_colors)
+      stats_df[[factor2]] <- factor(as.character(stats_df[[factor2]]), levels = group_levels)
       p <- ggplot(stats_df, aes(
         x = !!sym(factor1),
         y = mean,
@@ -3716,12 +3785,8 @@ build_anova_plot_info <- function(data, info, effective_input, line_colors = NUL
         theme(
           panel.grid.minor = element_blank(),
           panel.grid.major.x = element_blank()
-        )
-      
-      if (!is.null(line_colors) && length(line_colors) > 1) {
-        p <- p + scale_color_manual(values = line_colors) +
-          scale_fill_manual(values = line_colors)
-      }
+        ) +
+        scale_color_manual(values = palette)
     }
     
     if (!is.null(y_limits) && all(is.finite(y_limits))) {
@@ -3833,28 +3898,27 @@ build_anova_plot_info <- function(data, info, effective_input, line_colors = NUL
 }
 
 build_ggpairs_plot <- function(data) {
+  single_color <- resolve_single_color()
   GGally::ggpairs(
     data,
     progress = FALSE,
     upper = list(
-      continuous = GGally::wrap("cor", size = 4, color = "steelblue")
+      continuous = GGally::wrap("cor", size = 4, color = single_color)
     ),
     lower = list(
-      continuous = GGally::wrap("points", alpha = 0.6, color = "steelblue", size = 1.5)
+      continuous = GGally::wrap("points", alpha = 0.6, color = single_color, size = 1.5)
     ),
     diag = list(
-      continuous = GGally::wrap("densityDiag", fill = "steelblue", alpha = 0.4)
+      continuous = GGally::wrap("densityDiag", fill = single_color, alpha = 0.4)
     )
   ) +
     theme_minimal(base_size = 11) +
     theme(
-      strip.background = element_rect(fill = "gray95", color = NA),
       strip.text = element_text(face = "bold", size = 9),
       panel.grid.minor = element_blank(),
       panel.grid.major.x = element_blank(),
       panel.grid.major.y = element_blank(),
-      plot.title = element_text(size = 12, face = "bold"),
-      axis.text = element_text(color = "black")
+      plot.title = element_text(size = 12, face = "bold")
     )
 }
 
@@ -3885,15 +3949,27 @@ build_pca_biplot <- function(pca_obj, data, color_var = NULL, shape_var = NULL,
     label_var <- NULL
   }
   
+  color_levels <- NULL
+  if (!is.null(color_var) && !is.null(plot_data[[color_var]])) {
+    color_levels <- if (is.factor(plot_data[[color_var]])) {
+      levels(plot_data[[color_var]])
+    } else {
+      unique(as.character(plot_data[[color_var]]))
+    }
+    color_levels <- color_levels[!is.na(color_levels)]
+    plot_data[[color_var]] <- factor(as.character(plot_data[[color_var]]), levels = color_levels)
+  }
+
   aes_mapping <- aes(x = PC1, y = PC2)
   if (!is.null(color_var)) aes_mapping <- modifyList(aes_mapping, aes(color = .data[[color_var]]))
   if (!is.null(shape_var)) aes_mapping <- modifyList(aes_mapping, aes(shape = .data[[shape_var]]))
-  
+
+  single_color <- resolve_single_color()
   g <- ggplot(plot_data, aes_mapping) +
     geom_point(
       size = 3,
       shape = if (is.null(shape_var)) 16 else NULL,
-      color = if (is.null(color_var)) "black" else NULL
+      color = if (is.null(color_var)) single_color else NULL
     ) +
     theme_minimal(base_size = 14) +
     labs(
@@ -3907,10 +3983,16 @@ build_pca_biplot <- function(pca_obj, data, color_var = NULL, shape_var = NULL,
       plot.title = element_text(size = 16, face = "bold"),
       legend.position = "right"
     )
-  
+
+  if (!is.null(color_var)) {
+    palette <- resolve_palette_for_levels(color_levels)
+    g <- g + scale_color_manual(values = palette)
+  }
+
   if (!is.null(label_var)) {
     g <- g + ggrepel::geom_text_repel(
       aes(label = label_value),
+      color = if (is.null(color_var)) single_color else NULL,
       size = label_size,
       max.overlaps = Inf,
       min.segment.length = 0,
@@ -3990,16 +4072,17 @@ ggpairs_ui <- function(id) {
   ns <- NS(id)
   list(
     config = tagList(
-      p("Select numeric variables to include in the correlation matrix."),
-      selectInput(ns("vars"), "Variables:", choices = NULL, multiple = TRUE),
+      selectInput(ns("vars"), "Numeric variables:", choices = NULL, multiple = TRUE),
+      br(),
+      uiOutput(ns("advanced_options")),
       br(),
       fluidRow(
-        column(6, actionButton(ns("run"), "Run", width = "100%")),
-        column(6, downloadButton(ns("download_model"), "Download All Results", width = "100%"))
+        column(6, actionButton(ns("run"), "Show correlation matrix", width = "100%")),
+        column(6, downloadButton(ns("download_model"), "Download all results", width = "100%"))
       )
     ),
     results = tagList(
-      h5("Correlation Matrix"),
+      h5("Correlation matrix"),
       verbatimTextOutput(ns("summary"))
     )
   )
@@ -4009,41 +4092,160 @@ ggpairs_server <- function(id, data_reactive) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     df <- reactive(data_reactive())
-    
+
+    output$advanced_options <- renderUI({
+      render_stratification_controls(ns, df, input)
+    })
+
+    output$strata_order_ui <- renderUI({
+      render_strata_order_input(ns, df, input$stratify_var)
+    })
+
     # ---- Update variable selector ----
     observe({
       req(df())
       num_vars <- names(df())[sapply(df(), is.numeric)]
       updateSelectInput(session, "vars", choices = num_vars, selected = num_vars)
     })
-    
+
+    build_ggpairs_object <- function(data) {
+      GGally::ggpairs(
+        data,
+        progress = FALSE,
+        upper = list(
+          continuous = GGally::wrap("cor", size = 4, color = basic_color_palette[1])
+        ),
+        lower = list(
+          continuous = GGally::wrap("points", alpha = 0.6, color = basic_color_palette[1], size = 1.5)
+        ),
+        diag = list(
+          continuous = GGally::wrap("densityDiag", fill = basic_color_palette[1], alpha = 0.4)
+        )
+      ) +
+        ggplot2::theme_minimal(base_size = 11) +
+        ggplot2::theme(
+          strip.text = ggplot2::element_text(face = "bold", size = 9),
+          panel.grid.minor = ggplot2::element_blank(),
+          panel.grid.major.x = ggplot2::element_blank(),
+          panel.grid.major.y = ggplot2::element_blank(),
+          plot.title = ggplot2::element_text(size = 12, face = "bold")
+        )
+    }
+
+    correlation_store <- reactiveVal(NULL)
+
     # ---- Compute correlation matrix ----
     observeEvent(input$run, {
-      req(df(), input$vars)
-      dat <- df()[, input$vars, drop = FALSE]
-      output$summary <- renderPrint({
-        if (ncol(dat) < 2)
-          return(cat("Need at least two numeric columns."))
+      req(df())
+      data <- df()
+      numeric_vars <- names(data)[sapply(data, is.numeric)]
+      selected_vars <- if (length(input$vars)) input$vars else numeric_vars
+      selected_vars <- intersect(selected_vars, numeric_vars)
+
+      if (length(selected_vars) < 2) {
+        correlation_store(list(
+          message = "Need at least two numeric columns.",
+          matrices = list(),
+          plots = list(),
+          group_var = NULL,
+          selected_vars = selected_vars
+        ))
+        return()
+      }
+
+      group_var <- input$stratify_var
+      if (is.null(group_var) || identical(group_var, "None") || identical(group_var, "")) {
+        group_var <- NULL
+      }
+
+      if (!is.null(group_var) && !guard_stratification_levels(data, group_var)) {
+        correlation_store(NULL)
+        return()
+      }
+
+      strata_levels <- "Overall"
+      if (!is.null(group_var) && group_var %in% names(data)) {
+        values <- data[[group_var]]
+        values <- values[!is.na(values)]
+        if (!is.null(input$strata_order) && length(input$strata_order) > 0) {
+          unique_values <- unique(as.character(values))
+          strata_levels <- input$strata_order[input$strata_order %in% unique_values]
+        } else {
+          strata_levels <- unique(as.character(values))
+        }
+      }
+
+      matrices <- list()
+      plots <- list()
+
+      if (is.null(group_var)) {
+        dat <- data[, selected_vars, drop = FALSE]
         cor_matrix <- cor(dat, use = "pairwise.complete.obs")
-        print(round(cor_matrix, 2))
-      })
+        matrices[["Overall"]] <- cor_matrix
+        plots[["Overall"]] <- build_ggpairs_object(dat)
+      } else {
+        for (level in strata_levels) {
+          subset_rows <- !is.na(data[[group_var]]) & as.character(data[[group_var]]) == level
+          subset_data <- data[subset_rows, , drop = FALSE]
+          if (nrow(subset_data) == 0) {
+            matrices[[level]] <- NULL
+            plots[[level]] <- NULL
+            next
+          }
+          dat <- subset_data[, selected_vars, drop = FALSE]
+          cor_matrix <- suppressWarnings(cor(dat, use = "pairwise.complete.obs"))
+          matrices[[level]] <- cor_matrix
+          plots[[level]] <- build_ggpairs_object(dat)
+        }
+      }
+
+      correlation_store(list(
+        matrices = matrices,
+        plots = plots,
+        group_var = group_var,
+        selected_vars = selected_vars
+      ))
     })
-    
+
+    output$summary <- renderPrint({
+      results <- correlation_store()
+      if (is.null(results)) {
+        return(invisible(NULL))
+      }
+
+      if (!is.null(results$message)) {
+        cat(results$message)
+        return(invisible(NULL))
+      }
+
+      matrices <- results$matrices
+      if (is.null(matrices) || length(matrices) == 0) {
+        return(invisible(NULL))
+      }
+
+      multiple <- length(matrices) > 1
+      for (name in names(matrices)) {
+        mat <- matrices[[name]]
+        if (multiple) {
+          cat(sprintf("Stratum: %s\n", name))
+        }
+        if (is.null(mat)) {
+          cat("  No data available for this stratum.\n\n")
+        } else {
+          print(round(mat, 2))
+          cat("\n")
+        }
+      }
+    })
+
     # ---- Return structured output for visualization ----
     reactive({
-      req(df())
-      num_vars <- names(df())[sapply(df(), is.numeric)]
-      selected_vars <- if (length(input$vars)) input$vars else num_vars
-      dat <- df()[, selected_vars, drop = FALSE]
-      
       list(
-        type = "ggpairs",
-        models = NULL,
-        responses = selected_vars,
-        strata = NULL,
-        factors = list(factor1 = NULL, factor2 = NULL),
-        orders = list(order1 = NULL, order2 = NULL),
-        data = dat
+        type = "pairwise_correlation",
+        data = df,
+        group_var = reactive(input$stratify_var),
+        strata_order = reactive(input$strata_order),
+        results = reactive(correlation_store())
       )
     })
   })
@@ -4057,15 +4259,17 @@ visualize_ggpairs_ui <- function(id) {
   sidebarLayout(
     sidebarPanel(
       width = 4,
-      h4("Step 4 — Visualize Pairwise Correlation"),
+      h4("Step 4 — Visualize pairwise correlation"),
       p("Visualize pairwise relationships and correlation coefficients among numeric variables."),
       hr(),
       selectInput(
         ns("plot_type"),
-        label = "Visualization type:",
+        label = "Select visualization type:",
         choices = c("Pairwise correlation matrix" = "ggpairs"),  # ✅ single option for now
         selected = "ggpairs"
       ),
+      hr(),
+      uiOutput(ns("strata_selector")),
       hr(),
       fluidRow(
         column(
@@ -4092,7 +4296,7 @@ visualize_ggpairs_ui <- function(id) {
         )
       ),
       hr(),
-      downloadButton(ns("download_plot"), "Download Plot")
+      downloadButton(ns("download_plot"), "Download plot")
     ),
     mainPanel(
       width = 8,
@@ -4108,51 +4312,93 @@ visualize_ggpairs_server <- function(id, filtered_data, model_fit) {
     ns <- session$ns
     
     # Reactive data and model
-    df <- reactive(filtered_data())
     model_info <- reactive(model_fit())
-    
-    # Layout info placeholder
-    output$layout_controls <- renderUI({
+
+    stratified_results <- reactive({
       info <- model_info()
-      if (is.null(info) || info$type != "ggpairs") return(NULL)
-      tagList(
-        p("This plot shows pairwise scatterplots and Pearson correlations among numeric variables.")
+      if (is.null(info) || info$type != "pairwise_correlation") return(NULL)
+      res_accessor <- info$results
+      if (is.null(res_accessor) || !is.function(res_accessor)) return(NULL)
+      res_accessor()
+    })
+
+    available_strata <- reactive({
+      results <- stratified_results()
+      if (is.null(results) || is.null(results$plots)) return(NULL)
+      plots <- results$plots
+      if (is.null(plots) || length(plots) == 0) return(NULL)
+      nm <- names(plots)
+      if (is.null(nm) || length(nm) == 0) {
+        nm <- rep("Overall", length(plots))
+        names(plots) <- nm
+      }
+      nm <- nm[nzchar(nm)]
+      if (length(nm) == 0) return(NULL)
+      nm
+    })
+
+    output$strata_selector <- renderUI({
+      choices <- available_strata()
+      if (is.null(choices)) return(NULL)
+      selectInput(
+        ns("selected_stratum"),
+        label = "Select stratum:",
+        choices = choices,
+        selected = choices[[1]]
       )
     })
-    
+
     # Determine plot size dynamically
     plot_size <- reactive({
       list(w = input$plot_width, h = input$plot_height)
     })
-    
+
     # --- Main Plot Rendering ---
     output$plots <- renderPlot({
       info <- model_info()
-      if (is.null(info) || info$type != "ggpairs") return(NULL)
-      validate(need(ncol(info$data) >= 2, "Need at least two numeric columns for ggpairs."))
-      
+      if (is.null(info) || info$type != "pairwise_correlation") return(NULL)
+      results <- stratified_results()
+      if (is.null(results) || is.null(results$plots) || length(results$plots) == 0) {
+        validate(need(FALSE, "No correlation results available."))
+      }
+
       # use visualization type (only one for now)
       if (input$plot_type == "ggpairs") {
-        build_ggpairs_plot(info$data)
+        stratum <- input$selected_stratum
+        plots <- results$plots
+        if (is.null(stratum) || !stratum %in% names(plots)) {
+          stratum <- names(plots)[[1]]
+        }
+        plot_obj <- plots[[stratum]]
+        validate(need(!is.null(plot_obj), "Selected stratum has no data to plot."))
+        print(plot_obj)
       }
     },
     width  = function() plot_size()$w,
     height = function() plot_size()$h,
     res    = 96)
-    
+
     # --- Download handler ---
     output$download_plot <- downloadHandler(
       filename = function() paste0("ggpairs_plot_", Sys.Date(), ".png"),
       content = function(file) {
         info <- model_info()
         req(info)
-        validate(need(ncol(info$data) >= 2, "Need at least two numeric columns for ggpairs."))
-        
-        g <- if (input$plot_type == "ggpairs") build_ggpairs_plot(info$data)
-        
+        validate(need(info$type == "pairwise_correlation", "Pairwise correlation results are not available."))
+        results <- stratified_results()
+        req(results)
+        plots <- results$plots
+        req(plots)
+        stratum <- input$selected_stratum
+        if (is.null(stratum) || !stratum %in% names(plots)) {
+          stratum <- names(plots)[[1]]
+        }
+        g <- plots[[stratum]]
+        validate(need(!is.null(g), "Selected stratum has no data to plot."))
+
         width_in  <- input$plot_width / 96
         height_in <- input$plot_height / 96
-        
+
         ggsave(
           filename = file,
           plot = g,
@@ -4175,15 +4421,14 @@ pca_ui <- function(id) {
   ns <- NS(id)
   list(
     config = tagList(
-      p("Select numeric variables to include in the PCA. The data will be centered and scaled automatically."),
-      selectInput(ns("vars"), "Variables:", choices = NULL, multiple = TRUE),
+      selectInput(ns("vars"), "Numeric variables:", choices = NULL, multiple = TRUE),
       fluidRow(
-        column(6, actionButton(ns("run_pca"), "Run", width = "100%")),
-        column(6, downloadButton(ns("download_all"), "Download All Results", width = "100%"))
+        column(6, actionButton(ns("run_pca"), "Show PCA summary", width = "100%")),
+        column(6, downloadButton(ns("download_all"), "Download all results", width = "100%"))
       )
     ),
     results = tagList(
-      h5("PCA Results Summary"),
+      h5("PCA results summary"),
       verbatimTextOutput(ns("summary")),
       DT::dataTableOutput(ns("loadings_table"))
     )
@@ -4259,12 +4504,12 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
   sidebarLayout(
     sidebarPanel(
       width = 4,
-      h4("Step 4 - Principal Component Analysis (PCA)"),
+      h4("Step 4 — Visualize principal component analysis (PCA)"),
       p("Visualize multivariate structure using a PCA biplot."),
       hr(),
       selectInput(
         ns("plot_type"),
-        label = "Visualization type:",
+        label = "Select visualization type:",
         choices = c("PCA biplot" = "biplot"),
         selected = "biplot"
       ),
@@ -4321,11 +4566,11 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
         )
       ),
       hr(),
-      downloadButton(ns("download_plot"), "Download Plot")
+      downloadButton(ns("download_plot"), "Download plot")
     ),
     mainPanel(
       width = 8,
-      h4("PCA Biplot"),
+      h4("PCA biplot"),
       plotOutput(ns("plot"))
     )
   )
@@ -4445,8 +4690,8 @@ regression_ui <- function(id, engine = c("lm", "lmm"), allow_multi_response = FA
       uiOutput(ns("formula_preview")),
       br(),
       fluidRow(
-        column(6, actionButton(ns("run"), "Run", width = "100%")),
-        column(6, downloadButton(ns("download_model"), "Download All Results", width = "100%"))
+        column(6, actionButton(ns("run"), "Show results", width = "100%")),
+        column(6, downloadButton(ns("download_model"), "Download all results", width = "100%"))
       )
     ),
     results = tagList(
@@ -4505,7 +4750,7 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
           }
           selectInput(
             ns(paste0("order_", var)),
-            paste("Order of levels for", var, "(first = reference):"),
+            paste("Order of levels (first = reference):", var),
             choices = lvls,
             selected = lvls,
             multiple = TRUE
@@ -4759,7 +5004,7 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
             column(6, plotOutput(ns(paste0("qq_", idx))))
           ),
           br(),
-          downloadButton(ns(paste0("download_", idx)), "Download Results")
+          downloadButton(ns(paste0("download_", idx)), "Download results")
         )
       } else {
           stratum_tabs <- lapply(seq_along(strata), function(j) {
@@ -4776,7 +5021,7 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
                 column(6, plotOutput(ns(paste0("qq_", idx, "_", j))))
               ),
               br(),
-              downloadButton(ns(paste0("download_", idx, "_", j)), "Download Results")
+              downloadButton(ns(paste0("download_", idx, "_", j)), "Download results")
             )
           } else {
             div(
@@ -5033,7 +5278,7 @@ reg_interactions_ui <- function(ns, fixed, fac_vars) {
   pair_values <- vapply(pairs, function(p) paste(p, collapse = ":"), character(1))
   checkboxGroupInput(
     ns("interactions"),
-    label = "Add 2-way interactions (optional):",
+    label = "Select 2-way interactions (optional):",
     choices = stats::setNames(pair_values, pair_labels)
   )
 }
@@ -5338,12 +5583,12 @@ render_response_inputs <- function(ns, data, input) {
   tagList(
     checkboxInput(
       ns("multi_resp"),
-      "Enable multiple response variables",
+      "Allow multiple response variables",
       value = isTRUE(input$multi_resp)
     ),
     selectInput(
       ns("response"),
-      if (isTRUE(input$multi_resp)) "Select response variables:" else "Select response variable:",
+      if (isTRUE(input$multi_resp)) "Response variables (numeric):" else "Response variable (numeric):",
       choices = num_vars,
       selected = current_selection,
       multiple = isTRUE(input$multi_resp)
@@ -5456,7 +5701,7 @@ render_strata_order_input <- function(ns, data, strat_var,
   if (length(strata_levels) == 0) return(NULL)
   
   if (is.null(order_label)) {
-    order_label <- paste("Order of levels for", strat_var, "(strata):")
+    order_label <- "Order of levels (first = reference):"
   }
   
   selectInput(
