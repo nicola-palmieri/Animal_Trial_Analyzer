@@ -320,6 +320,113 @@ build_descriptive_numeric_boxplot <- function(df,
 }
 
 
+build_descriptive_numeric_histogram <- function(df,
+                                                selected_vars = NULL,
+                                                group_var = NULL,
+                                                strata_levels = NULL,
+                                                use_density = FALSE,
+                                                nrow_input = NULL,
+                                                ncol_input = NULL) {
+  if (is.null(df) || !is.data.frame(df) || nrow(df) == 0) return(NULL)
+
+  num_vars <- names(df)[vapply(df, is.numeric, logical(1))]
+  if (!is.null(selected_vars) && length(selected_vars) > 0) {
+    num_vars <- intersect(num_vars, selected_vars)
+  }
+  if (length(num_vars) == 0) return(NULL)
+
+  if (!is.null(group_var) && group_var %in% names(df)) {
+    df[[group_var]] <- as.character(df[[group_var]])
+    df[[group_var]][is.na(df[[group_var]]) | trimws(df[[group_var]]) == ""] <- "Missing"
+
+    if (!is.null(strata_levels) && length(strata_levels) > 0) {
+      keep_levels <- unique(strata_levels)
+      df <- df[df[[group_var]] %in% keep_levels, , drop = FALSE]
+      if (nrow(df) == 0) return(NULL)
+      df[[group_var]] <- factor(df[[group_var]], levels = keep_levels)
+    } else {
+      df[[group_var]] <- factor(df[[group_var]], levels = unique(df[[group_var]]))
+    }
+  } else {
+    group_var <- NULL
+  }
+
+  plots <- lapply(num_vars, function(var) {
+    cols <- c(var, group_var)
+    cols <- cols[cols %in% names(df)]
+    plot_data <- df[, cols, drop = FALSE]
+
+    keep <- is.finite(plot_data[[var]])
+    keep[is.na(keep)] <- FALSE
+    plot_data <- plot_data[keep, , drop = FALSE]
+    if (nrow(plot_data) == 0) return(NULL)
+
+    if (!is.null(group_var)) {
+      plot_data[[group_var]] <- droplevels(plot_data[[group_var]])
+    }
+
+    density_mode <- isTRUE(use_density) && length(unique(plot_data[[var]])) > 1
+
+    base <- ggplot(plot_data, aes(x = .data[[var]]))
+    y_label <- if (density_mode) "Density" else "Count"
+
+    if (!is.null(group_var)) {
+      if (density_mode) {
+        p <- base +
+          geom_density(aes(color = .data[[group_var]], fill = .data[[group_var]]), alpha = 0.3) +
+          labs(color = group_var, fill = group_var)
+      } else {
+        p <- base +
+          geom_histogram(
+            aes(fill = .data[[group_var]]),
+            position = "identity",
+            alpha = 0.5,
+            bins = 30,
+            color = "white"
+          ) +
+          labs(fill = group_var)
+      }
+    } else {
+      if (density_mode) {
+        p <- base + geom_density(fill = "#2C7FB8", color = "#2C7FB8", alpha = 0.35)
+      } else {
+        p <- base + geom_histogram(fill = "#FDBF6F", color = "white", bins = 30)
+      }
+    }
+
+    p +
+      theme_minimal(base_size = 13) +
+      labs(title = var, x = var, y = y_label)
+  })
+
+  plots <- Filter(Negate(is.null), plots)
+  if (length(plots) == 0) return(NULL)
+
+  layout <- resolve_grid_layout(
+    n_items = length(plots),
+    rows_input = suppressWarnings(as.numeric(nrow_input)),
+    cols_input = suppressWarnings(as.numeric(ncol_input))
+  )
+
+  title_text <- if (isTRUE(use_density)) {
+    "Numeric Distributions (Density)"
+  } else {
+    "Numeric Distributions (Histograms)"
+  }
+
+  combined <- patchwork::wrap_plots(plots, nrow = layout$nrow, ncol = layout$ncol) +
+    patchwork::plot_annotation(
+      title = title_text,
+      theme = theme(plot.title = element_text(size = 16, face = "bold"))
+    )
+
+  list(
+    plot = combined,
+    layout = list(nrow = layout$nrow, ncol = layout$ncol),
+    panels = length(plots)
+  )
+}
+
 
 build_descriptive_histogram <- function(df) {
   num_vars <- names(df)[sapply(df, is.numeric)]

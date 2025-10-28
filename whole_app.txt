@@ -433,18 +433,10 @@ prepare_stratified_anova <- function(
   }
   
   if (!is.null(stratify_var) && stratify_var %in% names(df)) {
-    n_levels <- length(unique(na.omit(df[[stratify_var]])))
-    
-    validate(
-      need(
-        n_levels <= 10,
-        paste0(
-          "❌ Stratification variable '", stratify_var,
-          "' has ", n_levels, " levels — please select a variable with at most 10."
-        )
-      )
-    )
-    
+    if (!guard_stratification_levels(df, stratify_var)) {
+      return(NULL)
+    }
+
     if (!is.null(strata_order) && length(strata_order) > 0) {
       df[[stratify_var]] <- factor(as.character(df[[stratify_var]]), levels = strata_order)
     } else {
@@ -1401,18 +1393,20 @@ descriptive_server <- function(id, filtered_data) {
     # Summary computation
     # ------------------------------------------------------------
     summary_data <- eventReactive(input$run, {
-      local_data <- df()  # create a copy to avoid modifying shared reactive
+      req(df())
+      raw_data <- df()
+      local_data <- raw_data  # create a copy to avoid modifying shared reactive
       selected_vars <- unique(c(input$cat_vars, input$num_vars))
       validate(need(length(selected_vars) > 0, "Please select at least one variable."))
-      
+
       group_var <- if (is.null(input$stratify_var) || input$stratify_var == "None") NULL else input$stratify_var
+      if (!guard_stratification_levels(raw_data, group_var)) {
+        return(NULL)
+      }
+
+      data_columns <- selected_vars
+
       if (!is.null(group_var)) {
-        # make sure the group var is present
-        if (!(group_var %in% names(local_data))) {
-          selected_vars <- unique(c(selected_vars, group_var))
-          local_data <- local_data[, selected_vars, drop = FALSE]
-        }
-        
         # keep ONLY selected levels, in the exact order; drop NA and unused levels
         sel <- input$strata_order
         if (!is.null(sel) && length(sel) > 0) {
@@ -1422,21 +1416,33 @@ descriptive_server <- function(id, filtered_data) {
           local_data[[group_var]] <- factor(as.character(local_data[[group_var]]))
         }
         local_data <- droplevels(local_data)
+
+        data_columns <- unique(c(data_columns, group_var))
       }
-      
-      local_data <- local_data[, selected_vars, drop = FALSE]
-      
+
+      data_columns <- data_columns[!is.na(data_columns) & nzchar(data_columns)]
+      data_columns <- intersect(data_columns, names(local_data))
+      local_data <- local_data[, data_columns, drop = FALSE]
+
       if (!is.null(group_var) && !is.null(input$strata_order)) {
         if (group_var %in% names(local_data)) {
           local_data[[group_var]] <- factor(as.character(local_data[[group_var]]),
                                             levels = input$strata_order)
         }
       }
-      
+
+      strata_levels <- if (!is.null(group_var) && group_var %in% names(local_data)) {
+        levels(local_data[[group_var]])
+      } else {
+        NULL
+      }
+
       list(
         summary = compute_descriptive_summary(local_data, group_var),
         selected_vars = selected_vars,
-        group_var = group_var
+        group_var = group_var,
+        processed_data = local_data,
+        strata_levels = strata_levels
       )
     })
     
@@ -1456,9 +1462,11 @@ descriptive_server <- function(id, filtered_data) {
     output$download_summary <- downloadHandler(
       filename = function() paste0("Descriptive_Statistics_", Sys.Date(), ".txt"),
       content = function(file) {
+        results <- summary_data()
+        req(results)
         sink(file)
-        print_summary_sections(summary_data()$summary)
-        sink()
+        on.exit(sink(), add = TRUE)
+        print_summary_sections(results$summary)
       }
     )
     
@@ -1466,12 +1474,19 @@ descriptive_server <- function(id, filtered_data) {
     # Return full model info
     # ------------------------------------------------------------
     return(reactive({
+      details <- summary_data()
+      if (is.null(details)) {
+        return(NULL)
+      }
+
       list(
         type = "descriptive",
         data = df,
-        summary = reactive(summary_data()$summary),
-        selected_vars = reactive(summary_data()$selected_vars),
-        group_var = reactive(summary_data()$group_var)
+        summary = reactive({ details <- summary_data(); req(details); details$summary }),
+        selected_vars = reactive({ details <- summary_data(); req(details); details$selected_vars }),
+        group_var = reactive({ details <- summary_data(); req(details); details$group_var }),
+        processed_data = reactive({ details <- summary_data(); req(details); details$processed_data }),
+        strata_levels = reactive({ details <- summary_data(); req(details); details$strata_levels })
       )
     }))
     
@@ -1604,6 +1619,7 @@ visualize_descriptive_ui <- function(id) {
   )
 }
 
+
 visualize_descriptive_server <- function(id, filtered_data, descriptive_summary) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
@@ -1611,11 +1627,13 @@ visualize_descriptive_server <- function(id, filtered_data, descriptive_summary)
     # holder for the active submodule's returned reactives
     active <- reactiveVal(NULL)
     
-    # Insert the submodule controls into the same sidebar
+    # ==========================================================
+    # 🔹 Inject the correct UI for each submodule
+    # ==========================================================
     output$sub_controls <- renderUI({
       switch(input$plot_type,
              "categorical" = visualize_categorical_barplots_ui(ns("categorical")),
-             "boxplots"    = h5("Boxplot controls not yet implemented."),
+             "boxplots"    = visualize_numeric_boxplots_ui(ns("boxplots")),
              "histograms"  = h5("Histogram controls not yet implemented."),
              "cv"          = h5("CV controls not yet implemented."),
              "outliers"    = h5("Outlier controls not yet implemented."),
@@ -1624,19 +1642,24 @@ visualize_descriptive_server <- function(id, filtered_data, descriptive_summary)
       )
     })
     
-    # Start/replace the submodule server and capture its return
+    # ==========================================================
+    # 🔹 Dynamically start the right submodule server
+    # ==========================================================
     observeEvent(input$plot_type, {
       type <- input$plot_type
       if (is.null(type) || length(type) == 0) return()
       
       handle <- switch(type[[1]],
                        "categorical" = visualize_categorical_barplots_server("categorical", filtered_data, descriptive_summary),
+                       "boxplots"    = visualize_numeric_boxplots_server("boxplots", filtered_data, descriptive_summary),
                        NULL
       )
       active(handle)
     }, ignoreInit = FALSE)
     
-    # Parent renders the plot using the submodule's returned reactives
+    # ==========================================================
+    # 🔹 Parent renders whatever the active submodule produces
+    # ==========================================================
     output$plot <- renderPlot({
       h <- active()
       req(h)
@@ -1690,31 +1713,71 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
     })
     
     plot_info <- reactive({
-      dat <- filtered_data()
       info <- summary_info()
-      
-      validate(need(!is.null(dat) && is.data.frame(dat) && nrow(dat) > 0, "No data available."))
+
       validate(need(!is.null(info), "Summary not available."))
-      
+
+      processed <- resolve_input_value(info$processed_data)
+      dat <- if (!is.null(processed)) processed else filtered_data()
+
+      validate(need(!is.null(dat) && is.data.frame(dat) && nrow(dat) > 0, "No data available."))
+
       selected_vars <- resolve_input_value(info$selected_vars)
       group_var     <- resolve_input_value(info$group_var)
-      
+      strata_levels <- resolve_input_value(info$strata_levels)
+
       out <- build_descriptive_categorical_plot(
         df = dat,
         selected_vars = selected_vars,
         group_var = group_var,
+        strata_levels = strata_levels,
         show_proportions = isTRUE(input$show_proportions),
         nrow_input = input$n_rows,
         ncol_input = input$n_cols
       )
       validate(need(!is.null(out), "No categorical variables available for plotting."))
       
-      # Derive safe maxima for the inputs WITHOUT changing their values
+      # Derive safe maxima for the inputs and gently clamp values so the
+      # rendered grid never differs from what the user sees in the controls.
       n_panels <- out$panels
-      max_val  <- max(1, as.integer(n_panels))
+      max_val  <- 10L
+
+      layout_info <- out$layout
+      if (is.null(layout_info) || !is.list(layout_info)) {
+        layout_info <- list()
+      }
+
+      safe_rows <- layout_info$nrow
+      safe_cols <- layout_info$ncol
+
+      if (is.null(safe_rows) || !is.finite(safe_rows)) {
+        safe_rows <- min(10L, max(1L, as.integer(n_panels)))
+      }
+      if (is.null(safe_cols) || !is.finite(safe_cols)) {
+        safe_cols <- min(10L, max(1L, ceiling(as.integer(n_panels) / max(1L, safe_rows))))
+      }
+
+      safe_rows <- min(max(1L, as.integer(safe_rows)), max_val)
+      safe_cols <- min(max(1L, as.integer(safe_cols)), max_val)
+
+      current_rows <- suppressWarnings(as.integer(input$n_rows))
+      current_cols <- suppressWarnings(as.integer(input$n_cols))
+
+      if (length(current_rows) == 0 || is.na(current_rows)) current_rows <- NULL
+      if (length(current_cols) == 0 || is.na(current_cols)) current_cols <- NULL
+
       isolate({
-        updateNumericInput(session, "n_rows", max = max_val)
-        updateNumericInput(session, "n_cols", max = max_val)
+        if (!identical(current_rows, safe_rows)) {
+          updateNumericInput(session, "n_rows", value = safe_rows, min = 1, max = max_val)
+        } else {
+          updateNumericInput(session, "n_rows", min = 1, max = max_val)
+        }
+
+        if (!identical(current_cols, safe_cols)) {
+          updateNumericInput(session, "n_cols", value = safe_cols, min = 1, max = max_val)
+        } else {
+          updateNumericInput(session, "n_cols", min = 1, max = max_val)
+        }
       })
       
       out
@@ -1734,6 +1797,155 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
     
     output$download_plot <- downloadHandler(
       filename = function() paste0("categorical_barplots_", Sys.Date(), ".png"),
+      content  = function(file) {
+        info <- plot_info()
+        req(info$plot)
+        s <- plot_size()
+        ggplot2::ggsave(
+          filename = file,
+          plot = info$plot,
+          device = "png",
+          dpi = 300,
+          width  = s$w / 96,
+          height = s$h / 96,
+          units = "in",
+          limitsize = FALSE
+        )
+      }
+    )
+    
+    return(list(
+      plot   = reactive({ plot_info()$plot }),
+      width  = reactive(plot_size()$w),
+      height = reactive(plot_size()$h)
+    ))
+  })
+}
+# ===============================================================
+# 🟦 Descriptive Visualization — Numeric Boxplots
+# ===============================================================
+
+visualize_numeric_boxplots_ui <- function(id) {
+  ns <- NS(id)
+  tagList(
+    checkboxInput(ns("show_points"), "Show individual data points", TRUE),
+    fluidRow(
+      column(6, numericInput(ns("plot_width"),  "Subplot width (px)",  200, 200, 2000, 50)),
+      column(6, numericInput(ns("plot_height"), "Subplot height (px)", 800, 200, 2000, 50))
+    ),
+    hr(),
+    fluidRow(
+      column(6, numericInput(ns("n_rows"), "Grid rows",    value = 1, min = 1, max = 10, step = 1)),
+      column(6, numericInput(ns("n_cols"), "Grid columns", value = 6, min = 1, max = 10, step = 1))
+    ),
+    hr(),
+    downloadButton(ns("download_plot"), "Download Plot")
+  )
+}
+
+
+visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info) {
+  moduleServer(id, function(input, output, session) {
+    
+    resolve_input_value <- function(x) {
+      if (is.null(x)) return(NULL)
+      if (is.reactive(x)) x() else x
+    }
+    
+    plot_width <- reactive({
+      w <- input$plot_width
+      if (is.null(w) || !is.numeric(w) || is.na(w)) 400 else w
+    })
+    
+    plot_height <- reactive({
+      h <- input$plot_height
+      if (is.null(h) || !is.numeric(h) || is.na(h)) 300 else h
+    })
+    
+    plot_info <- reactive({
+      info <- summary_info()
+
+      validate(need(!is.null(info), "Summary not available."))
+
+      processed <- resolve_input_value(info$processed_data)
+      dat <- if (!is.null(processed)) processed else filtered_data()
+
+      validate(need(!is.null(dat) && is.data.frame(dat) && nrow(dat) > 0, "No data available."))
+
+      selected_vars <- resolve_input_value(info$selected_vars)
+      group_var     <- resolve_input_value(info$group_var)
+      
+      out <- build_descriptive_numeric_boxplot(
+        df = dat,
+        selected_vars = selected_vars,
+        group_var = group_var,
+        show_points = isTRUE(input$show_points),
+        nrow_input = input$n_rows,
+        ncol_input = input$n_cols
+      )
+      
+      validate(need(!is.null(out), "No numeric variables available for plotting."))
+      
+      # Derive safe maxima and gently clamp control values so the visible
+      # settings always match the rendered layout (removing the grid flicker).
+      n_panels <- out$panels
+      max_val  <- 10L
+
+      layout_info <- out$layout
+      if (is.null(layout_info) || !is.list(layout_info)) {
+        layout_info <- list()
+      }
+
+      safe_rows <- layout_info$nrow
+      safe_cols <- layout_info$ncol
+
+      if (is.null(safe_rows) || !is.finite(safe_rows)) {
+        safe_rows <- min(10L, max(1L, as.integer(n_panels)))
+      }
+      if (is.null(safe_cols) || !is.finite(safe_cols)) {
+        safe_cols <- min(10L, max(1L, ceiling(as.integer(n_panels) / max(1L, safe_rows))))
+      }
+
+      safe_rows <- min(max(1L, as.integer(safe_rows)), max_val)
+      safe_cols <- min(max(1L, as.integer(safe_cols)), max_val)
+
+      current_rows <- suppressWarnings(as.integer(input$n_rows))
+      current_cols <- suppressWarnings(as.integer(input$n_cols))
+
+      if (length(current_rows) == 0 || is.na(current_rows)) current_rows <- NULL
+      if (length(current_cols) == 0 || is.na(current_cols)) current_cols <- NULL
+
+      isolate({
+        if (!identical(current_rows, safe_rows)) {
+          updateNumericInput(session, "n_rows", value = safe_rows, min = 1, max = max_val)
+        } else {
+          updateNumericInput(session, "n_rows", min = 1, max = max_val)
+        }
+
+        if (!identical(current_cols, safe_cols)) {
+          updateNumericInput(session, "n_cols", value = safe_cols, min = 1, max = max_val)
+        } else {
+          updateNumericInput(session, "n_cols", min = 1, max = max_val)
+        }
+      })
+      
+      out
+    })
+    
+    plot_size <- reactive({
+      info <- plot_info()
+      if (is.null(info$layout)) {
+        list(w = plot_width(), h = plot_height())
+      } else {
+        list(
+          w = plot_width()  * info$layout$ncol,
+          h = plot_height() * info$layout$nrow
+        )
+      }
+    })
+    
+    output$download_plot <- downloadHandler(
+      filename = function() paste0("numeric_boxplots_", Sys.Date(), ".png"),
       content  = function(file) {
         info <- plot_info()
         req(info$plot)
@@ -2536,11 +2748,12 @@ initialize_layout_state <- function(input, session) {
       }
 
       val <- suppressWarnings(as.numeric(input[[name]]))
-      if (is.na(val) || val <= 0) {
+      if (is.na(val) || val < 1) {
         layout_overrides[[name]] <- 0L
         layout_manual[[name]] <- FALSE
       } else {
-        layout_overrides[[name]] <- as.integer(val)
+        clamped <- as.integer(max(1, min(10, val)))
+        layout_overrides[[name]] <- clamped
         layout_manual[[name]] <- TRUE
       }
     })
@@ -2553,7 +2766,7 @@ initialize_layout_state <- function(input, session) {
 
   default_ui_value <- function(cur_val) {
     val <- if (is.null(cur_val)) 1 else cur_val
-    ifelse(is.na(val) || val <= 0, 1, val)
+    ifelse(is.na(val) || val <= 0, 1, min(10, val))
   }
 
   list(
@@ -2571,10 +2784,10 @@ observe_layout_synchronization <- function(plot_info_reactive, layout_state, ses
     if (is.null(info)) return()
 
     sync_input <- function(id, value, manual_key) {
-      val <- ifelse(is.null(value) || value <= 0, 1, value)
+      val <- ifelse(is.null(value) || value <= 0, 1, min(10, value))
       if (!isTRUE(layout_state$manual[[manual_key]])) {
         layout_state$suppress[[id]] <- TRUE
-        updateNumericInput(session, id, value = val)
+        updateNumericInput(session, id, value = val, min = 1, max = 10)
       }
     }
 
@@ -2714,6 +2927,7 @@ build_descriptive_metric_bar_plot <- function(info, y_label) {
 build_descriptive_categorical_plot <- function(df,
                                                selected_vars = NULL,
                                                group_var = NULL,
+                                               strata_levels = NULL,
                                                show_proportions = FALSE,
                                                nrow_input = NULL,
                                                ncol_input = NULL) {
@@ -2731,13 +2945,22 @@ build_descriptive_categorical_plot <- function(df,
   if (!is.null(group_var) && group_var %in% names(df)) {
     df[[group_var]] <- as.character(df[[group_var]])
     df[[group_var]][is.na(df[[group_var]]) | trimws(df[[group_var]]) == ""] <- "Missing"
-    df[[group_var]] <- factor(df[[group_var]], levels = unique(df[[group_var]]))
+
+    if (!is.null(strata_levels) && length(strata_levels) > 0) {
+      keep_levels <- unique(strata_levels)
+      df <- df[df[[group_var]] %in% keep_levels, , drop = FALSE]
+      if (nrow(df) == 0) return(NULL)
+      df[[group_var]] <- factor(df[[group_var]], levels = keep_levels)
+    } else {
+      df[[group_var]] <- factor(df[[group_var]], levels = unique(df[[group_var]]))
+    }
   } else {
     group_var <- NULL
   }
-  
+
   plots <- lapply(factor_vars, function(var) {
-    cols_to_use <- c(var, group_var)
+    group_col <- if (!is.null(group_var) && !identical(group_var, var)) group_var else NULL
+    cols_to_use <- c(var, group_col)
     cols_to_use <- cols_to_use[cols_to_use %in% names(df)]
     var_data <- df[, cols_to_use, drop = FALSE]
     
@@ -2755,14 +2978,14 @@ build_descriptive_categorical_plot <- function(df,
     
     y_label <- if (isTRUE(show_proportions)) "Proportion" else "Count"
     
-    if (!is.null(group_var)) {
-      var_data[[group_var]] <- droplevels(var_data[[group_var]])
-      count_df <- dplyr::count(var_data, .data[[var]], .data[[group_var]], name = "count")
+    if (!is.null(group_col)) {
+      var_data[[group_col]] <- droplevels(var_data[[group_col]])
+      count_df <- dplyr::count(var_data, .data[[var]], .data[[group_col]], name = "count")
       if (nrow(count_df) == 0) return(NULL)
-      
+
       if (isTRUE(show_proportions)) {
         count_df <- count_df |>
-          dplyr::group_by(.data[[group_var]]) |>
+          dplyr::group_by(.data[[group_col]]) |>
           dplyr::mutate(total = sum(.data$count, na.rm = TRUE)) |>
           dplyr::mutate(value = ifelse(.data$total > 0, .data$count / .data$total, 0)) |>
           dplyr::ungroup()
@@ -2770,19 +2993,19 @@ build_descriptive_categorical_plot <- function(df,
       } else {
         count_df <- dplyr::mutate(count_df, value = .data$count)
       }
-      
+
       count_df[[var]] <- factor(as.character(count_df[[var]]), levels = level_order)
-      
-      p <- ggplot(count_df, aes(x = .data[[var]], y = .data$value, fill = .data[[group_var]])) +
+
+      p <- ggplot(count_df, aes(x = .data[[var]], y = .data$value, fill = .data[[group_col]])) +
         geom_col(position = position_dodge(width = 0.75), width = 0.65) +
         theme_minimal(base_size = 13) +
-        labs(title = var, x = NULL, y = y_label, fill = group_var) +
+        labs(title = var, x = NULL, y = y_label, fill = group_col) +
         theme(axis.text.x = element_text(angle = 45, hjust = 1))
-      
+
       if (isTRUE(show_proportions)) {
         p <- p + scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0, 1))
       }
-      
+
       p
     } else {
       count_df <- dplyr::count(var_data, .data[[var]], name = "count")
@@ -2835,26 +3058,75 @@ build_descriptive_categorical_plot <- function(df,
 }
 
 
-build_descriptive_boxplot <- function(df) {
-  num_vars <- names(df)[sapply(df, is.numeric)]
+build_descriptive_numeric_boxplot <- function(df,
+                                              selected_vars = NULL,
+                                              group_var = NULL,
+                                              show_points = TRUE,
+                                              nrow_input = NULL,
+                                              ncol_input = NULL) {
+  if (is.null(df) || !is.data.frame(df) || nrow(df) == 0) return(NULL)
+  
+  num_vars <- names(df)[vapply(df, is.numeric, logical(1))]
+  if (!is.null(selected_vars) && length(selected_vars) > 0) {
+    num_vars <- intersect(num_vars, selected_vars)
+  }
   if (length(num_vars) == 0) return(NULL)
-  plots <- lapply(num_vars, function(v) {
-    ggplot(df, aes(x = 1, y = .data[[v]])) +
-      geom_boxplot(outlier.shape = NA, fill = "#A6CEE3") +
-      geom_jitter(width = 0.1, alpha = 0.5, color = "#1F78B4") +
-      theme_minimal(base_size = 13) +
-      labs(title = v, x = NULL, y = "Value") +
-      theme(
-        axis.text.x = element_blank(),
-        axis.ticks.x = element_blank()
-      )
+  
+  # ensure discrete x if grouped
+  if (!is.null(group_var) && group_var %in% names(df)) {
+    df[[group_var]] <- as.factor(df[[group_var]])
+  } else {
+    group_var <- NULL
+  }
+  
+  plots <- lapply(num_vars, function(var) {
+    # skip all-NA vars early
+    vec <- df[[var]]
+    if (all(is.na(vec))) return(NULL)
+    
+    if (!is.null(group_var)) {
+      p <- ggplot(df, aes(x = .data[[group_var]], y = .data[[var]], fill = .data[[group_var]])) +
+        geom_boxplot(outlier.shape = NA, width = 0.6) +
+        theme_minimal(base_size = 13) +
+        labs(title = var, x = NULL, y = var) +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1))
+      if (isTRUE(show_points)) p <- p + geom_jitter(width = 0.2, alpha = 0.5, size = 1)
+    } else {
+      # ✅ always provide an x aesthetic
+      p <- ggplot(df, aes(x = factor(1), y = .data[[var]])) +
+        geom_boxplot(fill = "#2C7FB8", width = 0.3) +
+        theme_minimal(base_size = 13) +
+        labs(title = var, x = NULL, y = var) +
+        theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+      if (isTRUE(show_points)) p <- p + geom_jitter(width = 0.05, alpha = 0.5, size = 1)
+    }
+    
+    if (inherits(p, "gg")) p else NULL
   })
-  patchwork::wrap_plots(plots, ncol = 2) +
+  
+  # keep only valid ggplots
+  plots <- Filter(Negate(is.null), plots)
+  if (length(plots) == 0) return(NULL)
+  
+  layout <- resolve_grid_layout(
+    n_items = length(plots),
+    rows_input = suppressWarnings(as.numeric(nrow_input)),
+    cols_input = suppressWarnings(as.numeric(ncol_input))
+  )
+  
+  combined <- patchwork::wrap_plots(plots, nrow = layout$nrow, ncol = layout$ncol) +
     patchwork::plot_annotation(
-      title = "Boxplots",
+      title = "Numeric Distributions (Boxplots)",
       theme = theme(plot.title = element_text(size = 16, face = "bold"))
     )
+  
+  list(
+    plot = combined,
+    layout = list(nrow = layout$nrow, ncol = layout$ncol),
+    panels = length(plots)
+  )
 }
+
 
 
 build_descriptive_histogram <- function(df) {
@@ -3835,17 +4107,8 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
       
       # ---- Validate stratification complexity ----
       strat_var <- input$stratify_var
-      if (!is.null(strat_var) && strat_var != "None" && strat_var %in% names(df)) {
-        n_levels <- length(unique(na.omit(df[[strat_var]])))
-        validate(
-          need(
-            n_levels <= 10,
-            paste0(
-              "❌ Stratification variable '", strat_var,
-              "' has ", n_levels, " levels — please select a variable with at most 10."
-            )
-          )
-        )
+      if (!guard_stratification_levels(df, strat_var)) {
+        return(NULL)
       }
 
       rhs <- reg_compose_rhs(
@@ -4604,6 +4867,42 @@ get_selected_responses <- function(input) {
 # -- Utility to resolve either a reactive expression or raw data frame
 .resolve_data <- function(data) {
   if (is.function(data)) data() else data
+}
+
+MAX_STRATIFICATION_LEVELS <- 10
+
+guard_stratification_levels <- function(data, stratify_var,
+                                        max_levels = MAX_STRATIFICATION_LEVELS,
+                                        session = shiny::getDefaultReactiveDomain(),
+                                        notify = TRUE) {
+  if (is.null(stratify_var) || identical(stratify_var, "None") || identical(stratify_var, "")) {
+    return(TRUE)
+  }
+
+  df <- .resolve_data(data)
+  if (is.null(df) || !is.data.frame(df) || !(stratify_var %in% names(df))) {
+    return(TRUE)
+  }
+
+  values <- df[[stratify_var]]
+  values <- values[!is.na(values)]
+  n_levels <- length(unique(as.character(values)))
+
+  if (n_levels <= max_levels) {
+    return(TRUE)
+  }
+
+  message <- paste0(
+    "❌ Stratification variable '", stratify_var,
+    "' has ", n_levels,
+    " levels — please select a variable with at most ", max_levels, "."
+  )
+
+  if (isTRUE(notify) && !is.null(session)) {
+    shiny::showNotification(message, type = "error", duration = 8)
+  }
+
+  FALSE
 }
 
 # ---------------------------------------------------------------
