@@ -29,31 +29,31 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
   sidebarLayout(
     sidebarPanel(
       width = 4,
-      h4("Step 4 - Principal Component Analysis (PCA)"),
-      p("Visualize multivariate structure using a PCA biplot."),
+      h4("Step 4 — Show PCA biplot"),
+      p("Show multivariate structure using a PCA biplot."),
       hr(),
       selectInput(
         ns("plot_type"),
-        label = "Visualization type:",
+        label = "Select visualization type:",
         choices = c("PCA biplot" = "biplot"),
         selected = "biplot"
       ),
       hr(),
       selectInput(
         ns("pca_color"),
-        label = "Color points by:",
+        label = "Select color variable:",
         choices = choices,
         selected = "None"
       ),
       selectInput(
         ns("pca_shape"),
-        label = "Shape points by:",
+        label = "Select shape variable:",
         choices = choices,
         selected = "None"
       ),
       selectInput(
         ns("pca_label"),
-        label = "Label points by:",
+        label = "Select label variable:",
         choices = choices,
         selected = "None"
       ),
@@ -91,11 +91,11 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
         )
       ),
       hr(),
-      downloadButton(ns("download_plot"), "Download Plot")
+      downloadButton(ns("download_plot"), "Download plot")
     ),
     mainPanel(
       width = 8,
-      h4("PCA Biplot"),
+      h4("PCA biplot"),
       plotOutput(ns("plot"))
     )
   )

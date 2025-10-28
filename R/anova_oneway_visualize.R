@@ -7,12 +7,12 @@ visualize_oneway_ui <- function(id) {
   sidebarLayout(
     sidebarPanel(
       width = 4,
-      h4("Step 4 — Visualize One-way ANOVA"),
-      p("Select visualization type and adjust subplot layout, axis scaling, and figure size."),
+      h4("Step 4 — Show one-way ANOVA visuals"),
+      p("Select a visualization type and adjust subplot layout, axis scaling, and figure size."),
       hr(),
       selectInput(
         ns("plot_type"),
-        label = "Visualization type:",
+        label = "Select visualization type:",
         choices = c("Mean ± SE" = "mean_se"),
         selected = "mean_se"
       ),
@@ -25,7 +25,7 @@ visualize_oneway_ui <- function(id) {
       hr(),
       add_color_customization_ui(ns, multi_group = FALSE),
       hr(),
-      downloadButton(ns("download_plot"), "Download Plot")
+      downloadButton(ns("download_plot"), "Download plot")
     ),
     mainPanel(
       width = 8,

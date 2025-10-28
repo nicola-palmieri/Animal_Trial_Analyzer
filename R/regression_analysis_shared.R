@@ -14,13 +14,13 @@ reg_detect_types <- function(df) {
 
 reg_variable_selectors_ui <- function(ns, types, allow_random = FALSE) {
   out <- list(
-    selectInput(ns("dep"), "Response variable (numeric):", choices = types$num),
-    selectInput(ns("fixed"), "Categorical predictors:", choices = types$fac, multiple = TRUE),
-    selectInput(ns("covar"), "Numeric predictors:", choices = types$num, multiple = TRUE)
+    selectInput(ns("dep"), "Select response variable (numeric):", choices = types$num),
+    selectInput(ns("fixed"), "Select categorical predictors:", choices = types$fac, multiple = TRUE),
+    selectInput(ns("covar"), "Select numeric predictors:", choices = types$num, multiple = TRUE)
   )
   if (allow_random) {
     out <- c(out, list(
-      selectInput(ns("random"), "Random effect (categorical):", choices = types$fac, selected = NULL)
+      selectInput(ns("random"), "Select random effect (categorical):", choices = types$fac, selected = NULL)
     ))
   }
   do.call(tagList, out)
@@ -35,7 +35,7 @@ reg_interactions_ui <- function(ns, fixed, fac_vars) {
   pair_values <- vapply(pairs, function(p) paste(p, collapse = ":"), character(1))
   checkboxGroupInput(
     ns("interactions"),
-    label = "Add 2-way interactions (optional):",
+    label = "Select 2-way interactions (optional):",
     choices = stats::setNames(pair_values, pair_labels)
   )
 }
