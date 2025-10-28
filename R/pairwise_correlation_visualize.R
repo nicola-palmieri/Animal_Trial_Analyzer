@@ -7,7 +7,7 @@ visualize_ggpairs_ui <- function(id) {
   sidebarLayout(
     sidebarPanel(
       width = 4,
-      h4("Step 4 — Visualize Pairwise Correlation"),
+      h4("Step 4 — Visualize pairwise correlation"),
       p("Visualize pairwise relationships and correlation coefficients among numeric variables."),
       hr(),
       selectInput(
@@ -42,7 +42,7 @@ visualize_ggpairs_ui <- function(id) {
         )
       ),
       hr(),
-      downloadButton(ns("download_plot"), "Download Plot")
+      downloadButton(ns("download_plot"), "Download plot")
     ),
     mainPanel(
       width = 8,

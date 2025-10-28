@@ -96,7 +96,7 @@ render_strata_order_input <- function(ns, data, strat_var,
   if (length(strata_levels) == 0) return(NULL)
   
   if (is.null(order_label)) {
-    order_label <- paste("Order of levels for", strat_var, "(strata):")
+    order_label <- "Order of levels (first = reference):"
   }
   
   selectInput(

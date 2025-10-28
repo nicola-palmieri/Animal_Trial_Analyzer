@@ -7,7 +7,7 @@ upload_ui <- function(id) {
   sidebarLayout(
     sidebarPanel(
       width = 4,
-      h4("Step 1 — Upload Data"),
+      h4("Step 1 — Upload data"),
       p("Upload your Excel file, choose the worksheet to analyze, and ensure the data follow either the long or wide format shown below."),
       hr(),
       radioButtons(
@@ -30,7 +30,7 @@ upload_ui <- function(id) {
     ),
     mainPanel(
       width = 8,
-      h4("Data Preview"),
+      h4("Data preview"),
       verbatimTextOutput(ns("validation_msg")),
       DTOutput(ns("preview"))
     )

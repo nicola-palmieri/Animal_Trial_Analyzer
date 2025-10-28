@@ -10,12 +10,12 @@ ggpairs_ui <- function(id) {
       selectInput(ns("vars"), "Variables:", choices = NULL, multiple = TRUE),
       br(),
       fluidRow(
-        column(6, actionButton(ns("run"), "Run", width = "100%")),
-        column(6, downloadButton(ns("download_model"), "Download All Results", width = "100%"))
+        column(6, actionButton(ns("run"), "Show correlation matrix", width = "100%")),
+        column(6, downloadButton(ns("download_model"), "Download all results", width = "100%"))
       )
     ),
     results = tagList(
-      h5("Correlation Matrix"),
+      h5("Correlation matrix"),
       verbatimTextOutput(ns("summary"))
     )
   )

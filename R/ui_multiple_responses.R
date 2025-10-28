@@ -16,7 +16,7 @@ render_response_inputs <- function(ns, data, input) {
   tagList(
     checkboxInput(
       ns("multi_resp"),
-      "Enable multiple response variables",
+      "Show multiple response variables",
       value = isTRUE(input$multi_resp)
     ),
     selectInput(
