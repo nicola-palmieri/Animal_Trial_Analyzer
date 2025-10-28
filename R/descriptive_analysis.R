@@ -70,13 +70,9 @@ descriptive_server <- function(id, filtered_data) {
         return(NULL)
       }
 
+      data_columns <- selected_vars
+
       if (!is.null(group_var)) {
-        # make sure the group var is present
-        if (!(group_var %in% names(local_data))) {
-          selected_vars <- unique(c(selected_vars, group_var))
-          local_data <- local_data[, selected_vars, drop = FALSE]
-        }
-        
         # keep ONLY selected levels, in the exact order; drop NA and unused levels
         sel <- input$strata_order
         if (!is.null(sel) && length(sel) > 0) {
@@ -86,9 +82,13 @@ descriptive_server <- function(id, filtered_data) {
           local_data[[group_var]] <- factor(as.character(local_data[[group_var]]))
         }
         local_data <- droplevels(local_data)
+
+        data_columns <- unique(c(data_columns, group_var))
       }
 
-      local_data <- local_data[, selected_vars, drop = FALSE]
+      data_columns <- data_columns[!is.na(data_columns) & nzchar(data_columns)]
+      data_columns <- intersect(data_columns, names(local_data))
+      local_data <- local_data[, data_columns, drop = FALSE]
 
       if (!is.null(group_var) && !is.null(input$strata_order)) {
         if (group_var %in% names(local_data)) {
