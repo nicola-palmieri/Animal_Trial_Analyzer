@@ -119,6 +119,7 @@ build_descriptive_metric_bar_plot <- function(info, y_label) {
 build_descriptive_categorical_plot <- function(df,
                                                selected_vars = NULL,
                                                group_var = NULL,
+                                               strata_levels = NULL,
                                                show_proportions = FALSE,
                                                nrow_input = NULL,
                                                ncol_input = NULL) {
@@ -136,13 +137,22 @@ build_descriptive_categorical_plot <- function(df,
   if (!is.null(group_var) && group_var %in% names(df)) {
     df[[group_var]] <- as.character(df[[group_var]])
     df[[group_var]][is.na(df[[group_var]]) | trimws(df[[group_var]]) == ""] <- "Missing"
-    df[[group_var]] <- factor(df[[group_var]], levels = unique(df[[group_var]]))
+
+    if (!is.null(strata_levels) && length(strata_levels) > 0) {
+      keep_levels <- unique(strata_levels)
+      df <- df[df[[group_var]] %in% keep_levels, , drop = FALSE]
+      if (nrow(df) == 0) return(NULL)
+      df[[group_var]] <- factor(df[[group_var]], levels = keep_levels)
+    } else {
+      df[[group_var]] <- factor(df[[group_var]], levels = unique(df[[group_var]]))
+    }
   } else {
     group_var <- NULL
   }
-  
+
   plots <- lapply(factor_vars, function(var) {
-    cols_to_use <- c(var, group_var)
+    group_col <- if (!is.null(group_var) && !identical(group_var, var)) group_var else NULL
+    cols_to_use <- c(var, group_col)
     cols_to_use <- cols_to_use[cols_to_use %in% names(df)]
     var_data <- df[, cols_to_use, drop = FALSE]
     
@@ -160,14 +170,14 @@ build_descriptive_categorical_plot <- function(df,
     
     y_label <- if (isTRUE(show_proportions)) "Proportion" else "Count"
     
-    if (!is.null(group_var)) {
-      var_data[[group_var]] <- droplevels(var_data[[group_var]])
-      count_df <- dplyr::count(var_data, .data[[var]], .data[[group_var]], name = "count")
+    if (!is.null(group_col)) {
+      var_data[[group_col]] <- droplevels(var_data[[group_col]])
+      count_df <- dplyr::count(var_data, .data[[var]], .data[[group_col]], name = "count")
       if (nrow(count_df) == 0) return(NULL)
-      
+
       if (isTRUE(show_proportions)) {
         count_df <- count_df |>
-          dplyr::group_by(.data[[group_var]]) |>
+          dplyr::group_by(.data[[group_col]]) |>
           dplyr::mutate(total = sum(.data$count, na.rm = TRUE)) |>
           dplyr::mutate(value = ifelse(.data$total > 0, .data$count / .data$total, 0)) |>
           dplyr::ungroup()
@@ -175,19 +185,19 @@ build_descriptive_categorical_plot <- function(df,
       } else {
         count_df <- dplyr::mutate(count_df, value = .data$count)
       }
-      
+
       count_df[[var]] <- factor(as.character(count_df[[var]]), levels = level_order)
-      
-      p <- ggplot(count_df, aes(x = .data[[var]], y = .data$value, fill = .data[[group_var]])) +
+
+      p <- ggplot(count_df, aes(x = .data[[var]], y = .data$value, fill = .data[[group_col]])) +
         geom_col(position = position_dodge(width = 0.75), width = 0.65) +
         theme_minimal(base_size = 13) +
-        labs(title = var, x = NULL, y = y_label, fill = group_var) +
+        labs(title = var, x = NULL, y = y_label, fill = group_col) +
         theme(axis.text.x = element_text(angle = 45, hjust = 1))
-      
+
       if (isTRUE(show_proportions)) {
         p <- p + scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0, 1))
       }
-      
+
       p
     } else {
       count_df <- dplyr::count(var_data, .data[[var]], name = "count")
@@ -623,20 +633,31 @@ build_pca_biplot <- function(pca_obj, data, color_var = NULL, shape_var = NULL,
 
 compute_grid_layout <- function(n_items, rows_input, cols_input) {
   # Safely handle nulls
-  if (is.null(n_items) || length(n_items) == 0 || is.na(n_items) || n_items <= 0) {
+  if (is.null(n_items) || length(n_items) == 0) {
     return(list(nrow = 1, ncol = 1))
   }
-  
-  # Replace NULL or NA inputs with 0
-  if (is.null(rows_input) || is.na(rows_input)) rows_input <- 0
-  if (is.null(cols_input) || is.na(cols_input)) cols_input <- 0
-  
-  n_row_input <- suppressWarnings(as.numeric(rows_input))
-  n_col_input <- suppressWarnings(as.numeric(cols_input))
-  
-  # Handle invalid inputs
-  if (is.na(n_row_input)) n_row_input <- 0
-  if (is.na(n_col_input)) n_col_input <- 0
+
+  n_items <- suppressWarnings(as.numeric(n_items[1]))
+  if (is.na(n_items) || n_items <= 0) {
+    return(list(nrow = 1, ncol = 1))
+  }
+
+  normalize_dim_input <- function(x) {
+    if (is.null(x) || length(x) == 0) {
+      return(0)
+    }
+
+    x <- suppressWarnings(as.numeric(x[1]))
+
+    if (is.na(x) || x < 0) {
+      return(0)
+    }
+
+    x
+  }
+
+  n_row_input <- normalize_dim_input(rows_input)
+  n_col_input <- normalize_dim_input(cols_input)
   
   if (n_row_input > 0) {
     n_row_final <- n_row_input
