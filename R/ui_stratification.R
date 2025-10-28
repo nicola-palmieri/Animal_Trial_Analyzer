@@ -7,6 +7,42 @@
   if (is.function(data)) data() else data
 }
 
+MAX_STRATIFICATION_LEVELS <- 10
+
+guard_stratification_levels <- function(data, stratify_var,
+                                        max_levels = MAX_STRATIFICATION_LEVELS,
+                                        session = shiny::getDefaultReactiveDomain(),
+                                        notify = TRUE) {
+  if (is.null(stratify_var) || identical(stratify_var, "None") || identical(stratify_var, "")) {
+    return(TRUE)
+  }
+
+  df <- .resolve_data(data)
+  if (is.null(df) || !is.data.frame(df) || !(stratify_var %in% names(df))) {
+    return(TRUE)
+  }
+
+  values <- df[[stratify_var]]
+  values <- values[!is.na(values)]
+  n_levels <- length(unique(as.character(values)))
+
+  if (n_levels <= max_levels) {
+    return(TRUE)
+  }
+
+  message <- paste0(
+    "❌ Stratification variable '", stratify_var,
+    "' has ", n_levels,
+    " levels — please select a variable with at most ", max_levels, "."
+  )
+
+  if (isTRUE(notify) && !is.null(session)) {
+    shiny::showNotification(message, type = "error", duration = 8)
+  }
+
+  FALSE
+}
+
 # ---------------------------------------------------------------
 # Stratification options panel (select strat variable + placeholder for order)
 # ---------------------------------------------------------------
