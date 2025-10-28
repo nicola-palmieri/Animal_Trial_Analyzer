@@ -1565,7 +1565,7 @@ print_summary_sections <- function(results) {
   cat("  • Shapiro p < 0.05 → non-normal distribution.\n")
 }
 # ===============================================================
-# Visualization Module — Descriptive Statistics
+# Visualization Module — Descriptive Statistics (Dispatcher)
 # ===============================================================
 
 visualize_descriptive_ui <- function(id) {
@@ -1581,31 +1581,33 @@ visualize_descriptive_ui <- function(id) {
         label = "Visualization type:",
         choices = c(
           "Categorical Distributions" = "categorical",
-          "Numeric Boxplots" = "boxplots",
-          "Numeric Histograms" = "histograms",
-          "CV (%)" = "cv",
-          "Outlier Counts" = "outliers",
-          "Missingness (%)" = "missing",
-          "Shapiro–Wilk p-values" = "shapiro"
+          "Numeric Boxplots"          = "boxplots",
+          "Numeric Histograms"        = "histograms",
+          "CV (%)"                    = "cv",
+          "Outlier Counts"            = "outliers",
+          "Missingness (%)"           = "missing",
+          "Shapiro–Wilk p-values"     = "shapiro"
         ),
         selected = "categorical"
       ),
       hr(),
-      uiOutput(ns("sub_controls"))  # 👈 placeholder for submodule-specific controls
+      uiOutput(ns("sub_controls"))  # controls from active submodule
     ),
     mainPanel(
       width = 8,
-      plotOutput(ns("plot"), height = "auto")
+      plotOutput(ns("plot"), height = "auto")  # parent-owned plotOutput
     )
   )
 }
-
 
 visualize_descriptive_server <- function(id, filtered_data, descriptive_summary) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
-    # --- Submodule controls in the same sidebar ---
+    # holder for the active submodule's returned reactives
+    active <- reactiveVal(NULL)
+    
+    # Insert the submodule controls into the same sidebar
     output$sub_controls <- renderUI({
       switch(input$plot_type,
              "categorical" = visualize_categorical_barplots_ui(ns("categorical")),
@@ -1618,22 +1620,31 @@ visualize_descriptive_server <- function(id, filtered_data, descriptive_summary)
       )
     })
     
-    # --- Route plot rendering to active submodule ---
+    # Start/replace the submodule server and capture its return
     observeEvent(input$plot_type, {
-      plot_type <- input$plot_type
-      if (is.null(plot_type) || length(plot_type) == 0) return(NULL)
-      plot_type <- plot_type[[1]]
+      type <- input$plot_type
+      if (is.null(type) || length(type) == 0) return()
       
-      switch(plot_type,
-             "categorical" = visualize_categorical_barplots_server("categorical", filtered_data, descriptive_summary),
-             NULL
+      handle <- switch(type[[1]],
+                       "categorical" = visualize_categorical_barplots_server("categorical", filtered_data, descriptive_summary),
+                       NULL
       )
-    })
+      active(handle)
+    }, ignoreInit = FALSE)
     
-    
+    # Parent renders the plot using the submodule's returned reactives
+    output$plot <- renderPlot({
+      h <- active()
+      req(h)
+      p <- h$plot()
+      validate(need(!is.null(p), "No plot available."))
+      print(p)
+    },
+    width  = function() { h <- active(); if (is.null(h)) 800 else h$width()  },
+    height = function() { h <- active(); if (is.null(h)) 600 else h$height() },
+    res = 96)
   })
 }
-
 # ===============================================================
 # 🟦 Descriptive Visualization — Categorical Barplots
 # ===============================================================
@@ -1645,7 +1656,7 @@ visualize_categorical_barplots_ui <- function(id) {
     fluidRow(
       column(
         6,
-        numericInput(ns("plot_width"), "Subplot width (px)", 400, 200, 2000, 50)
+        numericInput(ns("plot_width"),  "Subplot width (px)",  400, 200, 2000, 50)
       ),
       column(
         6,
@@ -1656,72 +1667,68 @@ visualize_categorical_barplots_ui <- function(id) {
   )
 }
 
-
 visualize_categorical_barplots_server <- function(id, filtered_data, summary_info) {
   moduleServer(id, function(input, output, session) {
-    ns <- session$ns
-    
-    df <- reactive({
-      data <- filtered_data()
-      validate(need(!is.null(data), "No data available."))
-      data
+
+    resolve_input_value <- function(x) {
+      if (is.null(x)) return(NULL)
+      if (is.reactive(x)) x() else x
+    }
+
+    plot_width <- reactive({
+      w <- input$plot_width
+      if (is.null(w) || !is.numeric(w) || is.na(w)) 400 else w
     })
-    
-    summary_df <- reactive({
-      info <- summary_info()
-      if (is.reactive(info$summary)) info <- info$summary()
-      info
+
+    plot_height <- reactive({
+      h <- input$plot_height
+      if (is.null(h) || !is.numeric(h) || is.na(h)) 300 else h
     })
-    
-    # ------------------------------------------------------------
-    # Build categorical barplots
-    # ------------------------------------------------------------
+
     plot_obj <- reactive({
-      data <- filtered_data()
+      dat <- filtered_data()
       info <- summary_info()
-      validate(need(!is.null(data), "No data available."))
+
+      validate(need(!is.null(dat) && is.data.frame(dat) && nrow(dat) > 0, "No data available."))
       validate(need(!is.null(info), "Summary not available."))
-      
-      summary_data <- info$summary
-      if (is.reactive(summary_data)) summary_data <- summary_data()
-      
-      selected_vars <- info$selected_vars
-      if (is.reactive(selected_vars)) selected_vars <- selected_vars()
-      
-      # --- Call the existing app helper ---
-      build_descriptive_categorical_plot(
-        summary_data = summary_data,
-        raw_data = data,
-        show_proportions = input$show_proportions,
-        width_px = input$plot_width,
-        height_px = input$plot_height
+
+      selected_vars <- resolve_input_value(info$selected_vars)
+      group_var <- resolve_input_value(info$group_var)
+
+      plot_info <- build_descriptive_categorical_plot(
+        df = dat,
+        selected_vars = selected_vars,
+        group_var = group_var,
+        show_proportions = isTRUE(input$show_proportions)
       )
+
+      validate(need(!is.null(plot_info), "No categorical variables available for plotting."))
+      plot_info
     })
-    
-    output$plot <- renderPlot({
-      obj <- plot_obj()
-      validate(need(!is.null(obj), "Plot object not available."))
-      print(obj$plot)
-    },
-    width = function() input$plot_width,
-    height = function() input$plot_height,
-    res = 96)
-    
+
     output$download_plot <- downloadHandler(
       filename = function() paste0("categorical_barplots_", Sys.Date(), ".png"),
-      content = function(file) {
-        ggsave(
+      content  = function(file) {
+        info <- plot_obj()
+        req(info$plot)
+        ggplot2::ggsave(
           filename = file,
-          plot = plot_obj(),
+          plot = info$plot,
           device = "png",
           dpi = 300,
-          width = input$plot_width / 96,
-          height = input$plot_height / 96,
+          width  = plot_width() / 96,
+          height = plot_height() / 96,
           units = "in",
           limitsize = FALSE
         )
       }
     )
+
+    return(list(
+      plot   = reactive({ plot_obj()$plot }),
+      width  = plot_width,
+      height = plot_height
+    ))
   })
 }
 # ===============================================================
@@ -2677,21 +2684,123 @@ build_descriptive_metric_bar_plot <- function(info, y_label) {
 }
 
 
-build_descriptive_categorical_plot <- function(df) {
-  factor_vars <- names(df)[sapply(df, function(x) is.character(x) || is.factor(x))]
+build_descriptive_categorical_plot <- function(df,
+                                               selected_vars = NULL,
+                                               group_var = NULL,
+                                               show_proportions = FALSE) {
+  if (is.null(df) || !is.data.frame(df) || nrow(df) == 0) return(NULL)
+
+  # Identify categorical variables (character/factor/logical)
+  factor_vars <- names(df)[vapply(df, function(x) {
+    is.character(x) || is.factor(x) || is.logical(x)
+  }, logical(1))]
+
+  if (!is.null(selected_vars) && length(selected_vars) > 0) {
+    factor_vars <- intersect(factor_vars, selected_vars)
+  }
+
   if (length(factor_vars) == 0) return(NULL)
-  plots <- lapply(factor_vars, function(v) {
-    ggplot(df, aes(x = .data[[v]])) +
-      geom_bar(fill = "#2C7FB8", width = 0.7) +
-      theme_minimal(base_size = 13) +
-      labs(title = v, x = NULL, y = "Count") +
-      theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+  if (!is.null(group_var) && group_var %in% names(df)) {
+    df[[group_var]] <- as.character(df[[group_var]])
+    df[[group_var]][is.na(df[[group_var]]) | trimws(df[[group_var]]) == ""] <- "Missing"
+    df[[group_var]] <- factor(df[[group_var]], levels = unique(df[[group_var]]))
+  } else {
+    group_var <- NULL
+  }
+
+  plots <- lapply(factor_vars, function(var) {
+    cols_to_use <- c(var, group_var)
+    cols_to_use <- cols_to_use[cols_to_use %in% names(df)]
+    var_data <- df[, cols_to_use, drop = FALSE]
+
+    var_data[[var]] <- as.character(var_data[[var]])
+    keep <- !is.na(var_data[[var]]) & trimws(var_data[[var]]) != ""
+    if (!any(keep)) return(NULL)
+    var_data <- var_data[keep, , drop = FALSE]
+
+    level_order <- if (is.factor(df[[var]])) {
+      as.character(levels(df[[var]]))
+    } else {
+      unique(var_data[[var]])
+    }
+    var_data[[var]] <- factor(var_data[[var]], levels = level_order)
+
+    y_label <- if (isTRUE(show_proportions)) "Proportion" else "Count"
+
+    if (!is.null(group_var)) {
+      var_data[[group_var]] <- droplevels(var_data[[group_var]])
+      count_df <- dplyr::count(var_data, .data[[var]], .data[[group_var]], name = "count")
+      if (nrow(count_df) == 0) return(NULL)
+
+      if (isTRUE(show_proportions)) {
+        count_df <- count_df |>
+          dplyr::group_by(.data[[group_var]]) |>
+          dplyr::mutate(total = sum(.data$count, na.rm = TRUE)) |>
+          dplyr::mutate(value = ifelse(.data$total > 0, .data$count / .data$total, 0)) |>
+          dplyr::ungroup()
+        count_df$total <- NULL
+      } else {
+        count_df <- dplyr::mutate(count_df, value = .data$count)
+      }
+
+      count_df[[var]] <- factor(as.character(count_df[[var]]), levels = level_order)
+
+      p <- ggplot(count_df, aes(x = .data[[var]], y = .data$value, fill = .data[[group_var]])) +
+        geom_col(position = position_dodge(width = 0.75), width = 0.65) +
+        theme_minimal(base_size = 13) +
+        labs(title = var, x = NULL, y = y_label, fill = group_var) +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+      if (isTRUE(show_proportions)) {
+        p <- p + scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0, 1))
+      }
+
+      p
+    } else {
+      count_df <- dplyr::count(var_data, .data[[var]], name = "count")
+      if (nrow(count_df) == 0) return(NULL)
+
+      total <- sum(count_df$count, na.rm = TRUE)
+      if (isTRUE(show_proportions) && total > 0) {
+        count_df$value <- count_df$count / total
+      } else {
+        count_df$value <- count_df$count
+      }
+
+      count_df[[var]] <- factor(as.character(count_df[[var]]), levels = level_order)
+
+      p <- ggplot(count_df, aes(x = .data[[var]], y = .data$value)) +
+        geom_col(fill = "#2C7FB8", width = 0.65) +
+        theme_minimal(base_size = 13) +
+        labs(title = var, x = NULL, y = y_label) +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+      if (isTRUE(show_proportions)) {
+        p <- p + scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0, 1))
+      }
+
+      p
+    }
   })
-  patchwork::wrap_plots(plots, ncol = 2) +
+
+  plots <- Filter(Negate(is.null), plots)
+  if (length(plots) == 0) return(NULL)
+
+  ncol <- if (length(plots) == 1) 1 else 2
+  nrow <- ceiling(length(plots) / ncol)
+
+  combined <- patchwork::wrap_plots(plots, ncol = ncol) +
     patchwork::plot_annotation(
       title = "Categorical Distributions",
       theme = theme(plot.title = element_text(size = 16, face = "bold"))
     )
+
+  list(
+    plot = combined,
+    layout = list(nrow = nrow, ncol = ncol),
+    panels = length(plots)
+  )
 }
 
 
