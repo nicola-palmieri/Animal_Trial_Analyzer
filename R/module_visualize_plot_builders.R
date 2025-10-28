@@ -103,11 +103,13 @@ build_descriptive_metric_bar_plot <- function(info, y_label) {
   p <- ggplot(df, aes(x = variable, y = value))
   if (has_multiple_groups) {
     legend_title <- if (!is.null(info$group_label)) info$group_label else "Group"
+    palette <- resolve_palette_for_levels(levels(df$.group))
     p <- p +
       geom_col(aes(fill = .group), position = position_dodge(width = 0.75), width = 0.65) +
+      scale_fill_manual(values = palette) +
       labs(fill = legend_title)
   } else {
-    p <- p + geom_col(fill = "#2C7FB8", width = 0.65)
+    p <- p + geom_col(fill = resolve_single_color(), width = 0.65)
   }
   p +
     theme_minimal(base_size = 13) +
@@ -187,9 +189,13 @@ build_descriptive_categorical_plot <- function(df,
       }
 
       count_df[[var]] <- factor(as.character(count_df[[var]]), levels = level_order)
+      group_levels <- levels(droplevels(var_data[[group_col]]))
+      count_df[[group_col]] <- factor(as.character(count_df[[group_col]]), levels = group_levels)
+      palette <- resolve_palette_for_levels(group_levels)
 
       p <- ggplot(count_df, aes(x = .data[[var]], y = .data$value, fill = .data[[group_col]])) +
         geom_col(position = position_dodge(width = 0.75), width = 0.65) +
+        scale_fill_manual(values = palette) +
         theme_minimal(base_size = 13) +
         labs(title = var, x = NULL, y = y_label, fill = group_col) +
         theme(axis.text.x = element_text(angle = 45, hjust = 1))
@@ -213,7 +219,7 @@ build_descriptive_categorical_plot <- function(df,
       count_df[[var]] <- factor(as.character(count_df[[var]]), levels = level_order)
       
       p <- ggplot(count_df, aes(x = .data[[var]], y = .data$value)) +
-        geom_col(fill = "#2C7FB8", width = 0.65) +
+        geom_col(fill = resolve_single_color(), width = 0.65) +
         theme_minimal(base_size = 13) +
         labs(title = var, x = NULL, y = y_label) +
         theme(axis.text.x = element_text(angle = 45, hjust = 1))
@@ -277,20 +283,29 @@ build_descriptive_numeric_boxplot <- function(df,
     if (all(is.na(vec))) return(NULL)
     
     if (!is.null(group_var)) {
+      group_levels <- levels(df[[group_var]])
+      palette <- resolve_palette_for_levels(group_levels)
       p <- ggplot(df, aes(x = .data[[group_var]], y = .data[[var]], fill = .data[[group_var]])) +
         geom_boxplot(outlier.shape = NA, width = 0.6) +
+        scale_fill_manual(values = palette) +
         theme_minimal(base_size = 13) +
         labs(title = var, x = NULL, y = var) +
         theme(axis.text.x = element_text(angle = 45, hjust = 1))
-      if (isTRUE(show_points)) p <- p + geom_jitter(width = 0.2, alpha = 0.5, size = 1)
+      if (isTRUE(show_points)) {
+        p <- p +
+          geom_jitter(aes(color = .data[[group_var]]), width = 0.2, alpha = 0.5, size = 1) +
+          scale_color_manual(values = palette, guide = "none")
+      }
     } else {
       # ✅ always provide an x aesthetic
       p <- ggplot(df, aes(x = factor(1), y = .data[[var]])) +
-        geom_boxplot(fill = "#2C7FB8", width = 0.3) +
+        geom_boxplot(fill = resolve_single_color(), width = 0.3) +
         theme_minimal(base_size = 13) +
         labs(title = var, x = NULL, y = var) +
         theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
-      if (isTRUE(show_points)) p <- p + geom_jitter(width = 0.05, alpha = 0.5, size = 1)
+      if (isTRUE(show_points)) {
+        p <- p + geom_jitter(color = resolve_single_color(), width = 0.05, alpha = 0.5, size = 1)
+      }
     }
     
     if (inherits(p, "gg")) p else NULL
@@ -371,9 +386,13 @@ build_descriptive_numeric_histogram <- function(df,
     y_label <- if (density_mode) "Density" else "Count"
 
     if (!is.null(group_var)) {
+      group_levels <- levels(plot_data[[group_var]])
+      palette <- resolve_palette_for_levels(group_levels)
       if (density_mode) {
         p <- base +
           geom_density(aes(color = .data[[group_var]], fill = .data[[group_var]]), alpha = 0.3) +
+          scale_color_manual(values = palette) +
+          scale_fill_manual(values = palette) +
           labs(color = group_var, fill = group_var)
       } else {
         p <- base +
@@ -381,16 +400,17 @@ build_descriptive_numeric_histogram <- function(df,
             aes(fill = .data[[group_var]]),
             position = "identity",
             alpha = 0.5,
-            bins = 30,
-            color = "white"
+            bins = 30
           ) +
+          scale_fill_manual(values = palette) +
           labs(fill = group_var)
       }
     } else {
+      single_color <- resolve_single_color()
       if (density_mode) {
-        p <- base + geom_density(fill = "#2C7FB8", color = "#2C7FB8", alpha = 0.35)
+        p <- base + geom_density(fill = single_color, color = single_color, alpha = 0.35)
       } else {
-        p <- base + geom_histogram(fill = "#FDBF6F", color = "white", bins = 30)
+        p <- base + geom_histogram(fill = single_color, color = single_color, bins = 30)
       }
     }
 
@@ -433,7 +453,7 @@ build_descriptive_histogram <- function(df) {
   if (length(num_vars) == 0) return(NULL)
   plots <- lapply(num_vars, function(v) {
     ggplot(df, aes(x = .data[[v]])) +
-      geom_histogram(fill = "#FDBF6F", color = "white", bins = 20) +
+      geom_histogram(fill = resolve_single_color(), color = resolve_single_color(), bins = 20) +
       theme_minimal(base_size = 13) +
       labs(title = paste(v, "Distribution"), x = NULL, y = "Frequency")
   })
@@ -491,14 +511,17 @@ build_anova_plot_info <- function(data, info, effective_input, line_colors = NUL
   }
 
   build_plot <- function(stats_df, title_text, y_limits) {
-    single_col <- if (!is.null(line_colors) && length(line_colors) == 1) line_colors else "steelblue"
-    
     if (is.null(factor2)) {
+      color_value <- if (!is.null(line_colors) && length(line_colors) > 0) {
+        unname(line_colors)[1]
+      } else {
+        resolve_single_color()
+      }
       p <- ggplot(stats_df, aes(x = !!sym(factor1), y = mean)) +
-        geom_line(aes(group = 1), color = single_col, linewidth = 1) +
-        geom_point(size = 3, color = single_col) +
+        geom_line(aes(group = 1), color = color_value, linewidth = 1) +
+        geom_point(size = 3, color = color_value) +
         geom_errorbar(aes(ymin = mean - se, ymax = mean + se),
-                      width = 0.15, color = single_col) +
+                      width = 0.15, color = color_value) +
         theme_minimal(base_size = 14) +
         labs(x = factor1, y = "Mean ± SE") +
         theme(
@@ -506,6 +529,14 @@ build_anova_plot_info <- function(data, info, effective_input, line_colors = NUL
           panel.grid.major.x = element_blank()
         )
     } else {
+      group_levels <- if (is.factor(stats_df[[factor2]])) {
+        levels(stats_df[[factor2]])
+      } else {
+        unique(as.character(stats_df[[factor2]]))
+      }
+      group_levels <- group_levels[!is.na(group_levels)]
+      palette <- resolve_palette_for_levels(group_levels, custom = line_colors)
+      stats_df[[factor2]] <- factor(as.character(stats_df[[factor2]]), levels = group_levels)
       p <- ggplot(stats_df, aes(
         x = !!sym(factor1),
         y = mean,
@@ -525,12 +556,8 @@ build_anova_plot_info <- function(data, info, effective_input, line_colors = NUL
         theme(
           panel.grid.minor = element_blank(),
           panel.grid.major.x = element_blank()
-        )
-      
-      if (!is.null(line_colors) && length(line_colors) > 1) {
-        p <- p + scale_color_manual(values = line_colors) +
-          scale_fill_manual(values = line_colors)
-      }
+        ) +
+        scale_color_manual(values = palette)
     }
     
     if (!is.null(y_limits) && all(is.finite(y_limits))) {
@@ -642,28 +669,27 @@ build_anova_plot_info <- function(data, info, effective_input, line_colors = NUL
 }
 
 build_ggpairs_plot <- function(data) {
+  single_color <- resolve_single_color()
   GGally::ggpairs(
     data,
     progress = FALSE,
     upper = list(
-      continuous = GGally::wrap("cor", size = 4, color = "steelblue")
+      continuous = GGally::wrap("cor", size = 4, color = single_color)
     ),
     lower = list(
-      continuous = GGally::wrap("points", alpha = 0.6, color = "steelblue", size = 1.5)
+      continuous = GGally::wrap("points", alpha = 0.6, color = single_color, size = 1.5)
     ),
     diag = list(
-      continuous = GGally::wrap("densityDiag", fill = "steelblue", alpha = 0.4)
+      continuous = GGally::wrap("densityDiag", fill = single_color, alpha = 0.4)
     )
   ) +
     theme_minimal(base_size = 11) +
     theme(
-      strip.background = element_rect(fill = "gray95", color = NA),
       strip.text = element_text(face = "bold", size = 9),
       panel.grid.minor = element_blank(),
       panel.grid.major.x = element_blank(),
       panel.grid.major.y = element_blank(),
-      plot.title = element_text(size = 12, face = "bold"),
-      axis.text = element_text(color = "black")
+      plot.title = element_text(size = 12, face = "bold")
     )
 }
 
@@ -694,15 +720,27 @@ build_pca_biplot <- function(pca_obj, data, color_var = NULL, shape_var = NULL,
     label_var <- NULL
   }
   
+  color_levels <- NULL
+  if (!is.null(color_var) && !is.null(plot_data[[color_var]])) {
+    color_levels <- if (is.factor(plot_data[[color_var]])) {
+      levels(plot_data[[color_var]])
+    } else {
+      unique(as.character(plot_data[[color_var]]))
+    }
+    color_levels <- color_levels[!is.na(color_levels)]
+    plot_data[[color_var]] <- factor(as.character(plot_data[[color_var]]), levels = color_levels)
+  }
+
   aes_mapping <- aes(x = PC1, y = PC2)
   if (!is.null(color_var)) aes_mapping <- modifyList(aes_mapping, aes(color = .data[[color_var]]))
   if (!is.null(shape_var)) aes_mapping <- modifyList(aes_mapping, aes(shape = .data[[shape_var]]))
-  
+
+  single_color <- resolve_single_color()
   g <- ggplot(plot_data, aes_mapping) +
     geom_point(
       size = 3,
       shape = if (is.null(shape_var)) 16 else NULL,
-      color = if (is.null(color_var)) "black" else NULL
+      color = if (is.null(color_var)) single_color else NULL
     ) +
     theme_minimal(base_size = 14) +
     labs(
@@ -716,10 +754,16 @@ build_pca_biplot <- function(pca_obj, data, color_var = NULL, shape_var = NULL,
       plot.title = element_text(size = 16, face = "bold"),
       legend.position = "right"
     )
-  
+
+  if (!is.null(color_var)) {
+    palette <- resolve_palette_for_levels(color_levels)
+    g <- g + scale_color_manual(values = palette)
+  }
+
   if (!is.null(label_var)) {
     g <- g + ggrepel::geom_text_repel(
       aes(label = label_value),
+      color = if (is.null(color_var)) single_color else NULL,
       size = label_size,
       max.overlaps = Inf,
       min.segment.length = 0,
