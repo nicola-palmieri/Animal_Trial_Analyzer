@@ -195,7 +195,7 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
       if (!is.null(selected_vars) && length(selected_vars) > 0) {
         numeric_vars <- intersect(numeric_vars, selected_vars)
       }
-      validate(need(length(numeric_vars) > 0, "No numeric variables selected."))
+      validate(need(length(numeric_vars) > 0, "No numeric variables available for plotting."))
 
       metric_info <- prepare_metric_data(
         data = dat,
