@@ -62,7 +62,7 @@ descriptive_server <- function(id, filtered_data) {
       local_data <- df()  # create a copy to avoid modifying shared reactive
       selected_vars <- unique(c(input$cat_vars, input$num_vars))
       validate(need(length(selected_vars) > 0, "Please select at least one variable."))
-      
+
       group_var <- if (is.null(input$stratify_var) || input$stratify_var == "None") NULL else input$stratify_var
       if (!is.null(group_var)) {
         # make sure the group var is present
@@ -81,20 +81,28 @@ descriptive_server <- function(id, filtered_data) {
         }
         local_data <- droplevels(local_data)
       }
-      
+
       local_data <- local_data[, selected_vars, drop = FALSE]
-      
+
       if (!is.null(group_var) && !is.null(input$strata_order)) {
         if (group_var %in% names(local_data)) {
           local_data[[group_var]] <- factor(as.character(local_data[[group_var]]),
                                             levels = input$strata_order)
         }
       }
-      
+
+      strata_levels <- if (!is.null(group_var) && group_var %in% names(local_data)) {
+        levels(local_data[[group_var]])
+      } else {
+        NULL
+      }
+
       list(
         summary = compute_descriptive_summary(local_data, group_var),
         selected_vars = selected_vars,
-        group_var = group_var
+        group_var = group_var,
+        processed_data = local_data,
+        strata_levels = strata_levels
       )
     })
     
@@ -129,7 +137,9 @@ descriptive_server <- function(id, filtered_data) {
         data = df,
         summary = reactive(summary_data()$summary),
         selected_vars = reactive(summary_data()$selected_vars),
-        group_var = reactive(summary_data()$group_var)
+        group_var = reactive(summary_data()$group_var),
+        processed_data = reactive(summary_data()$processed_data),
+        strata_levels = reactive(summary_data()$strata_levels)
       )
     }))
     
