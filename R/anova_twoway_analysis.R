@@ -40,7 +40,7 @@ two_way_anova_server <- function(id, filtered_data) {
       cat_cols <- names(data)[sapply(data, function(x) is.character(x) || is.factor(x))]
       
       tagList(
-        checkboxInput(ns("multi_resp"), "Show multiple response variables", value = FALSE),
+        checkboxInput(ns("multi_resp"), "Allow multiple response variables", value = FALSE),
         uiOutput(ns("response_selector")),
         selectInput(
           ns("factor1"),

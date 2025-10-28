@@ -34,7 +34,7 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
       hr(),
       selectInput(
         ns("plot_type"),
-        label = "Visualization type:",
+        label = "Select visualization type:",
         choices = c("PCA biplot" = "biplot"),
         selected = "biplot"
       ),

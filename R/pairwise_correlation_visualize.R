@@ -12,7 +12,7 @@ visualize_ggpairs_ui <- function(id) {
       hr(),
       selectInput(
         ns("plot_type"),
-        label = "Visualization type:",
+        label = "Select visualization type:",
         choices = c("Pairwise correlation matrix" = "ggpairs"),  # ✅ single option for now
         selected = "ggpairs"
       ),

@@ -1604,8 +1604,7 @@ visualize_descriptive_ui <- function(id) {
           "Numeric Histograms"        = "histograms",
           "CV (%)"                    = "cv",
           "Outlier Counts"            = "outliers",
-          "Missingness (%)"           = "missing",
-          "Shapiro–Wilk p-values"     = "shapiro"
+          "Missingness (%)"           = "missing"
         ),
         selected = "categorical"
       ),
@@ -1634,11 +1633,10 @@ visualize_descriptive_server <- function(id, filtered_data, descriptive_summary)
       switch(input$plot_type,
              "categorical" = visualize_categorical_barplots_ui(ns("categorical")),
              "boxplots"    = visualize_numeric_boxplots_ui(ns("boxplots")),
-             "histograms"  = h5("Histogram controls not yet implemented."),
-             "cv"          = h5("CV controls not yet implemented."),
-             "outliers"    = h5("Outlier controls not yet implemented."),
-             "missing"     = h5("Missingness controls not yet implemented."),
-             "shapiro"     = h5("Shapiro–Wilk controls not yet implemented.")
+             "histograms"  = visualize_numeric_histograms_ui(ns("histograms")),
+             "cv"          = visualize_cv_ui(ns("cv")),
+             "outliers"    = visualize_outliers_ui(ns("outliers")),
+             "missing"     = visualize_missing_ui(ns("missing"))
       )
     })
     
@@ -1652,6 +1650,10 @@ visualize_descriptive_server <- function(id, filtered_data, descriptive_summary)
       handle <- switch(type[[1]],
                        "categorical" = visualize_categorical_barplots_server("categorical", filtered_data, descriptive_summary),
                        "boxplots"    = visualize_numeric_boxplots_server("boxplots", filtered_data, descriptive_summary),
+                       "histograms"  = visualize_numeric_histograms_server("histograms", filtered_data, descriptive_summary),
+                       "cv"          = visualize_cv_server("cv", filtered_data, descriptive_summary),
+                       "outliers"    = visualize_outliers_server("outliers", filtered_data, descriptive_summary),
+                       "missing"     = visualize_missing_server("missing", filtered_data, descriptive_summary),
                        NULL
       )
       active(handle)
@@ -1686,8 +1688,28 @@ visualize_categorical_barplots_ui <- function(id) {
     ),
     hr(),
     fluidRow(
-      column(6, numericInput(ns("n_rows"), "Grid rows",    value = 3, min = 1, max = 10, step = 1)),
-      column(6, numericInput(ns("n_cols"), "Grid columns", value = 2, min = 1, max = 10, step = 1))
+      column(
+        6,
+        numericInput(
+          ns("n_rows"),
+          "Grid rows",
+          value = 3,
+          min = 1,
+          max = 10,
+          step = 1
+        )
+      ),
+      column(
+        6,
+        numericInput(
+          ns("n_cols"),
+          "Grid columns",
+          value = 2,
+          min = 1,
+          max = 10,
+          step = 1
+        )
+      )
     ),
     hr(),
     downloadButton(ns("download_plot"), "Download Plot")
@@ -1736,50 +1758,6 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
         ncol_input = input$n_cols
       )
       validate(need(!is.null(out), "No categorical variables available for plotting."))
-      
-      # Derive safe maxima for the inputs and gently clamp values so the
-      # rendered grid never differs from what the user sees in the controls.
-      n_panels <- out$panels
-      max_val  <- 10L
-
-      layout_info <- out$layout
-      if (is.null(layout_info) || !is.list(layout_info)) {
-        layout_info <- list()
-      }
-
-      safe_rows <- layout_info$nrow
-      safe_cols <- layout_info$ncol
-
-      if (is.null(safe_rows) || !is.finite(safe_rows)) {
-        safe_rows <- min(10L, max(1L, as.integer(n_panels)))
-      }
-      if (is.null(safe_cols) || !is.finite(safe_cols)) {
-        safe_cols <- min(10L, max(1L, ceiling(as.integer(n_panels) / max(1L, safe_rows))))
-      }
-
-      safe_rows <- min(max(1L, as.integer(safe_rows)), max_val)
-      safe_cols <- min(max(1L, as.integer(safe_cols)), max_val)
-
-      current_rows <- suppressWarnings(as.integer(input$n_rows))
-      current_cols <- suppressWarnings(as.integer(input$n_cols))
-
-      if (length(current_rows) == 0 || is.na(current_rows)) current_rows <- NULL
-      if (length(current_cols) == 0 || is.na(current_cols)) current_cols <- NULL
-
-      isolate({
-        if (!identical(current_rows, safe_rows)) {
-          updateNumericInput(session, "n_rows", value = safe_rows, min = 1, max = max_val)
-        } else {
-          updateNumericInput(session, "n_rows", min = 1, max = max_val)
-        }
-
-        if (!identical(current_cols, safe_cols)) {
-          updateNumericInput(session, "n_cols", value = safe_cols, min = 1, max = max_val)
-        } else {
-          updateNumericInput(session, "n_cols", min = 1, max = max_val)
-        }
-      })
-      
       out
     })
     
@@ -1822,6 +1800,305 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
   })
 }
 # ===============================================================
+# 🟦 Descriptive Visualization — Summary Metrics
+# ===============================================================
+
+# ---- UI helpers ----
+metric_panel_ui <- function(id, default_width = 400, default_height = 300,
+                            default_rows = 2, default_cols = 3) {
+  ns <- NS(id)
+  tagList(
+    fluidRow(
+      column(6, numericInput(ns("plot_width"),  "Subplot width (px)",  default_width, 200, 2000, 50)),
+      column(6, numericInput(ns("plot_height"), "Subplot height (px)", default_height, 200, 2000, 50))
+    ),
+    hr(),
+    fluidRow(
+      column(6, numericInput(ns("n_rows"), "Grid rows",    value = default_rows, min = 1, max = 10, step = 1)),
+      column(6, numericInput(ns("n_cols"), "Grid columns", value = default_cols, min = 1, max = 10, step = 1))
+    ),
+    hr(),
+    downloadButton(ns("download_plot"), "Download Plot")
+  )
+}
+
+
+visualize_cv_ui <- function(id) {
+  metric_panel_ui(id, default_width = 400, default_height = 320, default_rows = 2, default_cols = 3)
+}
+
+visualize_outliers_ui <- function(id) {
+  metric_panel_ui(id, default_width = 400, default_height = 320, default_rows = 2, default_cols = 3)
+}
+
+visualize_missing_ui <- function(id) {
+  metric_panel_ui(id, default_width = 400, default_height = 320, default_rows = 2, default_cols = 3)
+}
+
+
+# ---- Shared computation helpers ----
+resolve_metric_input <- function(x) {
+  if (is.null(x)) return(NULL)
+  if (is.reactive(x)) x() else x
+}
+
+safe_numeric_input <- function(value, default = 1L) {
+  val <- suppressWarnings(as.integer(value))
+  if (length(val) == 0 || is.na(val) || val <= 0) {
+    return(default)
+  }
+  max(1L, min(10L, val))
+}
+
+safe_cv <- function(x) {
+  m <- mean(x, na.rm = TRUE)
+  s <- stats::sd(x, na.rm = TRUE)
+  if (!is.finite(m) || abs(m) < .Machine$double.eps) {
+    return(NA_real_)
+  }
+  100 * s / m
+}
+
+count_outliers <- function(x) {
+  q <- stats::quantile(x, probs = c(0.25, 0.75), na.rm = TRUE)
+  iqr <- q[2] - q[1]
+  sum(x < q[1] - 1.5 * iqr | x > q[2] + 1.5 * iqr, na.rm = TRUE)
+}
+
+missing_pct <- function(x) {
+  100 * mean(is.na(x))
+}
+
+prepare_metric_data <- function(data, numeric_vars, group_var, strata_levels, metric) {
+  if (length(numeric_vars) == 0) {
+    return(NULL)
+  }
+
+  if (is.null(group_var) || !group_var %in% names(data)) {
+    group_var <- NULL
+  }
+
+  data_tbl <- tibble::as_tibble(data)
+
+  if (!is.null(group_var)) {
+    if (!is.null(strata_levels) && length(strata_levels) > 0) {
+      data_tbl[[group_var]] <- factor(as.character(data_tbl[[group_var]]), levels = strata_levels)
+      data_tbl <- droplevels(data_tbl)
+    }
+    data_tbl <- dplyr::group_by(data_tbl, .data[[group_var]], .drop = TRUE)
+  }
+
+  summarised <- switch(
+    metric,
+    cv = dplyr::summarise(
+      data_tbl,
+      dplyr::across(
+        dplyr::all_of(numeric_vars),
+        ~ safe_cv(.x),
+        .names = "cv_{.col}"
+      ),
+      .groups = "drop"
+    ),
+    outliers = dplyr::summarise(
+      data_tbl,
+      dplyr::across(
+        dplyr::all_of(numeric_vars),
+        ~ count_outliers(.x),
+        .names = "outliers_{.col}"
+      ),
+      .groups = "drop"
+    ),
+    missing = dplyr::summarise(
+      data_tbl,
+      dplyr::across(
+        dplyr::all_of(numeric_vars),
+        ~ missing_pct(.x),
+        .names = "missing_{.col}"
+      ),
+      .groups = "drop"
+    ),
+    stop("Unsupported metric type.")
+  )
+
+  tidy <- tidy_descriptive_metric(summarised, metric)
+  if (is.null(tidy)) {
+    return(NULL)
+  }
+
+  tidy$data <- tidy$data[tidy$data$variable %in% numeric_vars, , drop = FALSE]
+  if (nrow(tidy$data) == 0) {
+    return(NULL)
+  }
+
+  if (!is.null(group_var) && !is.null(strata_levels) && length(strata_levels) > 0) {
+    tidy$data$.group <- factor(as.character(tidy$data$.group), levels = strata_levels)
+  }
+
+  tidy
+}
+
+
+build_metric_plot <- function(metric_info, y_label, title, n_rows, n_cols) {
+  df <- metric_info$data
+  has_group <- isTRUE(metric_info$has_group)
+
+  n_rows <- safe_numeric_input(n_rows, default = 1L)
+  n_cols <- safe_numeric_input(n_cols, default = 1L)
+
+  if (has_group) {
+    legend_title <- if (!is.null(metric_info$group_label)) metric_info$group_label else "Group"
+    p <- ggplot(df, aes(x = .group, y = value, fill = .group)) +
+      geom_col(position = "dodge", width = 0.65) +
+      labs(fill = legend_title)
+  } else {
+    p <- ggplot(df, aes(x = .group, y = value)) +
+      geom_col(width = 0.65, fill = "#2C7FB8") +
+      guides(fill = "none")
+  }
+
+  p +
+    facet_wrap(~ variable, nrow = n_rows, ncol = n_cols, scales = "free_y") +
+    theme_minimal(base_size = 13) +
+    labs(x = NULL, y = y_label, title = title) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+}
+
+
+metric_module_server <- function(id, filtered_data, summary_info, metric_key,
+                                 y_label, title, filename_prefix) {
+  moduleServer(id, function(input, output, session) {
+
+    plot_width <- reactive({
+      w <- input$plot_width
+      if (is.null(w) || !is.numeric(w) || is.na(w)) 400 else w
+    })
+
+    plot_height <- reactive({
+      h <- input$plot_height
+      if (is.null(h) || !is.numeric(h) || is.na(h)) 300 else h
+    })
+
+    plot_details <- reactive({
+      info <- summary_info()
+      validate(need(!is.null(info), "Summary not available."))
+
+      processed <- resolve_metric_input(info$processed_data)
+      dat <- if (!is.null(processed)) processed else filtered_data()
+
+      validate(need(!is.null(dat) && is.data.frame(dat) && nrow(dat) > 0, "No data available."))
+
+      selected_vars <- resolve_metric_input(info$selected_vars)
+      group_var <- resolve_metric_input(info$group_var)
+      strata_levels <- resolve_metric_input(info$strata_levels)
+      group_label <- resolve_metric_input(info$group_label)
+
+      numeric_vars <- names(dat)[vapply(dat, is.numeric, logical(1))]
+      if (!is.null(selected_vars) && length(selected_vars) > 0) {
+        numeric_vars <- intersect(numeric_vars, selected_vars)
+      }
+      validate(need(length(numeric_vars) > 0, "No numeric variables selected."))
+
+      metric_info <- prepare_metric_data(
+        data = dat,
+        numeric_vars = numeric_vars,
+        group_var = group_var,
+        strata_levels = strata_levels,
+        metric = metric_key
+      )
+
+      validate(need(!is.null(metric_info), "Unable to compute metric for the selected variables."))
+
+      if (!is.null(group_label)) {
+        metric_info$group_label <- group_label
+      }
+
+      n_rows <- safe_numeric_input(input$n_rows, default = 1L)
+      n_cols <- safe_numeric_input(input$n_cols, default = 1L)
+
+      plot <- build_metric_plot(metric_info, y_label, title, n_rows, n_cols)
+
+      list(
+        plot = plot,
+        layout = list(nrow = n_rows, ncol = n_cols)
+      )
+    })
+
+    plot_size <- reactive({
+      details <- plot_details()
+      if (is.null(details$layout)) {
+        list(w = plot_width(), h = plot_height())
+      } else {
+        list(
+          w = plot_width()  * details$layout$ncol,
+          h = plot_height() * details$layout$nrow
+        )
+      }
+    })
+
+    output$download_plot <- downloadHandler(
+      filename = function() paste0(filename_prefix, "_", Sys.Date(), ".png"),
+      content = function(file) {
+        details <- plot_details()
+        req(details$plot)
+        size <- plot_size()
+        ggplot2::ggsave(
+          filename = file,
+          plot = details$plot,
+          device = "png",
+          dpi = 300,
+          width = size$w / 96,
+          height = size$h / 96,
+          units = "in",
+          limitsize = FALSE
+        )
+      }
+    )
+
+    return(list(
+      plot = reactive({ plot_details()$plot }),
+      width = reactive(plot_size()$w),
+      height = reactive(plot_size()$h)
+    ))
+  })
+}
+
+
+visualize_cv_server <- function(id, filtered_data, summary_info) {
+  metric_module_server(
+    id = id,
+    filtered_data = filtered_data,
+    summary_info = summary_info,
+    metric_key = "cv",
+    y_label = "CV (%)",
+    title = "Coefficient of Variation (CV%)",
+    filename_prefix = "cv_summary"
+  )
+}
+
+visualize_outliers_server <- function(id, filtered_data, summary_info) {
+  metric_module_server(
+    id = id,
+    filtered_data = filtered_data,
+    summary_info = summary_info,
+    metric_key = "outliers",
+    y_label = "Outlier Count",
+    title = "Outlier Counts (1.5×IQR Rule)",
+    filename_prefix = "outlier_summary"
+  )
+}
+
+visualize_missing_server <- function(id, filtered_data, summary_info) {
+  metric_module_server(
+    id = id,
+    filtered_data = filtered_data,
+    summary_info = summary_info,
+    metric_key = "missing",
+    y_label = "Missing (%)",
+    title = "Missingness (%)",
+    filename_prefix = "missing_summary"
+  )
+}
+# ===============================================================
 # 🟦 Descriptive Visualization — Numeric Boxplots
 # ===============================================================
 
@@ -1835,8 +2112,28 @@ visualize_numeric_boxplots_ui <- function(id) {
     ),
     hr(),
     fluidRow(
-      column(6, numericInput(ns("n_rows"), "Grid rows",    value = 1, min = 1, max = 10, step = 1)),
-      column(6, numericInput(ns("n_cols"), "Grid columns", value = 6, min = 1, max = 10, step = 1))
+      column(
+        6,
+        numericInput(
+          ns("n_rows"),
+          "Grid rows",
+          value = 1,
+          min = 1,
+          max = 10,
+          step = 1
+        )
+      ),
+      column(
+        6,
+        numericInput(
+          ns("n_cols"),
+          "Grid columns",
+          value = 6,
+          min = 1,
+          max = 10,
+          step = 1
+        )
+      )
     ),
     hr(),
     downloadButton(ns("download_plot"), "Download Plot")
@@ -1883,11 +2180,116 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info) {
         nrow_input = input$n_rows,
         ncol_input = input$n_cols
       )
-      
+
       validate(need(!is.null(out), "No numeric variables available for plotting."))
-      
-      # Derive safe maxima and gently clamp control values so the visible
-      # settings always match the rendered layout (removing the grid flicker).
+      out
+    })
+    
+    plot_size <- reactive({
+      info <- plot_info()
+      if (is.null(info$layout)) {
+        list(w = plot_width(), h = plot_height())
+      } else {
+        list(
+          w = plot_width()  * info$layout$ncol,
+          h = plot_height() * info$layout$nrow
+        )
+      }
+    })
+    
+    output$download_plot <- downloadHandler(
+      filename = function() paste0("numeric_boxplots_", Sys.Date(), ".png"),
+      content  = function(file) {
+        info <- plot_info()
+        req(info$plot)
+        s <- plot_size()
+        ggplot2::ggsave(
+          filename = file,
+          plot = info$plot,
+          device = "png",
+          dpi = 300,
+          width  = s$w / 96,
+          height = s$h / 96,
+          units = "in",
+          limitsize = FALSE
+        )
+      }
+    )
+    
+    return(list(
+      plot   = reactive({ plot_info()$plot }),
+      width  = reactive(plot_size()$w),
+      height = reactive(plot_size()$h)
+    ))
+  })
+}
+# ===============================================================
+# 🟦 Descriptive Visualization — Numeric Histograms
+# ===============================================================
+
+visualize_numeric_histograms_ui <- function(id) {
+  ns <- NS(id)
+  tagList(
+    checkboxInput(ns("use_density"), "Show density instead of count", FALSE),
+    fluidRow(
+      column(6, numericInput(ns("plot_width"),  "Subplot width (px)",  400, 200, 2000, 50)),
+      column(6, numericInput(ns("plot_height"), "Subplot height (px)", 300, 200, 2000, 50))
+    ),
+    hr(),
+    fluidRow(
+      column(6, numericInput(ns("n_rows"), "Grid rows",    value = 2, min = 1, max = 10, step = 1)),
+      column(6, numericInput(ns("n_cols"), "Grid columns", value = 3, min = 1, max = 10, step = 1))
+    ),
+    hr(),
+    downloadButton(ns("download_plot"), "Download Plot")
+  )
+}
+
+
+visualize_numeric_histograms_server <- function(id, filtered_data, summary_info) {
+  moduleServer(id, function(input, output, session) {
+
+    resolve_input_value <- function(x) {
+      if (is.null(x)) return(NULL)
+      if (is.reactive(x)) x() else x
+    }
+
+    plot_width <- reactive({
+      w <- input$plot_width
+      if (is.null(w) || !is.numeric(w) || is.na(w)) 400 else w
+    })
+
+    plot_height <- reactive({
+      h <- input$plot_height
+      if (is.null(h) || !is.numeric(h) || is.na(h)) 300 else h
+    })
+
+    plot_info <- reactive({
+      info <- summary_info()
+
+      validate(need(!is.null(info), "Summary not available."))
+
+      processed <- resolve_input_value(info$processed_data)
+      dat <- if (!is.null(processed)) processed else filtered_data()
+
+      validate(need(!is.null(dat) && is.data.frame(dat) && nrow(dat) > 0, "No data available."))
+
+      selected_vars <- resolve_input_value(info$selected_vars)
+      group_var     <- resolve_input_value(info$group_var)
+      strata_levels <- resolve_input_value(info$strata_levels)
+
+      out <- build_descriptive_numeric_histogram(
+        df = dat,
+        selected_vars = selected_vars,
+        group_var = group_var,
+        strata_levels = strata_levels,
+        use_density = isTRUE(input$use_density),
+        nrow_input = input$n_rows,
+        ncol_input = input$n_cols
+      )
+
+      validate(need(!is.null(out), "No numeric variables available for plotting."))
+
       n_panels <- out$panels
       max_val  <- 10L
 
@@ -1928,10 +2330,10 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info) {
           updateNumericInput(session, "n_cols", min = 1, max = max_val)
         }
       })
-      
+
       out
     })
-    
+
     plot_size <- reactive({
       info <- plot_info()
       if (is.null(info$layout)) {
@@ -1943,9 +2345,9 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info) {
         )
       }
     })
-    
+
     output$download_plot <- downloadHandler(
-      filename = function() paste0("numeric_boxplots_", Sys.Date(), ".png"),
+      filename = function() paste0("numeric_histograms_", Sys.Date(), ".png"),
       content  = function(file) {
         info <- plot_info()
         req(info$plot)
@@ -1962,7 +2364,7 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info) {
         )
       }
     )
-    
+
     return(list(
       plot   = reactive({ plot_info()$plot }),
       width  = reactive(plot_size()$w),
@@ -2780,31 +3182,12 @@ initialize_layout_state <- function(input, session) {
 
 observe_layout_synchronization <- function(plot_info_reactive, layout_state, session) {
   observeEvent(plot_info_reactive(), {
-    info <- plot_info_reactive()
-    if (is.null(info)) return()
-
-    sync_input <- function(id, value, manual_key) {
-      val <- ifelse(is.null(value) || value <= 0, 1, min(10, value))
-      if (!isTRUE(layout_state$manual[[manual_key]])) {
-        layout_state$suppress[[id]] <- TRUE
-        updateNumericInput(session, id, value = val, min = 1, max = 10)
-      }
-    }
-
-    if (isTRUE(info$has_strata)) {
-      sync_input("strata_rows", info$layout$strata$rows, "strata_rows")
-      sync_input("strata_cols", info$layout$strata$cols, "strata_cols")
-    } else {
-      sync_input("strata_rows", 1, "strata_rows")
-      sync_input("strata_cols", 1, "strata_cols")
-    }
-
-    resp_rows_val <- if (info$n_responses <= 1) 1 else info$layout$responses$nrow
-    resp_cols_val <- if (info$n_responses <= 1) 1 else info$layout$responses$ncol
-
-    sync_input("resp_rows", resp_rows_val, "resp_rows")
-    sync_input("resp_cols", resp_cols_val, "resp_cols")
+    plot_info_reactive()
+    layout_state
+    session
+    invisible(NULL)
   })
+  invisible(NULL)
 }
 # ===============================================================
 # 🎨 Visualization Plot Builders
@@ -3037,7 +3420,7 @@ build_descriptive_categorical_plot <- function(df,
   plots <- Filter(Negate(is.null), plots)
   if (length(plots) == 0) return(NULL)
   
-  # ✅ Use the common layout helper; clamp without changing inputs
+  # ✅ Use the common layout helper to arrange plots using the requested grid
   layout <- resolve_grid_layout(
     n_items   = length(plots),
     rows_input = suppressWarnings(as.numeric(nrow_input)),
@@ -3127,6 +3510,113 @@ build_descriptive_numeric_boxplot <- function(df,
   )
 }
 
+
+build_descriptive_numeric_histogram <- function(df,
+                                                selected_vars = NULL,
+                                                group_var = NULL,
+                                                strata_levels = NULL,
+                                                use_density = FALSE,
+                                                nrow_input = NULL,
+                                                ncol_input = NULL) {
+  if (is.null(df) || !is.data.frame(df) || nrow(df) == 0) return(NULL)
+
+  num_vars <- names(df)[vapply(df, is.numeric, logical(1))]
+  if (!is.null(selected_vars) && length(selected_vars) > 0) {
+    num_vars <- intersect(num_vars, selected_vars)
+  }
+  if (length(num_vars) == 0) return(NULL)
+
+  if (!is.null(group_var) && group_var %in% names(df)) {
+    df[[group_var]] <- as.character(df[[group_var]])
+    df[[group_var]][is.na(df[[group_var]]) | trimws(df[[group_var]]) == ""] <- "Missing"
+
+    if (!is.null(strata_levels) && length(strata_levels) > 0) {
+      keep_levels <- unique(strata_levels)
+      df <- df[df[[group_var]] %in% keep_levels, , drop = FALSE]
+      if (nrow(df) == 0) return(NULL)
+      df[[group_var]] <- factor(df[[group_var]], levels = keep_levels)
+    } else {
+      df[[group_var]] <- factor(df[[group_var]], levels = unique(df[[group_var]]))
+    }
+  } else {
+    group_var <- NULL
+  }
+
+  plots <- lapply(num_vars, function(var) {
+    cols <- c(var, group_var)
+    cols <- cols[cols %in% names(df)]
+    plot_data <- df[, cols, drop = FALSE]
+
+    keep <- is.finite(plot_data[[var]])
+    keep[is.na(keep)] <- FALSE
+    plot_data <- plot_data[keep, , drop = FALSE]
+    if (nrow(plot_data) == 0) return(NULL)
+
+    if (!is.null(group_var)) {
+      plot_data[[group_var]] <- droplevels(plot_data[[group_var]])
+    }
+
+    density_mode <- isTRUE(use_density) && length(unique(plot_data[[var]])) > 1
+
+    base <- ggplot(plot_data, aes(x = .data[[var]]))
+    y_label <- if (density_mode) "Density" else "Count"
+
+    if (!is.null(group_var)) {
+      if (density_mode) {
+        p <- base +
+          geom_density(aes(color = .data[[group_var]], fill = .data[[group_var]]), alpha = 0.3) +
+          labs(color = group_var, fill = group_var)
+      } else {
+        p <- base +
+          geom_histogram(
+            aes(fill = .data[[group_var]]),
+            position = "identity",
+            alpha = 0.5,
+            bins = 30,
+            color = "white"
+          ) +
+          labs(fill = group_var)
+      }
+    } else {
+      if (density_mode) {
+        p <- base + geom_density(fill = "#2C7FB8", color = "#2C7FB8", alpha = 0.35)
+      } else {
+        p <- base + geom_histogram(fill = "#FDBF6F", color = "white", bins = 30)
+      }
+    }
+
+    p +
+      theme_minimal(base_size = 13) +
+      labs(title = var, x = var, y = y_label)
+  })
+
+  plots <- Filter(Negate(is.null), plots)
+  if (length(plots) == 0) return(NULL)
+
+  layout <- resolve_grid_layout(
+    n_items = length(plots),
+    rows_input = suppressWarnings(as.numeric(nrow_input)),
+    cols_input = suppressWarnings(as.numeric(ncol_input))
+  )
+
+  title_text <- if (isTRUE(use_density)) {
+    "Numeric Distributions (Density)"
+  } else {
+    "Numeric Distributions (Histograms)"
+  }
+
+  combined <- patchwork::wrap_plots(plots, nrow = layout$nrow, ncol = layout$ncol) +
+    patchwork::plot_annotation(
+      title = title_text,
+      theme = theme(plot.title = element_text(size = 16, face = "bold"))
+    )
+
+  list(
+    plot = combined,
+    layout = list(nrow = layout$nrow, ncol = layout$ncol),
+    panels = length(plots)
+  )
+}
 
 
 build_descriptive_histogram <- function(df) {
@@ -3443,7 +3933,7 @@ resolve_grid_value <- function(value) {
   if (is.null(value) || length(value) == 0) return(NA_integer_)
   val <- suppressWarnings(as.integer(value[1]))
   if (is.na(val) || val < 1) return(NA_integer_)
-  max(1L, min(10L, val))
+  val
 }
 
 resolve_grid_layout <- function(n_items, rows_input = NULL, cols_input = NULL) {
@@ -3452,32 +3942,40 @@ resolve_grid_layout <- function(n_items, rows_input = NULL, cols_input = NULL) {
     n_items <- 1L
   }
 
-  rows <- resolve_grid_value(rows_input)
-  cols <- resolve_grid_value(cols_input)
+  rows_raw <- resolve_grid_value(rows_input)
+  cols_raw <- resolve_grid_value(cols_input)
+
+  rows <- rows_raw
+  cols <- cols_raw
 
   if (is.na(rows) && is.na(cols)) {
-    rows <- min(10L, max(1L, ceiling(sqrt(n_items))))
-    cols <- min(10L, max(1L, ceiling(n_items / rows)))
+    rows <- ceiling(sqrt(n_items))
+    cols <- ceiling(n_items / rows)
   } else if (is.na(rows)) {
-    cols <- min(10L, max(1L, cols))
-    rows <- min(10L, max(1L, ceiling(n_items / cols)))
+    cols <- cols_raw
+    if (is.na(cols) || cols <= 0) {
+      rows <- ceiling(sqrt(n_items))
+      cols <- ceiling(n_items / rows)
+    } else {
+      rows <- ceiling(n_items / cols)
+    }
   } else if (is.na(cols)) {
-    rows <- min(10L, max(1L, rows))
-    cols <- min(10L, max(1L, ceiling(n_items / rows)))
-  } else {
-    rows <- min(10L, max(1L, rows))
-    cols <- min(10L, max(1L, cols))
+    rows <- rows_raw
+    if (is.na(rows) || rows <= 0) {
+      rows <- ceiling(sqrt(n_items))
+      cols <- ceiling(n_items / rows)
+    } else {
+      cols <- ceiling(n_items / rows)
+    }
   }
 
-  while (rows * cols < n_items) {
-    if (cols < rows && cols < 10L) {
-      cols <- cols + 1L
-    } else if (rows < 10L) {
-      rows <- rows + 1L
-    } else if (cols < 10L) {
-      cols <- cols + 1L
-    } else {
-      break
+  if ((is.na(rows_raw) || is.na(cols_raw)) && !is.na(rows) && !is.na(cols)) {
+    while (rows * cols < n_items) {
+      if (cols <= rows) {
+        cols <- cols + 1L
+      } else {
+        rows <- rows + 1L
+      }
     }
   }
 

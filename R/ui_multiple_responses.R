@@ -16,12 +16,12 @@ render_response_inputs <- function(ns, data, input) {
   tagList(
     checkboxInput(
       ns("multi_resp"),
-      "Show multiple response variables",
+      "Allow multiple response variables",
       value = isTRUE(input$multi_resp)
     ),
     selectInput(
       ns("response"),
-      if (isTRUE(input$multi_resp)) "Select response variables:" else "Select response variable:",
+      if (isTRUE(input$multi_resp)) "Response variables (numeric):" else "Response variable (numeric):",
       choices = num_vars,
       selected = current_selection,
       multiple = isTRUE(input$multi_resp)

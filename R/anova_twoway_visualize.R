@@ -12,7 +12,7 @@ visualize_twoway_ui <- function(id) {
       hr(),
       selectInput(
         ns("plot_type"),
-        label = "Visualization type:",
+        label = "Select visualization type:",
         choices = c("Mean ± SE" = "mean_se"),
         selected = "mean_se"
       ),

@@ -6,8 +6,7 @@ pca_ui <- function(id) {
   ns <- NS(id)
   list(
     config = tagList(
-      p("Select numeric variables to include in the PCA. The data will be centered and scaled automatically."),
-      selectInput(ns("vars"), "Variables:", choices = NULL, multiple = TRUE),
+      selectInput(ns("vars"), "Numeric variables:", choices = NULL, multiple = TRUE),
       fluidRow(
         column(6, actionButton(ns("run_pca"), "Show PCA summary", width = "100%")),
         column(6, downloadButton(ns("download_all"), "Download all results", width = "100%"))

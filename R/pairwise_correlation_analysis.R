@@ -6,8 +6,7 @@ ggpairs_ui <- function(id) {
   ns <- NS(id)
   list(
     config = tagList(
-      p("Select numeric variables to include in the correlation matrix."),
-      selectInput(ns("vars"), "Variables:", choices = NULL, multiple = TRUE),
+      selectInput(ns("vars"), "Numeric variables:", choices = NULL, multiple = TRUE),
       br(),
       fluidRow(
         column(6, actionButton(ns("run"), "Show correlation matrix", width = "100%")),

@@ -12,7 +12,7 @@ visualize_descriptive_ui <- function(id) {
       hr(),
       selectInput(
         ns("plot_type"),
-        label = "Visualization type:",
+        label = "Select visualization type:",
         choices = c(
           "Categorical distributions" = "categorical",
           "Numeric boxplots"          = "boxplots",
