@@ -64,29 +64,10 @@ initialize_layout_state <- function(input, session) {
 
 observe_layout_synchronization <- function(plot_info_reactive, layout_state, session) {
   observeEvent(plot_info_reactive(), {
-    info <- plot_info_reactive()
-    if (is.null(info)) return()
-
-    sync_input <- function(id, value, manual_key) {
-      val <- ifelse(is.null(value) || value <= 0, 1, min(10, value))
-      if (!isTRUE(layout_state$manual[[manual_key]])) {
-        layout_state$suppress[[id]] <- TRUE
-        updateNumericInput(session, id, value = val, min = 1, max = 10)
-      }
-    }
-
-    if (isTRUE(info$has_strata)) {
-      sync_input("strata_rows", info$layout$strata$rows, "strata_rows")
-      sync_input("strata_cols", info$layout$strata$cols, "strata_cols")
-    } else {
-      sync_input("strata_rows", 1, "strata_rows")
-      sync_input("strata_cols", 1, "strata_cols")
-    }
-
-    resp_rows_val <- if (info$n_responses <= 1) 1 else info$layout$responses$nrow
-    resp_cols_val <- if (info$n_responses <= 1) 1 else info$layout$responses$ncol
-
-    sync_input("resp_rows", resp_rows_val, "resp_rows")
-    sync_input("resp_cols", resp_cols_val, "resp_cols")
+    plot_info_reactive()
+    layout_state
+    session
+    invisible(NULL)
   })
+  invisible(NULL)
 }
