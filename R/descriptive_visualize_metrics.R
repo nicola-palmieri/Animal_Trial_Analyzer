@@ -146,12 +146,14 @@ build_metric_plot <- function(metric_info, y_label, title, n_rows, n_cols) {
 
   if (has_group) {
     legend_title <- if (!is.null(metric_info$group_label)) metric_info$group_label else "Group"
+    palette <- resolve_palette_for_levels(levels(df$.group))
     p <- ggplot(df, aes(x = .group, y = value, fill = .group)) +
       geom_col(position = "dodge", width = 0.65) +
+      scale_fill_manual(values = palette) +
       labs(fill = legend_title)
   } else {
     p <- ggplot(df, aes(x = .group, y = value)) +
-      geom_col(width = 0.65, fill = "#2C7FB8") +
+      geom_col(width = 0.65, fill = resolve_single_color()) +
       guides(fill = "none")
   }
 
