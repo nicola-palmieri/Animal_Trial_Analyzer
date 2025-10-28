@@ -12,8 +12,28 @@ visualize_categorical_barplots_ui <- function(id) {
     ),
     hr(),
     fluidRow(
-      column(6, numericInput(ns("n_rows"), "Grid rows",    value = 3, min = 1, max = 10, step = 1)),
-      column(6, numericInput(ns("n_cols"), "Grid columns", value = 2, min = 1, max = 10, step = 1))
+      column(
+        6,
+        numericInput(
+          ns("n_rows"),
+          "Grid rows",
+          value = 3,
+          min = 1,
+          max = 10,
+          step = 1
+        )
+      ),
+      column(
+        6,
+        numericInput(
+          ns("n_cols"),
+          "Grid columns",
+          value = 2,
+          min = 1,
+          max = 10,
+          step = 1
+        )
+      )
     ),
     hr(),
     downloadButton(ns("download_plot"), "Download Plot")
@@ -62,50 +82,6 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
         ncol_input = input$n_cols
       )
       validate(need(!is.null(out), "No categorical variables available for plotting."))
-      
-      # Derive safe maxima for the inputs and gently clamp values so the
-      # rendered grid never differs from what the user sees in the controls.
-      n_panels <- out$panels
-      max_val  <- 10L
-
-      layout_info <- out$layout
-      if (is.null(layout_info) || !is.list(layout_info)) {
-        layout_info <- list()
-      }
-
-      safe_rows <- layout_info$nrow
-      safe_cols <- layout_info$ncol
-
-      if (is.null(safe_rows) || !is.finite(safe_rows)) {
-        safe_rows <- min(10L, max(1L, as.integer(n_panels)))
-      }
-      if (is.null(safe_cols) || !is.finite(safe_cols)) {
-        safe_cols <- min(10L, max(1L, ceiling(as.integer(n_panels) / max(1L, safe_rows))))
-      }
-
-      safe_rows <- min(max(1L, as.integer(safe_rows)), max_val)
-      safe_cols <- min(max(1L, as.integer(safe_cols)), max_val)
-
-      current_rows <- suppressWarnings(as.integer(input$n_rows))
-      current_cols <- suppressWarnings(as.integer(input$n_cols))
-
-      if (length(current_rows) == 0 || is.na(current_rows)) current_rows <- NULL
-      if (length(current_cols) == 0 || is.na(current_cols)) current_cols <- NULL
-
-      isolate({
-        if (!identical(current_rows, safe_rows)) {
-          updateNumericInput(session, "n_rows", value = safe_rows, min = 1, max = max_val)
-        } else {
-          updateNumericInput(session, "n_rows", min = 1, max = max_val)
-        }
-
-        if (!identical(current_cols, safe_cols)) {
-          updateNumericInput(session, "n_cols", value = safe_cols, min = 1, max = max_val)
-        } else {
-          updateNumericInput(session, "n_cols", min = 1, max = max_val)
-        }
-      })
-      
       out
     })
     
