@@ -36,7 +36,7 @@ visualize_categorical_barplots_ui <- function(id) {
       )
     ),
     hr(),
-    add_color_customization_ui(ns, multi_group = FALSE),
+    add_color_customization_ui(ns, multi_group = TRUE),
     hr(),
     downloadButton(ns("download_plot"), "Download plot")
   )
@@ -61,13 +61,30 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
       if (is.null(h) || !is.numeric(h) || is.na(h)) 300 else h
     })
     
+    color_var_reactive <- reactive({
+      info <- summary_info()
+      if (is.null(info)) return(NULL)
+
+      group_var <- resolve_input_value(info$group_var)
+      if (is.null(group_var) || identical(group_var, "") || identical(group_var, "None")) {
+        return(NULL)
+      }
+
+      dat <- filtered_data()
+      if (is.null(dat) || !is.data.frame(dat) || !group_var %in% names(dat)) {
+        return(NULL)
+      }
+
+      group_var
+    })
+
     custom_colors <- add_color_customization_server(
       ns = ns,
       input = input,
       output = output,
       data = filtered_data,
-      color_var_reactive = reactive(NULL),  # no grouping variable
-      multi_group = FALSE
+      color_var_reactive = color_var_reactive,
+      multi_group = TRUE
     )
 
     plot_info <- reactive({

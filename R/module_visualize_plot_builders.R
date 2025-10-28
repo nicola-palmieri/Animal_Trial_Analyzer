@@ -193,12 +193,8 @@ build_descriptive_categorical_plot <- function(df,
       group_levels <- levels(droplevels(var_data[[group_col]]))
       count_df[[group_col]] <- factor(as.character(count_df[[group_col]]), levels = group_levels)
       
-      palette <- if (!is.null(fill_colors) && length(fill_colors) >= length(group_levels)) {
-        unname(fill_colors[seq_along(group_levels)])
-      } else {
-        resolve_palette_for_levels(group_levels)
-      }
-      
+      palette <- resolve_palette_for_levels(group_levels, custom = fill_colors)
+
       p <- ggplot(count_df, aes(x = .data[[var]], y = .data$value, fill = .data[[group_col]])) +
         geom_col(position = position_dodge(width = 0.75), width = 0.65) +
         scale_fill_manual(values = palette) +
