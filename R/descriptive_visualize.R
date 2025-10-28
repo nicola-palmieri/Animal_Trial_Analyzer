@@ -49,7 +49,7 @@ visualize_descriptive_server <- function(id, filtered_data, descriptive_summary)
       switch(input$plot_type,
              "categorical" = visualize_categorical_barplots_ui(ns("categorical")),
              "boxplots"    = visualize_numeric_boxplots_ui(ns("boxplots")),
-             "histograms"  = h5("Histogram controls not yet implemented."),
+             "histograms"  = visualize_numeric_histograms_ui(ns("histograms")),
              "cv"          = h5("CV controls not yet implemented."),
              "outliers"    = h5("Outlier controls not yet implemented."),
              "missing"     = h5("Missingness controls not yet implemented."),
@@ -67,6 +67,7 @@ visualize_descriptive_server <- function(id, filtered_data, descriptive_summary)
       handle <- switch(type[[1]],
                        "categorical" = visualize_categorical_barplots_server("categorical", filtered_data, descriptive_summary),
                        "boxplots"    = visualize_numeric_boxplots_server("boxplots", filtered_data, descriptive_summary),
+                       "histograms"  = visualize_numeric_histograms_server("histograms", filtered_data, descriptive_summary),
                        NULL
       )
       active(handle)
