@@ -7,8 +7,8 @@ filter_ui <- function(id) {
   sidebarLayout(
     sidebarPanel(
       width = 4,
-      h4("Step 2 — Filter Records"),
-      p("Pick the columns to focus on and adjust the filters to refine the dataset for analysis."),
+      h4("Step 2 — Filter records"),
+      p("Select the columns to focus on and adjust the filters to refine the dataset for analysis."),
       hr(),
       uiOutput(ns("column_selector")),
       hr(),
@@ -16,7 +16,7 @@ filter_ui <- function(id) {
     ),
     mainPanel(
       width = 8,
-      h4("Filtered Data Preview"),
+      h4("Filtered data preview"),
       DTOutput(ns("filtered_preview"))
     )
   )

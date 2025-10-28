@@ -12,8 +12,8 @@ two_way_anova_ui <- function(id) {
       uiOutput(ns("advanced_options")),
       br(),
       fluidRow(
-        column(6, actionButton(ns("run"), "Run", width = "100%")),
-        column(6, downloadButton(ns("download_all"), "Download All Results"))
+        column(6, actionButton(ns("run"), "Show results", width = "100%")),
+        column(6, downloadButton(ns("download_all"), "Download all results"))
       )
     ),
     results = tagList(
@@ -40,7 +40,7 @@ two_way_anova_server <- function(id, filtered_data) {
       cat_cols <- names(data)[sapply(data, function(x) is.character(x) || is.factor(x))]
       
       tagList(
-        checkboxInput(ns("multi_resp"), "Enable multiple response variables", value = FALSE),
+        checkboxInput(ns("multi_resp"), "Show multiple response variables", value = FALSE),
         uiOutput(ns("response_selector")),
         selectInput(
           ns("factor1"),
@@ -77,7 +77,7 @@ two_way_anova_server <- function(id, filtered_data) {
       levels1 <- unique(as.character(df()[[input$factor1]]))
       selectInput(
         ns("order1"),
-        paste("Order of levels for", input$factor1, "(x-axis):"),
+        paste("Order of levels (first = reference):", input$factor1, "(x-axis)"),
         choices = levels1,
         selected = levels1,
         multiple = TRUE
@@ -89,7 +89,7 @@ two_way_anova_server <- function(id, filtered_data) {
       levels2 <- unique(as.character(df()[[input$factor2]]))
       selectInput(
         ns("order2"),
-        paste("Order of levels for", input$factor2, "(lines):"),
+        paste("Order of levels (first = reference):", input$factor2, "(lines)"),
         choices = levels2,
         selected = levels2,
         multiple = TRUE

@@ -7,7 +7,7 @@ visualize_oneway_ui <- function(id) {
   sidebarLayout(
     sidebarPanel(
       width = 4,
-      h4("Step 4 — Visualize One-way ANOVA"),
+      h4("Step 4 — Visualize one-way ANOVA"),
       p("Select visualization type and adjust subplot layout, axis scaling, and figure size."),
       hr(),
       selectInput(
@@ -25,7 +25,7 @@ visualize_oneway_ui <- function(id) {
       hr(),
       add_color_customization_ui(ns, multi_group = FALSE),
       hr(),
-      downloadButton(ns("download_plot"), "Download Plot")
+      downloadButton(ns("download_plot"), "Download plot")
     ),
     mainPanel(
       width = 8,

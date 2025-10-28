@@ -35,7 +35,7 @@ reg_interactions_ui <- function(ns, fixed, fac_vars) {
   pair_values <- vapply(pairs, function(p) paste(p, collapse = ":"), character(1))
   checkboxGroupInput(
     ns("interactions"),
-    label = "Add 2-way interactions (optional):",
+    label = "Select 2-way interactions (optional):",
     choices = stats::setNames(pair_values, pair_labels)
   )
 }

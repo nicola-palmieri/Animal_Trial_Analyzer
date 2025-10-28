@@ -10,8 +10,8 @@ descriptive_ui <- function(id) {
       uiOutput(ns("advanced_options")),
       br(),
       fluidRow(
-        column(6, actionButton(ns("run"), "Run", width = "100%")),
-        column(6, downloadButton(ns("download_summary"), "Download Summary", width = "100%"))
+        column(6, actionButton(ns("run"), "Show summary", width = "100%")),
+        column(6, downloadButton(ns("download_summary"), "Download summary", width = "100%"))
       ),
       hr()
     ),

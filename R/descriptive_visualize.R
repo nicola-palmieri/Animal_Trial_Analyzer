@@ -7,18 +7,18 @@ visualize_descriptive_ui <- function(id) {
   sidebarLayout(
     sidebarPanel(
       width = 4,
-      h4("Step 5 — Visualize Descriptive Statistics"),
+      h4("Step 5 — Visualize descriptive statistics"),
       p("Explore distributions, variability, and normality across variables."),
       hr(),
       selectInput(
         ns("plot_type"),
         label = "Visualization type:",
         choices = c(
-          "Categorical Distributions" = "categorical",
-          "Numeric Boxplots"          = "boxplots",
-          "Numeric Histograms"        = "histograms",
+          "Categorical distributions" = "categorical",
+          "Numeric boxplots"          = "boxplots",
+          "Numeric histograms"        = "histograms",
           "CV (%)"                    = "cv",
-          "Outlier Counts"            = "outliers",
+          "Outlier counts"            = "outliers",
           "Missingness (%)"           = "missing"
         ),
         selected = "categorical"

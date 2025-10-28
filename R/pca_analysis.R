@@ -9,12 +9,12 @@ pca_ui <- function(id) {
       p("Select numeric variables to include in the PCA. The data will be centered and scaled automatically."),
       selectInput(ns("vars"), "Variables:", choices = NULL, multiple = TRUE),
       fluidRow(
-        column(6, actionButton(ns("run_pca"), "Run", width = "100%")),
-        column(6, downloadButton(ns("download_all"), "Download All Results", width = "100%"))
+        column(6, actionButton(ns("run_pca"), "Show PCA summary", width = "100%")),
+        column(6, downloadButton(ns("download_all"), "Download all results", width = "100%"))
       )
     ),
     results = tagList(
-      h5("PCA Results Summary"),
+      h5("PCA results summary"),
       verbatimTextOutput(ns("summary")),
       DT::dataTableOutput(ns("loadings_table"))
     )
