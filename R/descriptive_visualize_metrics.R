@@ -137,7 +137,7 @@ prepare_metric_data <- function(data, numeric_vars, group_var, strata_levels, me
 }
 
 
-build_metric_plot <- function(metric_info, y_label, title, n_rows, n_cols) {
+build_metric_plot <- function(metric_info, y_label, n_rows, n_cols) {
   df <- metric_info$data
   has_group <- isTRUE(metric_info$has_group)
 
@@ -158,13 +158,13 @@ build_metric_plot <- function(metric_info, y_label, title, n_rows, n_cols) {
   p +
     facet_wrap(~ variable, nrow = n_rows, ncol = n_cols, scales = "free_y") +
     theme_minimal(base_size = 13) +
-    labs(x = NULL, y = y_label, title = title) +
+    labs(x = NULL, y = y_label) +
     theme(axis.text.x = element_text(angle = 45, hjust = 1))
 }
 
 
 metric_module_server <- function(id, filtered_data, summary_info, metric_key,
-                                 y_label, title, filename_prefix) {
+                                 y_label, filename_prefix) {
   moduleServer(id, function(input, output, session) {
 
     plot_width <- reactive({
@@ -214,7 +214,7 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
       n_rows <- safe_numeric_input(input$n_rows, default = 1L)
       n_cols <- safe_numeric_input(input$n_cols, default = 1L)
 
-      plot <- build_metric_plot(metric_info, y_label, title, n_rows, n_cols)
+      plot <- build_metric_plot(metric_info, y_label, n_rows, n_cols)
 
       list(
         plot = plot,
@@ -293,7 +293,6 @@ visualize_missing_server <- function(id, filtered_data, summary_info) {
     summary_info = summary_info,
     metric_key = "missing",
     y_label = "Missing (%)",
-    title = "Missingness (%)",
     filename_prefix = "missing_summary"
   )
 }
