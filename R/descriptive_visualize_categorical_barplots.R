@@ -7,15 +7,15 @@ visualize_categorical_barplots_ui <- function(id) {
   tagList(
     checkboxInput(ns("show_proportions"), "Show proportions instead of counts", FALSE),
     fluidRow(
-      column(
-        6,
-        numericInput(ns("plot_width"),  "Subplot width (px)",  400, 200, 2000, 50)
-      ),
-      column(
-        6,
-        numericInput(ns("plot_height"), "Subplot height (px)", 300, 200, 2000, 50)
-      )
+      column(6, numericInput(ns("plot_width"),  "Subplot width (px)",  400, 200, 2000, 50)),
+      column(6, numericInput(ns("plot_height"), "Subplot height (px)", 300, 200, 2000, 50))
     ),
+    hr(),
+    fluidRow(
+      column(6, numericInput(ns("n_rows"), "Grid rows",    value = 3, min = 1, step = 1)),
+      column(6, numericInput(ns("n_cols"), "Grid columns", value = 2, min = 1, step = 1))
+    ),
+    hr(),
     downloadButton(ns("download_plot"), "Download Plot")
   )
 }
@@ -38,7 +38,7 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
       if (is.null(h) || !is.numeric(h) || is.na(h)) 300 else h
     })
     
-    plot_obj <- reactive({
+    plot_info <- reactive({
       dat <- filtered_data()
       info <- summary_info()
       
@@ -46,21 +46,31 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
       validate(need(!is.null(info), "Summary not available."))
       
       selected_vars <- resolve_input_value(info$selected_vars)
-      group_var <- resolve_input_value(info$group_var)
+      group_var     <- resolve_input_value(info$group_var)
       
-      plot_info <- build_descriptive_categorical_plot(
+      out <- build_descriptive_categorical_plot(
         df = dat,
         selected_vars = selected_vars,
         group_var = group_var,
-        show_proportions = isTRUE(input$show_proportions)
+        show_proportions = isTRUE(input$show_proportions),
+        nrow_input = input$n_rows,
+        ncol_input = input$n_cols
       )
+      validate(need(!is.null(out), "No categorical variables available for plotting."))
       
-      validate(need(!is.null(plot_info), "No categorical variables available for plotting."))
-      plot_info
+      # Derive safe maxima for the inputs WITHOUT changing their values
+      n_panels <- out$panels
+      max_val  <- max(1, as.integer(n_panels))
+      isolate({
+        updateNumericInput(session, "n_rows", max = max_val)
+        updateNumericInput(session, "n_cols", max = max_val)
+      })
+      
+      out
     })
     
     plot_size <- reactive({
-      info <- plot_obj()
+      info <- plot_info()
       if (is.null(info$layout)) {
         list(w = plot_width(), h = plot_height())
       } else {
@@ -74,7 +84,7 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
     output$download_plot <- downloadHandler(
       filename = function() paste0("categorical_barplots_", Sys.Date(), ".png"),
       content  = function(file) {
-        info <- plot_obj()
+        info <- plot_info()
         req(info$plot)
         s <- plot_size()
         ggplot2::ggsave(
@@ -90,12 +100,10 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
       }
     )
     
-    # 🔹 Return the adjusted sizes
     return(list(
-      plot   = reactive({ plot_obj()$plot }),
+      plot   = reactive({ plot_info()$plot }),
       width  = reactive(plot_size()$w),
       height = reactive(plot_size()$h)
     ))
   })
 }
-

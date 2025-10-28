@@ -119,20 +119,20 @@ build_descriptive_metric_bar_plot <- function(info, y_label) {
 build_descriptive_categorical_plot <- function(df,
                                                selected_vars = NULL,
                                                group_var = NULL,
-                                               show_proportions = FALSE) {
+                                               show_proportions = FALSE,
+                                               nrow_input = NULL,
+                                               ncol_input = NULL) {
   if (is.null(df) || !is.data.frame(df) || nrow(df) == 0) return(NULL)
-
-  # Identify categorical variables (character/factor/logical)
+  
   factor_vars <- names(df)[vapply(df, function(x) {
     is.character(x) || is.factor(x) || is.logical(x)
   }, logical(1))]
-
+  
   if (!is.null(selected_vars) && length(selected_vars) > 0) {
     factor_vars <- intersect(factor_vars, selected_vars)
   }
-
   if (length(factor_vars) == 0) return(NULL)
-
+  
   if (!is.null(group_var) && group_var %in% names(df)) {
     df[[group_var]] <- as.character(df[[group_var]])
     df[[group_var]][is.na(df[[group_var]]) | trimws(df[[group_var]]) == ""] <- "Missing"
@@ -140,31 +140,31 @@ build_descriptive_categorical_plot <- function(df,
   } else {
     group_var <- NULL
   }
-
+  
   plots <- lapply(factor_vars, function(var) {
     cols_to_use <- c(var, group_var)
     cols_to_use <- cols_to_use[cols_to_use %in% names(df)]
     var_data <- df[, cols_to_use, drop = FALSE]
-
+    
     var_data[[var]] <- as.character(var_data[[var]])
     keep <- !is.na(var_data[[var]]) & trimws(var_data[[var]]) != ""
     if (!any(keep)) return(NULL)
     var_data <- var_data[keep, , drop = FALSE]
-
+    
     level_order <- if (is.factor(df[[var]])) {
       as.character(levels(df[[var]]))
     } else {
       unique(var_data[[var]])
     }
     var_data[[var]] <- factor(var_data[[var]], levels = level_order)
-
+    
     y_label <- if (isTRUE(show_proportions)) "Proportion" else "Count"
-
+    
     if (!is.null(group_var)) {
       var_data[[group_var]] <- droplevels(var_data[[group_var]])
       count_df <- dplyr::count(var_data, .data[[var]], .data[[group_var]], name = "count")
       if (nrow(count_df) == 0) return(NULL)
-
+      
       if (isTRUE(show_proportions)) {
         count_df <- count_df |>
           dplyr::group_by(.data[[group_var]]) |>
@@ -175,62 +175,66 @@ build_descriptive_categorical_plot <- function(df,
       } else {
         count_df <- dplyr::mutate(count_df, value = .data$count)
       }
-
+      
       count_df[[var]] <- factor(as.character(count_df[[var]]), levels = level_order)
-
+      
       p <- ggplot(count_df, aes(x = .data[[var]], y = .data$value, fill = .data[[group_var]])) +
         geom_col(position = position_dodge(width = 0.75), width = 0.65) +
         theme_minimal(base_size = 13) +
         labs(title = var, x = NULL, y = y_label, fill = group_var) +
         theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
+      
       if (isTRUE(show_proportions)) {
         p <- p + scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0, 1))
       }
-
+      
       p
     } else {
       count_df <- dplyr::count(var_data, .data[[var]], name = "count")
       if (nrow(count_df) == 0) return(NULL)
-
+      
       total <- sum(count_df$count, na.rm = TRUE)
       if (isTRUE(show_proportions) && total > 0) {
         count_df$value <- count_df$count / total
       } else {
         count_df$value <- count_df$count
       }
-
+      
       count_df[[var]] <- factor(as.character(count_df[[var]]), levels = level_order)
-
+      
       p <- ggplot(count_df, aes(x = .data[[var]], y = .data$value)) +
         geom_col(fill = "#2C7FB8", width = 0.65) +
         theme_minimal(base_size = 13) +
         labs(title = var, x = NULL, y = y_label) +
         theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
+      
       if (isTRUE(show_proportions)) {
         p <- p + scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0, 1))
       }
-
+      
       p
     }
   })
-
+  
   plots <- Filter(Negate(is.null), plots)
   if (length(plots) == 0) return(NULL)
-
-  ncol <- if (length(plots) == 1) 1 else 2
-  nrow <- ceiling(length(plots) / ncol)
-
-  combined <- patchwork::wrap_plots(plots, ncol = ncol) +
+  
+  # ✅ Use the common layout helper; clamp without changing inputs
+  layout <- compute_grid_layout(
+    n_items   = length(plots),
+    rows_input = suppressWarnings(as.numeric(nrow_input)),
+    cols_input = suppressWarnings(as.numeric(ncol_input))
+  )
+  
+  combined <- patchwork::wrap_plots(plots, nrow = layout$nrow, ncol = layout$ncol) +
     patchwork::plot_annotation(
       title = "Categorical Distributions",
       theme = theme(plot.title = element_text(size = 16, face = "bold"))
     )
-
+  
   list(
     plot = combined,
-    layout = list(nrow = nrow, ncol = ncol),
+    layout = list(nrow = layout$nrow, ncol = layout$ncol),
     panels = length(plots)
   )
 }
