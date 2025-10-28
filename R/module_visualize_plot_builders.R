@@ -574,20 +574,31 @@ build_pca_biplot <- function(pca_obj, data, color_var = NULL, shape_var = NULL,
 
 compute_grid_layout <- function(n_items, rows_input, cols_input) {
   # Safely handle nulls
-  if (is.null(n_items) || length(n_items) == 0 || is.na(n_items) || n_items <= 0) {
+  if (is.null(n_items) || length(n_items) == 0) {
     return(list(nrow = 1, ncol = 1))
   }
-  
-  # Replace NULL or NA inputs with 0
-  if (is.null(rows_input) || is.na(rows_input)) rows_input <- 0
-  if (is.null(cols_input) || is.na(cols_input)) cols_input <- 0
-  
-  n_row_input <- suppressWarnings(as.numeric(rows_input))
-  n_col_input <- suppressWarnings(as.numeric(cols_input))
-  
-  # Handle invalid inputs
-  if (is.na(n_row_input)) n_row_input <- 0
-  if (is.na(n_col_input)) n_col_input <- 0
+
+  n_items <- suppressWarnings(as.numeric(n_items[1]))
+  if (is.na(n_items) || n_items <= 0) {
+    return(list(nrow = 1, ncol = 1))
+  }
+
+  normalize_dim_input <- function(x) {
+    if (is.null(x) || length(x) == 0) {
+      return(0)
+    }
+
+    x <- suppressWarnings(as.numeric(x[1]))
+
+    if (is.na(x) || x < 0) {
+      return(0)
+    }
+
+    x
+  }
+
+  n_row_input <- normalize_dim_input(rows_input)
+  n_col_input <- normalize_dim_input(cols_input)
   
   if (n_row_input > 0) {
     n_row_final <- n_row_input
