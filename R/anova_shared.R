@@ -16,7 +16,8 @@ build_anova_layout_controls <- function(ns, input, info, default_ui_value) {
             ns("strata_rows"),
             "Grid rows",
             value = isolate(default_ui_value(input$strata_rows)),
-            min = 0,
+            min = 1,
+            max = 10,
             step = 1
           )
         ),
@@ -26,7 +27,8 @@ build_anova_layout_controls <- function(ns, input, info, default_ui_value) {
             ns("strata_cols"),
             "Grid columns",
             value = isolate(default_ui_value(input$strata_cols)),
-            min = 0,
+            min = 1,
+            max = 10,
             step = 1
           )
         )
@@ -46,7 +48,8 @@ build_anova_layout_controls <- function(ns, input, info, default_ui_value) {
             ns("resp_rows"),
             "Grid rows",
             value = isolate(default_ui_value(input$resp_rows)),
-            min = 0,
+            min = 1,
+            max = 10,
             step = 1
           )
         ),
@@ -56,7 +59,8 @@ build_anova_layout_controls <- function(ns, input, info, default_ui_value) {
             ns("resp_cols"),
             "Grid columns",
             value = isolate(default_ui_value(input$resp_cols)),
-            min = 0,
+            min = 1,
+            max = 10,
             step = 1
           )
         )
