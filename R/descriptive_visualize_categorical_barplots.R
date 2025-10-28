@@ -36,7 +36,7 @@ visualize_categorical_barplots_ui <- function(id) {
       )
     ),
     hr(),
-    downloadButton(ns("download_plot"), "Download Plot")
+    downloadButton(ns("download_plot"), "Download plot")
   )
 }
 
