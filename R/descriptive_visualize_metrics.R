@@ -7,7 +7,6 @@ metric_panel_ui <- function(id, default_width = 400, default_height = 300,
                             default_rows = 2, default_cols = 3) {
   ns <- NS(id)
   tagList(
-    checkboxInput(ns("use_strata"), "Stratify by selected variable", TRUE),
     fluidRow(
       column(6, numericInput(ns("plot_width"),  "Subplot width (px)",  default_width, 200, 2000, 50)),
       column(6, numericInput(ns("plot_height"), "Subplot height (px)", default_height, 200, 2000, 50))
@@ -69,13 +68,12 @@ missing_pct <- function(x) {
   100 * mean(is.na(x))
 }
 
-prepare_metric_data <- function(data, numeric_vars, group_var, use_group, strata_levels,
-                                metric) {
+prepare_metric_data <- function(data, numeric_vars, group_var, strata_levels, metric) {
   if (length(numeric_vars) == 0) {
     return(NULL)
   }
 
-  if (!isTRUE(use_group) || is.null(group_var) || !group_var %in% names(data)) {
+  if (is.null(group_var) || !group_var %in% names(data)) {
     group_var <- NULL
   }
 
@@ -191,6 +189,7 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
       selected_vars <- resolve_metric_input(info$selected_vars)
       group_var <- resolve_metric_input(info$group_var)
       strata_levels <- resolve_metric_input(info$strata_levels)
+      group_label <- resolve_metric_input(info$group_label)
 
       numeric_vars <- names(dat)[vapply(dat, is.numeric, logical(1))]
       if (!is.null(selected_vars) && length(selected_vars) > 0) {
@@ -198,18 +197,19 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
       }
       validate(need(length(numeric_vars) > 0, "No numeric variables selected."))
 
-      use_group <- isTRUE(input$use_strata)
-
       metric_info <- prepare_metric_data(
         data = dat,
         numeric_vars = numeric_vars,
         group_var = group_var,
-        use_group = use_group,
         strata_levels = strata_levels,
         metric = metric_key
       )
 
       validate(need(!is.null(metric_info), "Unable to compute metric for the selected variables."))
+
+      if (!is.null(group_label)) {
+        metric_info$group_label <- group_label
+      }
 
       n_rows <- safe_numeric_input(input$n_rows, default = 1L)
       n_cols <- safe_numeric_input(input$n_cols, default = 1L)
