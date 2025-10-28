@@ -240,25 +240,58 @@ build_descriptive_categorical_plot <- function(df,
 }
 
 
-build_descriptive_boxplot <- function(df) {
-  num_vars <- names(df)[sapply(df, is.numeric)]
+build_descriptive_numeric_boxplot <- function(df,
+                                              selected_vars = NULL,
+                                              group_var = NULL,
+                                              show_points = TRUE,
+                                              nrow_input = NULL,
+                                              ncol_input = NULL) {
+  if (is.null(df) || !is.data.frame(df) || nrow(df) == 0) return(NULL)
+  
+  num_vars <- names(df)[vapply(df, is.numeric, logical(1))]
+  if (!is.null(selected_vars) && length(selected_vars) > 0) {
+    num_vars <- intersect(num_vars, selected_vars)
+  }
   if (length(num_vars) == 0) return(NULL)
-  plots <- lapply(num_vars, function(v) {
-    ggplot(df, aes(x = 1, y = .data[[v]])) +
-      geom_boxplot(outlier.shape = NA, fill = "#A6CEE3") +
-      geom_jitter(width = 0.1, alpha = 0.5, color = "#1F78B4") +
-      theme_minimal(base_size = 13) +
-      labs(title = v, x = NULL, y = "Value") +
-      theme(
-        axis.text.x = element_blank(),
-        axis.ticks.x = element_blank()
-      )
+  
+  plots <- lapply(num_vars, function(var) {
+    if (!is.null(group_var) && group_var %in% names(df)) {
+      p <- ggplot(df, aes(x = .data[[group_var]], y = .data[[var]], fill = .data[[group_var]])) +
+        geom_boxplot(outlier.shape = NA, width = 0.6) +
+        theme_minimal(base_size = 13) +
+        labs(title = var, x = NULL, y = var) +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1))
+      if (show_points) p <- p + geom_jitter(width = 0.2, alpha = 0.5, size = 1)
+    } else {
+      p <- ggplot(df, aes(y = .data[[var]])) +
+        geom_boxplot(fill = "#2C7FB8", width = 0.3) +
+        theme_minimal(base_size = 13) +
+        labs(title = var, x = NULL, y = var)
+      if (show_points) p <- p + geom_jitter(width = 0.05, alpha = 0.5, size = 1)
+    }
+    p
   })
-  patchwork::wrap_plots(plots, ncol = 2) +
+  
+  plots <- Filter(Negate(is.null), plots)
+  if (length(plots) == 0) return(NULL)
+  
+  layout <- compute_grid_layout(
+    n_items = length(plots),
+    rows_input = suppressWarnings(as.numeric(nrow_input)),
+    cols_input = suppressWarnings(as.numeric(ncol_input))
+  )
+  
+  combined <- patchwork::wrap_plots(plots, nrow = layout$nrow, ncol = layout$ncol) +
     patchwork::plot_annotation(
-      title = "Boxplots",
+      title = "Numeric Distributions (Boxplots)",
       theme = theme(plot.title = element_text(size = 16, face = "bold"))
     )
+  
+  list(
+    plot = combined,
+    layout = list(nrow = layout$nrow, ncol = layout$ncol),
+    panels = length(plots)
+  )
 }
 
 

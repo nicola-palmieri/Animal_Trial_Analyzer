@@ -34,6 +34,7 @@ visualize_descriptive_ui <- function(id) {
   )
 }
 
+
 visualize_descriptive_server <- function(id, filtered_data, descriptive_summary) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
@@ -41,11 +42,13 @@ visualize_descriptive_server <- function(id, filtered_data, descriptive_summary)
     # holder for the active submodule's returned reactives
     active <- reactiveVal(NULL)
     
-    # Insert the submodule controls into the same sidebar
+    # ==========================================================
+    # 🔹 Inject the correct UI for each submodule
+    # ==========================================================
     output$sub_controls <- renderUI({
       switch(input$plot_type,
              "categorical" = visualize_categorical_barplots_ui(ns("categorical")),
-             "boxplots"    = h5("Boxplot controls not yet implemented."),
+             "boxplots"    = visualize_numeric_boxplots_ui(ns("boxplots")),
              "histograms"  = h5("Histogram controls not yet implemented."),
              "cv"          = h5("CV controls not yet implemented."),
              "outliers"    = h5("Outlier controls not yet implemented."),
@@ -54,19 +57,24 @@ visualize_descriptive_server <- function(id, filtered_data, descriptive_summary)
       )
     })
     
-    # Start/replace the submodule server and capture its return
+    # ==========================================================
+    # 🔹 Dynamically start the right submodule server
+    # ==========================================================
     observeEvent(input$plot_type, {
       type <- input$plot_type
       if (is.null(type) || length(type) == 0) return()
       
       handle <- switch(type[[1]],
                        "categorical" = visualize_categorical_barplots_server("categorical", filtered_data, descriptive_summary),
+                       "boxplots"    = visualize_numeric_boxplots_server("boxplots", filtered_data, descriptive_summary),
                        NULL
       )
       active(handle)
     }, ignoreInit = FALSE)
     
-    # Parent renders the plot using the submodule's returned reactives
+    # ==========================================================
+    # 🔹 Parent renders whatever the active submodule produces
+    # ==========================================================
     output$plot <- renderPlot({
       h <- active()
       req(h)
