@@ -254,24 +254,39 @@ build_descriptive_numeric_boxplot <- function(df,
   }
   if (length(num_vars) == 0) return(NULL)
   
+  # ensure discrete x if grouped
+  if (!is.null(group_var) && group_var %in% names(df)) {
+    df[[group_var]] <- as.factor(df[[group_var]])
+  } else {
+    group_var <- NULL
+  }
+  
   plots <- lapply(num_vars, function(var) {
-    if (!is.null(group_var) && group_var %in% names(df)) {
+    # skip all-NA vars early
+    vec <- df[[var]]
+    if (all(is.na(vec))) return(NULL)
+    
+    if (!is.null(group_var)) {
       p <- ggplot(df, aes(x = .data[[group_var]], y = .data[[var]], fill = .data[[group_var]])) +
         geom_boxplot(outlier.shape = NA, width = 0.6) +
         theme_minimal(base_size = 13) +
         labs(title = var, x = NULL, y = var) +
         theme(axis.text.x = element_text(angle = 45, hjust = 1))
-      if (show_points) p <- p + geom_jitter(width = 0.2, alpha = 0.5, size = 1)
+      if (isTRUE(show_points)) p <- p + geom_jitter(width = 0.2, alpha = 0.5, size = 1)
     } else {
-      p <- ggplot(df, aes(y = .data[[var]])) +
+      # ✅ always provide an x aesthetic
+      p <- ggplot(df, aes(x = factor(1), y = .data[[var]])) +
         geom_boxplot(fill = "#2C7FB8", width = 0.3) +
         theme_minimal(base_size = 13) +
-        labs(title = var, x = NULL, y = var)
-      if (show_points) p <- p + geom_jitter(width = 0.05, alpha = 0.5, size = 1)
+        labs(title = var, x = NULL, y = var) +
+        theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+      if (isTRUE(show_points)) p <- p + geom_jitter(width = 0.05, alpha = 0.5, size = 1)
     }
-    p
+    
+    if (inherits(p, "gg")) p else NULL
   })
   
+  # keep only valid ggplots
   plots <- Filter(Negate(is.null), plots)
   if (length(plots) == 0) return(NULL)
   
@@ -293,6 +308,7 @@ build_descriptive_numeric_boxplot <- function(df,
     panels = length(plots)
   )
 }
+
 
 
 build_descriptive_histogram <- function(df) {
