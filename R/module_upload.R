@@ -55,7 +55,7 @@ upload_server <- function(id) {
       df(data)
       
       output$validation_msg <- renderText(paste("📂 Loaded default long-format dataset from:", path))
-      output$preview <- renderDT(data, options = list(scrollX = TRUE, pageLength = 5))
+      output$preview <- renderDT(data, options = list(scrollX = TRUE, pageLength = 5, autoWidth = TRUE),  class = "compact stripe nowrap")
     })
     
     # ---- Example layout preview ----
@@ -121,14 +121,13 @@ upload_server <- function(id) {
         return()
       }
       
-      first_row <- suppressMessages(
-        readxl::read_excel(input$file$datapath, sheet = input$sheet, n_max = 1)
-      )
-      if (any(duplicated(unlist(first_row))) && input$layout_type == "long") {
-        output$validation_msg <- renderText("❌ Wide-format detected — please switch to 'Wide format'.")
+      col_names <- names(readxl::read_excel(input$file$datapath, sheet = input$sheet, n_max = 1))
+      if (anyDuplicated(col_names) > 0 && input$layout_type == "long") {
+        output$validation_msg <- renderText("❌ Duplicate column names found — this looks like wide format.")
         output$preview <- renderDT(data.frame(), options = list(scrollX = TRUE))
         return()
       }
+      
       
       if (input$layout_type == "wide") {
         data <- tryCatch(

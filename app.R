@@ -1,10 +1,11 @@
 # ===============================================================
-# 🧪 Animal Trial Analyzer — Standalone App
+# 🧪 Table Analyzer — Standalone App
 # ===============================================================
 
 library(bslib)
 library(dplyr)
 library(DT)
+library(emmeans)
 library(flextable)
 library(GGally)
 library(ggplot2)
@@ -17,6 +18,7 @@ library(skimr)
 library(tidyr)
 
 options(shiny.autoreload = TRUE)
+options(shiny.maxRequestSize = 200 * 1024^2)
 
 # ---------------------------------------------------------------
 # UI

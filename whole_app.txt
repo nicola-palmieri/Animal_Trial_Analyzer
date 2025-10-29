@@ -1611,7 +1611,7 @@ visualize_descriptive_ui <- function(id) {
     ),
     mainPanel(
       width = 8,
-      plotOutput(ns("plot"), height = "auto")  # parent-owned plotOutput
+      uiOutput(ns("plot_ui"))  # plot output provided by the active submodule
     )
   )
 }
@@ -1620,56 +1620,88 @@ visualize_descriptive_ui <- function(id) {
 visualize_descriptive_server <- function(id, filtered_data, descriptive_summary) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
-    
-    # holder for the active submodule's returned reactives
-    active <- reactiveVal(NULL)
-    
+
+    active_type <- reactive({
+      type <- input$plot_type
+      if (is.null(type) || !length(type) || !nzchar(type[[1]])) {
+        "categorical"
+      } else {
+        type[[1]]
+      }
+    })
+
     # ==========================================================
     # 🔹 Inject the correct UI for each submodule
     # ==========================================================
     output$sub_controls <- renderUI({
-      switch(input$plot_type,
+      type <- active_type()
+      switch(type,
              "categorical" = visualize_categorical_barplots_ui(ns("categorical")),
              "boxplots"    = visualize_numeric_boxplots_ui(ns("boxplots")),
              "histograms"  = visualize_numeric_histograms_ui(ns("histograms")),
              "cv"          = visualize_cv_ui(ns("cv")),
              "outliers"    = visualize_outliers_ui(ns("outliers")),
-             "missing"     = visualize_missing_ui(ns("missing"))
+             "missing"     = visualize_missing_ui(ns("missing")),
+             div("No controls available for this plot type.")
       )
     })
-    
-    # ==========================================================
-    # 🔹 Dynamically start the right submodule server
-    # ==========================================================
-    observeEvent(input$plot_type, {
-      type <- input$plot_type
-      if (is.null(type) || length(type) == 0) return()
-      
-      handle <- switch(type[[1]],
-                       "categorical" = visualize_categorical_barplots_server("categorical", filtered_data, descriptive_summary),
-                       "boxplots"    = visualize_numeric_boxplots_server("boxplots", filtered_data, descriptive_summary),
-                       "histograms"  = visualize_numeric_histograms_server("histograms", filtered_data, descriptive_summary),
-                       "cv"          = visualize_cv_server("cv", filtered_data, descriptive_summary),
-                       "outliers"    = visualize_outliers_server("outliers", filtered_data, descriptive_summary),
-                       "missing"     = visualize_missing_server("missing", filtered_data, descriptive_summary),
-                       NULL
+
+    output$plot_ui <- renderUI({
+      type <- active_type()
+      switch(type,
+             "categorical" = visualize_categorical_barplots_plot_ui(ns("categorical")),
+             "boxplots"    = visualize_numeric_boxplots_plot_ui(ns("boxplots")),
+             "histograms"  = visualize_numeric_histograms_plot_ui(ns("histograms")),
+             "cv"          = visualize_cv_plot_ui(ns("cv")),
+             "outliers"    = visualize_outliers_plot_ui(ns("outliers")),
+             "missing"     = visualize_missing_plot_ui(ns("missing")),
+             div("Plot not available for this selection.")
       )
-      active(handle)
-    }, ignoreInit = FALSE)
-    
-    # ==========================================================
-    # 🔹 Parent renders whatever the active submodule produces
-    # ==========================================================
-    output$plot <- renderPlot({
-      h <- active()
-      req(h)
-      p <- h$plot()
-      validate(need(!is.null(p), "No plot available."))
-      print(p)
-    },
-    width  = function() { h <- active(); if (is.null(h)) 800 else h$width()  },
-    height = function() { h <- active(); if (is.null(h)) 600 else h$height() },
-    res = 96)
+    })
+
+    categorical_active <- reactive(active_type() == "categorical")
+    boxplots_active    <- reactive(active_type() == "boxplots")
+    histograms_active  <- reactive(active_type() == "histograms")
+    cv_active          <- reactive(active_type() == "cv")
+    outliers_active    <- reactive(active_type() == "outliers")
+    missing_active     <- reactive(active_type() == "missing")
+
+    visualize_categorical_barplots_server(
+      "categorical",
+      filtered_data,
+      descriptive_summary,
+      is_active = categorical_active
+    )
+    visualize_numeric_boxplots_server(
+      "boxplots",
+      filtered_data,
+      descriptive_summary,
+      is_active = boxplots_active
+    )
+    visualize_numeric_histograms_server(
+      "histograms",
+      filtered_data,
+      descriptive_summary,
+      is_active = histograms_active
+    )
+    visualize_cv_server(
+      "cv",
+      filtered_data,
+      descriptive_summary,
+      is_active = cv_active
+    )
+    visualize_outliers_server(
+      "outliers",
+      filtered_data,
+      descriptive_summary,
+      is_active = outliers_active
+    )
+    visualize_missing_server(
+      "missing",
+      filtered_data,
+      descriptive_summary,
+      is_active = missing_active
+    )
   })
 }
 # ===============================================================
@@ -1710,29 +1742,76 @@ visualize_categorical_barplots_ui <- function(id) {
       )
     ),
     hr(),
+    add_color_customization_ui(ns, multi_group = TRUE),
+    hr(),
     downloadButton(ns("download_plot"), "Download plot")
   )
 }
 
-visualize_categorical_barplots_server <- function(id, filtered_data, summary_info) {
+visualize_categorical_barplots_plot_ui <- function(id) {
+  ns <- NS(id)
+  div(
+    class = "ta-plot-container",
+    plotOutput(ns("plot"), width = "100%", height = "auto")
+  )
+}
+
+visualize_categorical_barplots_server <- function(id, filtered_data, summary_info, is_active = NULL) {
   moduleServer(id, function(input, output, session) {
-    
+    ns <- session$ns
+
     resolve_input_value <- function(x) {
       if (is.null(x)) return(NULL)
       if (is.reactive(x)) x() else x
     }
-    
+
+    module_active <- reactive({
+      if (is.null(is_active)) {
+        TRUE
+      } else {
+        isTRUE(is_active())
+      }
+    })
+
     plot_width <- reactive({
       w <- input$plot_width
       if (is.null(w) || !is.numeric(w) || is.na(w)) 400 else w
     })
-    
+
     plot_height <- reactive({
       h <- input$plot_height
       if (is.null(h) || !is.numeric(h) || is.na(h)) 300 else h
     })
     
+    color_var_reactive <- reactive({
+      info <- summary_info()
+      if (is.null(info)) return(NULL)
+
+      group_var <- resolve_input_value(info$group_var)
+      if (is.null(group_var) || identical(group_var, "") || identical(group_var, "None")) {
+        return(NULL)
+      }
+
+      dat <- filtered_data()
+      if (is.null(dat) || !is.data.frame(dat) || !group_var %in% names(dat)) {
+        return(NULL)
+      }
+
+      group_var
+    })
+
+    custom_colors <- add_color_customization_server(
+      ns = ns,
+      input = input,
+      output = output,
+      data = filtered_data,
+      color_var_reactive = color_var_reactive,
+      multi_group = TRUE
+    )
+
     plot_info <- reactive({
+      req(module_active())
+
       info <- summary_info()
 
       validate(need(!is.null(info), "Summary not available."))
@@ -1753,13 +1832,16 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
         strata_levels = strata_levels,
         show_proportions = isTRUE(input$show_proportions),
         nrow_input = input$n_rows,
-        ncol_input = input$n_cols
+        ncol_input = input$n_cols,
+        fill_colors = custom_colors()
       )
       validate(need(!is.null(out), "No categorical variables available for plotting."))
       out
     })
-    
+
     plot_size <- reactive({
+      req(module_active())
+
       info <- plot_info()
       if (is.null(info$layout)) {
         list(w = plot_width(), h = plot_height())
@@ -1774,6 +1856,7 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
     output$download_plot <- downloadHandler(
       filename = function() paste0("categorical_barplots_", Sys.Date(), ".png"),
       content  = function(file) {
+        req(module_active())
         info <- plot_info()
         req(info$plot)
         s <- plot_size()
@@ -1789,12 +1872,22 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
         )
       }
     )
-    
-    return(list(
-      plot   = reactive({ plot_info()$plot }),
-      width  = reactive(plot_size()$w),
-      height = reactive(plot_size()$h)
-    ))
+
+    output$plot <- renderPlot({
+      req(module_active())
+      info <- plot_info()
+      validate(need(!is.null(info$plot), "No plot available."))
+      print(info$plot)
+    },
+    width = function() {
+      req(module_active())
+      plot_size()$w
+    },
+    height = function() {
+      req(module_active())
+      plot_size()$h
+    },
+    res = 96)
   })
 }
 # ===============================================================
@@ -1831,6 +1924,26 @@ visualize_outliers_ui <- function(id) {
 
 visualize_missing_ui <- function(id) {
   metric_panel_ui(id, default_width = 400, default_height = 320, default_rows = 2, default_cols = 3)
+}
+
+metric_plot_ui <- function(id) {
+  ns <- NS(id)
+  div(
+    class = "ta-plot-container",
+    plotOutput(ns("plot"), width = "100%", height = "auto")
+  )
+}
+
+visualize_cv_plot_ui <- function(id) {
+  metric_plot_ui(id)
+}
+
+visualize_outliers_plot_ui <- function(id) {
+  metric_plot_ui(id)
+}
+
+visualize_missing_plot_ui <- function(id) {
+  metric_plot_ui(id)
 }
 
 
@@ -1965,7 +2078,7 @@ build_metric_plot <- function(metric_info, y_label, title, n_rows, n_cols) {
 
 
 metric_module_server <- function(id, filtered_data, summary_info, metric_key,
-                                 y_label, title, filename_prefix) {
+                                 y_label, title, filename_prefix, is_active = NULL) {
   moduleServer(id, function(input, output, session) {
 
     plot_width <- reactive({
@@ -1978,7 +2091,17 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
       if (is.null(h) || !is.numeric(h) || is.na(h)) 300 else h
     })
 
+    module_active <- reactive({
+      if (is.null(is_active)) {
+        TRUE
+      } else {
+        isTRUE(is_active())
+      }
+    })
+
     plot_details <- reactive({
+      req(module_active())
+
       info <- summary_info()
       validate(need(!is.null(info), "Summary not available."))
 
@@ -2024,6 +2147,7 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
     })
 
     plot_size <- reactive({
+      req(module_active())
       details <- plot_details()
       if (is.null(details$layout)) {
         list(w = plot_width(), h = plot_height())
@@ -2038,6 +2162,7 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
     output$download_plot <- downloadHandler(
       filename = function() paste0(filename_prefix, "_", Sys.Date(), ".png"),
       content = function(file) {
+        req(module_active())
         details <- plot_details()
         req(details$plot)
         size <- plot_size()
@@ -2054,16 +2179,26 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
       }
     )
 
-    return(list(
-      plot = reactive({ plot_details()$plot }),
-      width = reactive(plot_size()$w),
-      height = reactive(plot_size()$h)
-    ))
+    output$plot <- renderPlot({
+      req(module_active())
+      details <- plot_details()
+      validate(need(!is.null(details$plot), "No plot available."))
+      print(details$plot)
+    },
+    width = function() {
+      req(module_active())
+      plot_size()$w
+    },
+    height = function() {
+      req(module_active())
+      plot_size()$h
+    },
+    res = 96)
   })
 }
 
 
-visualize_cv_server <- function(id, filtered_data, summary_info) {
+visualize_cv_server <- function(id, filtered_data, summary_info, is_active = NULL) {
   metric_module_server(
     id = id,
     filtered_data = filtered_data,
@@ -2071,11 +2206,12 @@ visualize_cv_server <- function(id, filtered_data, summary_info) {
     metric_key = "cv",
     y_label = "CV (%)",
     title = "Coefficient of Variation (CV%)",
-    filename_prefix = "cv_summary"
+    filename_prefix = "cv_summary",
+    is_active = is_active
   )
 }
 
-visualize_outliers_server <- function(id, filtered_data, summary_info) {
+visualize_outliers_server <- function(id, filtered_data, summary_info, is_active = NULL) {
   metric_module_server(
     id = id,
     filtered_data = filtered_data,
@@ -2083,11 +2219,12 @@ visualize_outliers_server <- function(id, filtered_data, summary_info) {
     metric_key = "outliers",
     y_label = "Outlier Count",
     title = "Outlier Counts (1.5×IQR Rule)",
-    filename_prefix = "outlier_summary"
+    filename_prefix = "outlier_summary",
+    is_active = is_active
   )
 }
 
-visualize_missing_server <- function(id, filtered_data, summary_info) {
+visualize_missing_server <- function(id, filtered_data, summary_info, is_active = NULL) {
   metric_module_server(
     id = id,
     filtered_data = filtered_data,
@@ -2095,7 +2232,8 @@ visualize_missing_server <- function(id, filtered_data, summary_info) {
     metric_key = "missing",
     y_label = "Missing (%)",
     title = "Missingness (%)",
-    filename_prefix = "missing_summary"
+    filename_prefix = "missing_summary",
+    is_active = is_active
   )
 }
 # ===============================================================
@@ -2141,25 +2279,44 @@ visualize_numeric_boxplots_ui <- function(id) {
 }
 
 
-visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info) {
+visualize_numeric_boxplots_plot_ui <- function(id) {
+  ns <- NS(id)
+  div(
+    class = "ta-plot-container",
+    plotOutput(ns("plot"), width = "100%", height = "auto")
+  )
+}
+
+
+visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, is_active = NULL) {
   moduleServer(id, function(input, output, session) {
-    
+
     resolve_input_value <- function(x) {
       if (is.null(x)) return(NULL)
       if (is.reactive(x)) x() else x
     }
-    
+
+    module_active <- reactive({
+      if (is.null(is_active)) {
+        TRUE
+      } else {
+        isTRUE(is_active())
+      }
+    })
+
     plot_width <- reactive({
       w <- input$plot_width
       if (is.null(w) || !is.numeric(w) || is.na(w)) 400 else w
     })
-    
+
     plot_height <- reactive({
       h <- input$plot_height
       if (is.null(h) || !is.numeric(h) || is.na(h)) 300 else h
     })
-    
+
     plot_info <- reactive({
+      req(module_active())
+
       info <- summary_info()
 
       validate(need(!is.null(info), "Summary not available."))
@@ -2184,8 +2341,9 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info) {
       validate(need(!is.null(out), "No numeric variables available for plotting."))
       out
     })
-    
+
     plot_size <- reactive({
+      req(module_active())
       info <- plot_info()
       if (is.null(info$layout)) {
         list(w = plot_width(), h = plot_height())
@@ -2200,6 +2358,7 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info) {
     output$download_plot <- downloadHandler(
       filename = function() paste0("numeric_boxplots_", Sys.Date(), ".png"),
       content  = function(file) {
+        req(module_active())
         info <- plot_info()
         req(info$plot)
         s <- plot_size()
@@ -2215,12 +2374,22 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info) {
         )
       }
     )
-    
-    return(list(
-      plot   = reactive({ plot_info()$plot }),
-      width  = reactive(plot_size()$w),
-      height = reactive(plot_size()$h)
-    ))
+
+    output$plot <- renderPlot({
+      req(module_active())
+      info <- plot_info()
+      validate(need(!is.null(info$plot), "No plot available."))
+      print(info$plot)
+    },
+    width = function() {
+      req(module_active())
+      plot_size()$w
+    },
+    height = function() {
+      req(module_active())
+      plot_size()$h
+    },
+    res = 96)
   })
 }
 # ===============================================================
@@ -2246,13 +2415,30 @@ visualize_numeric_histograms_ui <- function(id) {
 }
 
 
-visualize_numeric_histograms_server <- function(id, filtered_data, summary_info) {
+visualize_numeric_histograms_plot_ui <- function(id) {
+  ns <- NS(id)
+  div(
+    class = "ta-plot-container",
+    plotOutput(ns("plot"), width = "100%", height = "auto")
+  )
+}
+
+
+visualize_numeric_histograms_server <- function(id, filtered_data, summary_info, is_active = NULL) {
   moduleServer(id, function(input, output, session) {
 
     resolve_input_value <- function(x) {
       if (is.null(x)) return(NULL)
       if (is.reactive(x)) x() else x
     }
+
+    module_active <- reactive({
+      if (is.null(is_active)) {
+        TRUE
+      } else {
+        isTRUE(is_active())
+      }
+    })
 
     plot_width <- reactive({
       w <- input$plot_width
@@ -2265,6 +2451,8 @@ visualize_numeric_histograms_server <- function(id, filtered_data, summary_info)
     })
 
     plot_info <- reactive({
+      req(module_active())
+
       info <- summary_info()
 
       validate(need(!is.null(info), "Summary not available."))
@@ -2335,6 +2523,7 @@ visualize_numeric_histograms_server <- function(id, filtered_data, summary_info)
     })
 
     plot_size <- reactive({
+      req(module_active())
       info <- plot_info()
       if (is.null(info$layout)) {
         list(w = plot_width(), h = plot_height())
@@ -2349,6 +2538,7 @@ visualize_numeric_histograms_server <- function(id, filtered_data, summary_info)
     output$download_plot <- downloadHandler(
       filename = function() paste0("numeric_histograms_", Sys.Date(), ".png"),
       content  = function(file) {
+        req(module_active())
         info <- plot_info()
         req(info$plot)
         s <- plot_size()
@@ -2365,11 +2555,21 @@ visualize_numeric_histograms_server <- function(id, filtered_data, summary_info)
       }
     )
 
-    return(list(
-      plot   = reactive({ plot_info()$plot }),
-      width  = reactive(plot_size()$w),
-      height = reactive(plot_size()$h)
-    ))
+    output$plot <- renderPlot({
+      req(module_active())
+      info <- plot_info()
+      validate(need(!is.null(info$plot), "No plot available."))
+      print(info$plot)
+    },
+    width = function() {
+      req(module_active())
+      plot_size()$w
+    },
+    height = function() {
+      req(module_active())
+      plot_size()$h
+    },
+    res = 96)
   })
 }
 # ===============================================================
@@ -2611,26 +2811,41 @@ add_color_customization_server <- function(ns, input, output, data, color_var_re
   output$color_custom_ui <- renderUI({
     req(data())
     color_var <- color_var_reactive()
-    
+
+    single_color_ui <- tagList(
+      br(),
+      h5("Line color"),
+      color_dropdown_input(ns, "single_color", basic_color_palette, ncol = 4)
+    )
+
     if (isTRUE(multi_group)) {
-      if (is.null(color_var)) return(NULL)
-      render_color_inputs(ns, data, color_var)
+      if (is.null(color_var) || identical(color_var, "") || identical(color_var, "None")) {
+        single_color_ui
+      } else {
+        render_color_inputs(ns, data, color_var)
+      }
     } else {
-      tagList(
-        br(),
-        h5("Line color"),
-        color_dropdown_input(ns, "single_color", basic_color_palette, ncol = 4)
-      )
+      single_color_ui
     }
   })
-  
+
   reactive({
     if (isTRUE(multi_group)) {
-      req(data())
       color_var <- color_var_reactive()
-      req(color_var)
-      
-      lvls <- levels(as.factor(data()[[color_var]]))
+      if (is.null(color_var) || identical(color_var, "") || identical(color_var, "None")) {
+        selected_color <- input$single_color
+        if (is.null(selected_color) || identical(selected_color, "")) selected_color <- "steelblue"
+        return(selected_color)
+      }
+
+      dataset <- data()
+      if (is.null(dataset) || !color_var %in% names(dataset)) {
+        selected_color <- input$single_color
+        if (is.null(selected_color) || identical(selected_color, "")) selected_color <- "steelblue"
+        return(selected_color)
+      }
+
+      lvls <- levels(as.factor(dataset[[color_var]]))
       base_palette <- rep(basic_color_palette, length.out = length(lvls))
       cols <- vapply(seq_along(lvls), function(i) {
         input_val <- input[[paste0("col_", color_var, "_", i)]]
@@ -3353,7 +3568,8 @@ build_descriptive_categorical_plot <- function(df,
                                                strata_levels = NULL,
                                                show_proportions = FALSE,
                                                nrow_input = NULL,
-                                               ncol_input = NULL) {
+                                               ncol_input = NULL,
+                                               fill_colors = NULL) {
   if (is.null(df) || !is.data.frame(df) || nrow(df) == 0) return(NULL)
   
   factor_vars <- names(df)[vapply(df, function(x) {
@@ -3420,7 +3636,8 @@ build_descriptive_categorical_plot <- function(df,
       count_df[[var]] <- factor(as.character(count_df[[var]]), levels = level_order)
       group_levels <- levels(droplevels(var_data[[group_col]]))
       count_df[[group_col]] <- factor(as.character(count_df[[group_col]]), levels = group_levels)
-      palette <- resolve_palette_for_levels(group_levels)
+      
+      palette <- resolve_palette_for_levels(group_levels, custom = fill_colors)
 
       p <- ggplot(count_df, aes(x = .data[[var]], y = .data$value, fill = .data[[group_col]])) +
         geom_col(position = position_dodge(width = 0.75), width = 0.65) +
@@ -3447,11 +3664,18 @@ build_descriptive_categorical_plot <- function(df,
       
       count_df[[var]] <- factor(as.character(count_df[[var]]), levels = level_order)
       
+      single_fill <- if (!is.null(fill_colors) && length(fill_colors) > 0) {
+        fill_colors[1]
+      } else {
+        resolve_single_color()
+      }
+      
       p <- ggplot(count_df, aes(x = .data[[var]], y = .data$value)) +
-        geom_col(fill = resolve_single_color(), width = 0.65) +
+        geom_col(fill = single_fill, width = 0.65) +
         theme_minimal(base_size = 13) +
         labs(title = var, x = NULL, y = y_label) +
         theme(axis.text.x = element_text(angle = 45, hjust = 1))
+      
       
       if (isTRUE(show_proportions)) {
         p <- p + scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0, 1))
@@ -4251,7 +4475,7 @@ ggpairs_server <- function(id, data_reactive) {
   })
 }
 # ===============================================================
-# 🧪 Visualization Module — Pairwise Correlation (GGpairs)
+# 🧪 Visualization Module — Pairwise Correlation (Dispatcher)
 # ===============================================================
 
 visualize_ggpairs_ui <- function(id) {
@@ -4265,43 +4489,15 @@ visualize_ggpairs_ui <- function(id) {
       selectInput(
         ns("plot_type"),
         label = "Select visualization type:",
-        choices = c("Pairwise correlation matrix" = "ggpairs"),  # ✅ single option for now
-        selected = "ggpairs"
+        choices = c("GGPairs" = "GGPairs"),
+        selected = "GGPairs"
       ),
       hr(),
-      uiOutput(ns("strata_selector")),
-      hr(),
-      fluidRow(
-        column(
-          width = 6,
-          numericInput(
-            ns("plot_width"),
-            label = "Plot width (px)",
-            value = 800,
-            min = 400,
-            max = 2000,
-            step = 100
-          )
-        ),
-        column(
-          width = 6,
-          numericInput(
-            ns("plot_height"),
-            label = "Plot height (px)",
-            value = 600,
-            min = 400,
-            max = 2000,
-            step = 100
-          )
-        )
-      ),
-      hr(),
-      downloadButton(ns("download_plot"), "Download plot")
+      uiOutput(ns("sub_controls"))
     ),
     mainPanel(
       width = 8,
-      h4("Plots"),
-      plotOutput(ns("plots"))
+      plotOutput(ns("plot"), height = "auto")
     )
   )
 }
@@ -4310,106 +4506,266 @@ visualize_ggpairs_ui <- function(id) {
 visualize_ggpairs_server <- function(id, filtered_data, model_fit) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
-    
-    # Reactive data and model
-    model_info <- reactive(model_fit())
 
-    stratified_results <- reactive({
-      info <- model_info()
-      if (is.null(info) || info$type != "pairwise_correlation") return(NULL)
-      res_accessor <- info$results
-      if (is.null(res_accessor) || !is.function(res_accessor)) return(NULL)
-      res_accessor()
-    })
-
-    available_strata <- reactive({
-      results <- stratified_results()
-      if (is.null(results) || is.null(results$plots)) return(NULL)
-      plots <- results$plots
-      if (is.null(plots) || length(plots) == 0) return(NULL)
-      nm <- names(plots)
-      if (is.null(nm) || length(nm) == 0) {
-        nm <- rep("Overall", length(plots))
-        names(plots) <- nm
+    correlation_info <- reactive({
+      info <- model_fit()
+      if (is.null(info) || is.null(info$type) || info$type != "pairwise_correlation") {
+        return(NULL)
       }
-      nm <- nm[nzchar(nm)]
-      if (length(nm) == 0) return(NULL)
-      nm
+      info
     })
 
-    output$strata_selector <- renderUI({
-      choices <- available_strata()
-      if (is.null(choices)) return(NULL)
-      selectInput(
-        ns("selected_stratum"),
-        label = "Select stratum:",
-        choices = choices,
-        selected = choices[[1]]
-      )
+    active <- reactiveVal(NULL)
+
+    output$sub_controls <- renderUI({
+      info <- correlation_info()
+      if (is.null(info)) {
+        helpText("Run the pairwise correlation analysis to configure plots.")
+      } else if (identical(input$plot_type, "GGPairs")) {
+        pairwise_correlation_visualize_ggpairs_ui(ns("ggpairs"))
+      } else {
+        NULL
+      }
     })
 
-    # Determine plot size dynamically
-    plot_size <- reactive({
-      list(w = input$plot_width, h = input$plot_height)
-    })
+    observeEvent(list(input$plot_type, correlation_info()), {
+      info <- correlation_info()
+      type <- input$plot_type
 
-    # --- Main Plot Rendering ---
-    output$plots <- renderPlot({
-      info <- model_info()
-      if (is.null(info) || info$type != "pairwise_correlation") return(NULL)
-      results <- stratified_results()
-      if (is.null(results) || is.null(results$plots) || length(results$plots) == 0) {
-        validate(need(FALSE, "No correlation results available."))
+      if (is.null(info) || is.null(type)) {
+        active(NULL)
+        return()
       }
 
-      # use visualization type (only one for now)
-      if (input$plot_type == "ggpairs") {
-        stratum <- input$selected_stratum
-        plots <- results$plots
-        if (is.null(stratum) || !stratum %in% names(plots)) {
-          stratum <- names(plots)[[1]]
-        }
-        plot_obj <- plots[[stratum]]
-        validate(need(!is.null(plot_obj), "Selected stratum has no data to plot."))
-        print(plot_obj)
-      }
+      handle <- switch(type,
+                       "GGPairs" = pairwise_correlation_visualize_ggpairs_server("ggpairs", filtered_data, correlation_info),
+                       NULL)
+      active(handle)
+    }, ignoreNULL = FALSE)
+
+    output$plot <- renderPlot({
+      h <- active()
+      req(h)
+      plot_obj <- h$plot()
+      validate(need(!is.null(plot_obj), "No plot available."))
+      print(plot_obj)
     },
-    width  = function() plot_size()$w,
-    height = function() plot_size()$h,
-    res    = 96)
+    width = function() {
+      h <- active()
+      if (is.null(h)) 800 else h$width()
+    },
+    height = function() {
+      h <- active()
+      if (is.null(h)) 600 else h$height()
+    },
+    res = 96)
+  })
+}
+# ===============================================================
+# 🧪 Pairwise Correlation — GGPairs Visualization Module
+# ===============================================================
 
-    # --- Download handler ---
-    output$download_plot <- downloadHandler(
-      filename = function() paste0("ggpairs_plot_", Sys.Date(), ".png"),
-      content = function(file) {
-        info <- model_info()
-        req(info)
-        validate(need(info$type == "pairwise_correlation", "Pairwise correlation results are not available."))
-        results <- stratified_results()
-        req(results)
-        plots <- results$plots
-        req(plots)
-        stratum <- input$selected_stratum
-        if (is.null(stratum) || !stratum %in% names(plots)) {
-          stratum <- names(plots)[[1]]
+pairwise_correlation_visualize_ggpairs_ui <- function(id) {
+  ns <- NS(id)
+  tagList(
+    fluidRow(
+      column(6, numericInput(ns("plot_width"),  "Subplot width (px)",  800, 200, 2000, 50)),
+      column(6, numericInput(ns("plot_height"), "Subplot height (px)", 600, 200, 2000, 50))
+    ),
+    fluidRow(
+      column(6, numericInput(ns("grid_rows"),    "Grid rows",    1, 1, 10, 1)),
+      column(6, numericInput(ns("grid_cols"),    "Grid columns", 1, 1, 10, 1))
+    ),
+    hr(),
+    downloadButton(ns("download_plot"), "Download Plot")
+  )
+}
+
+
+pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, correlation_info) {
+  moduleServer(id, function(input, output, session) {
+
+    resolve_input_value <- function(x) {
+      if (is.null(x)) return(NULL)
+      if (is.reactive(x)) x() else x
+    }
+
+    sanitize_numeric <- function(value, default, min_val, max_val) {
+      v <- suppressWarnings(as.numeric(value))
+      if (length(v) == 0 || is.na(v)) return(default)
+      v <- max(min_val, min(max_val, v))
+      v
+    }
+
+    plot_width <- reactive({
+      sanitize_numeric(input$plot_width, 800, 200, 2000)
+    })
+
+    plot_height <- reactive({
+      sanitize_numeric(input$plot_height, 600, 200, 2000)
+    })
+
+    grid_rows <- reactive({
+      as.integer(sanitize_numeric(input$grid_rows, 1, 1, 10))
+    })
+
+    grid_cols <- reactive({
+      as.integer(sanitize_numeric(input$grid_cols, 1, 1, 10))
+    })
+
+    build_ggpairs_plot <- function(data, color_value, title = NULL) {
+      validate(need(is.data.frame(data) && nrow(data) > 0, "No data available for plotting."))
+
+      numeric_cols <- data[, vapply(data, is.numeric, logical(1)), drop = FALSE]
+      numeric_cols <- numeric_cols[, colSums(!is.na(numeric_cols)) > 0, drop = FALSE]
+
+      validate(need(ncol(numeric_cols) >= 2, "Need at least two numeric columns for GGPairs plot."))
+
+      plot_obj <- GGally::ggpairs(
+        numeric_cols,
+        progress = FALSE,
+        upper = list(
+          continuous = GGally::wrap("cor", size = 4, colour = color_value)
+        ),
+        lower = list(
+          continuous = GGally::wrap("points", alpha = 0.6, colour = color_value, size = 1.5)
+        ),
+        diag = list(
+          continuous = GGally::wrap("densityDiag", fill = color_value, alpha = 0.4)
+        )
+      ) +
+        ggplot2::theme_minimal(base_size = 11) +
+        ggplot2::theme(
+          strip.text = ggplot2::element_text(face = "bold", size = 9),
+          panel.grid.minor = ggplot2::element_blank(),
+          panel.grid.major = ggplot2::element_blank()
+        )
+
+      if (!is.null(title)) {
+        plot_obj <- plot_obj + ggplot2::labs(title = title)
+      }
+
+      plot_obj
+    }
+
+    plot_info <- reactive({
+      info <- correlation_info()
+      validate(need(!is.null(info), "Correlation results are not available."))
+
+      results_accessor <- info$results
+      results <- resolve_input_value(results_accessor)
+
+      validate(need(!is.null(results), "Run the correlation analysis to generate plots."))
+
+      if (!is.null(results$message)) {
+        validate(need(FALSE, results$message))
+      }
+
+      data <- filtered_data()
+      validate(need(!is.null(data) && nrow(data) > 0, "No data available."))
+
+      selected_vars <- resolve_input_value(results$selected_vars)
+      if (is.null(selected_vars) || length(selected_vars) < 2) {
+        numeric_vars <- names(data)[vapply(data, is.numeric, logical(1))]
+        selected_vars <- numeric_vars
+      }
+
+      validate(need(length(selected_vars) >= 2, "Need at least two numeric columns for GGPairs plot."))
+
+      group_var <- resolve_input_value(info$group_var)
+      if (is.null(group_var) || identical(group_var, "None") || identical(group_var, "")) {
+        group_var <- NULL
+      }
+
+      strata_order <- resolve_input_value(info$strata_order)
+
+      if (is.null(group_var)) {
+        plot_data <- data[, selected_vars, drop = FALSE]
+        plot_obj <- build_ggpairs_plot(plot_data, basic_color_palette[1])
+        layout <- list(nrow = 1L, ncol = 1L)
+        list(plot = plot_obj, layout = layout)
+      } else {
+        available_levels <- NULL
+        if (!is.null(results$matrices)) {
+          available_levels <- names(results$matrices)
         }
-        g <- plots[[stratum]]
-        validate(need(!is.null(g), "Selected stratum has no data to plot."))
+        if (is.null(available_levels) || length(available_levels) == 0) {
+          available_levels <- unique(as.character(data[[group_var]]))
+        }
+        if (!is.null(strata_order) && length(strata_order) > 0) {
+          available_levels <- strata_order[strata_order %in% available_levels]
+        }
+        available_levels <- available_levels[nzchar(available_levels)]
+        validate(need(length(available_levels) > 0, "No strata available for plotting."))
 
-        width_in  <- input$plot_width / 96
-        height_in <- input$plot_height / 96
+        colors <- basic_color_palette[seq_len(min(length(basic_color_palette), length(available_levels)))]
+        if (length(colors) < length(available_levels)) {
+          extra <- rep("#7F7F7F", length(available_levels) - length(colors))
+          colors <- c(colors, extra)
+        }
+        names(colors) <- available_levels
 
-        ggsave(
+        plots <- list()
+        for (level in available_levels) {
+          subset_rows <- !is.na(data[[group_var]]) & as.character(data[[group_var]]) == level
+          subset_data <- data[subset_rows, selected_vars, drop = FALSE]
+          if (nrow(subset_data) == 0) {
+            next
+          }
+          plots[[level]] <- build_ggpairs_plot(subset_data, colors[[level]], title = level)
+        }
+
+        validate(need(length(plots) > 0, "No data available for the selected strata."))
+
+        combined <- patchwork::wrap_plots(plotlist = plots, nrow = grid_rows(), ncol = grid_cols())
+        layout <- list(nrow = grid_rows(), ncol = grid_cols())
+        list(plot = combined, layout = layout)
+      }
+    })
+
+    plot_width_total <- reactive({
+      info <- plot_info()
+      layout <- info$layout
+      w <- plot_width()
+      if (!is.null(layout$ncol)) {
+        w <- w * max(1L, as.integer(layout$ncol))
+      }
+      w
+    })
+
+    plot_height_total <- reactive({
+      info <- plot_info()
+      layout <- info$layout
+      h <- plot_height()
+      if (!is.null(layout$nrow)) {
+        h <- h * max(1L, as.integer(layout$nrow))
+      }
+      h
+    })
+
+    output$download_plot <- downloadHandler(
+      filename = function() paste0("pairwise_correlation_ggpairs_", Sys.Date(), ".png"),
+      content = function(file) {
+        info <- plot_info()
+        plot_obj <- info$plot
+        req(plot_obj)
+        ggplot2::ggsave(
           filename = file,
-          plot = g,
+          plot = plot_obj,
           device = "png",
           dpi = 300,
-          width = width_in,
-          height = height_in,
+          width = plot_width_total() / 96,
+          height = plot_height_total() / 96,
           units = "in",
           limitsize = FALSE
         )
       }
+    )
+
+    list(
+      plot = reactive({ plot_info()$plot }),
+      width = reactive(plot_width_total()),
+      height = reactive(plot_height_total())
     )
   })
 }
