@@ -42,20 +42,36 @@ visualize_categorical_barplots_ui <- function(id) {
   )
 }
 
-visualize_categorical_barplots_server <- function(id, filtered_data, summary_info) {
+visualize_categorical_barplots_plot_ui <- function(id) {
+  ns <- NS(id)
+  div(
+    class = "ta-plot-container",
+    plotOutput(ns("plot"), width = "100%", height = "auto")
+  )
+}
+
+visualize_categorical_barplots_server <- function(id, filtered_data, summary_info, is_active = NULL) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
-    
+
     resolve_input_value <- function(x) {
       if (is.null(x)) return(NULL)
       if (is.reactive(x)) x() else x
     }
-    
+
+    module_active <- reactive({
+      if (is.null(is_active)) {
+        TRUE
+      } else {
+        isTRUE(is_active())
+      }
+    })
+
     plot_width <- reactive({
       w <- input$plot_width
       if (is.null(w) || !is.numeric(w) || is.na(w)) 400 else w
     })
-    
+
     plot_height <- reactive({
       h <- input$plot_height
       if (is.null(h) || !is.numeric(h) || is.na(h)) 300 else h
@@ -88,6 +104,8 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
     )
 
     plot_info <- reactive({
+      req(module_active())
+
       info <- summary_info()
 
       validate(need(!is.null(info), "Summary not available."))
@@ -114,8 +132,10 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
       validate(need(!is.null(out), "No categorical variables available for plotting."))
       out
     })
-    
+
     plot_size <- reactive({
+      req(module_active())
+
       info <- plot_info()
       if (is.null(info$layout)) {
         list(w = plot_width(), h = plot_height())
@@ -130,6 +150,7 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
     output$download_plot <- downloadHandler(
       filename = function() paste0("categorical_barplots_", Sys.Date(), ".png"),
       content  = function(file) {
+        req(module_active())
         info <- plot_info()
         req(info$plot)
         s <- plot_size()
@@ -145,11 +166,21 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
         )
       }
     )
-    
-    return(list(
-      plot   = reactive({ plot_info()$plot }),
-      width  = reactive(plot_size()$w),
-      height = reactive(plot_size()$h)
-    ))
+
+    output$plot <- renderPlot({
+      req(module_active())
+      info <- plot_info()
+      validate(need(!is.null(info$plot), "No plot available."))
+      print(info$plot)
+    },
+    width = function() {
+      req(module_active())
+      plot_size()$w
+    },
+    height = function() {
+      req(module_active())
+      plot_size()$h
+    },
+    res = 96)
   })
 }
