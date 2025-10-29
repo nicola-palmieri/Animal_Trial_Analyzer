@@ -34,6 +34,26 @@ visualize_missing_ui <- function(id) {
   metric_panel_ui(id, default_width = 400, default_height = 320, default_rows = 2, default_cols = 3)
 }
 
+metric_plot_ui <- function(id) {
+  ns <- NS(id)
+  div(
+    class = "ta-plot-container",
+    plotOutput(ns("plot"), width = "100%", height = "auto")
+  )
+}
+
+visualize_cv_plot_ui <- function(id) {
+  metric_plot_ui(id)
+}
+
+visualize_outliers_plot_ui <- function(id) {
+  metric_plot_ui(id)
+}
+
+visualize_missing_plot_ui <- function(id) {
+  metric_plot_ui(id)
+}
+
 
 # ---- Shared computation helpers ----
 resolve_metric_input <- function(x) {
@@ -166,7 +186,7 @@ build_metric_plot <- function(metric_info, y_label, title, n_rows, n_cols) {
 
 
 metric_module_server <- function(id, filtered_data, summary_info, metric_key,
-                                 y_label, title, filename_prefix) {
+                                 y_label, title, filename_prefix, is_active = NULL) {
   moduleServer(id, function(input, output, session) {
 
     plot_width <- reactive({
@@ -179,7 +199,17 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
       if (is.null(h) || !is.numeric(h) || is.na(h)) 300 else h
     })
 
+    module_active <- reactive({
+      if (is.null(is_active)) {
+        TRUE
+      } else {
+        isTRUE(is_active())
+      }
+    })
+
     plot_details <- reactive({
+      req(module_active())
+
       info <- summary_info()
       validate(need(!is.null(info), "Summary not available."))
 
@@ -225,6 +255,7 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
     })
 
     plot_size <- reactive({
+      req(module_active())
       details <- plot_details()
       if (is.null(details$layout)) {
         list(w = plot_width(), h = plot_height())
@@ -239,6 +270,7 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
     output$download_plot <- downloadHandler(
       filename = function() paste0(filename_prefix, "_", Sys.Date(), ".png"),
       content = function(file) {
+        req(module_active())
         details <- plot_details()
         req(details$plot)
         size <- plot_size()
@@ -255,16 +287,26 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
       }
     )
 
-    return(list(
-      plot = reactive({ plot_details()$plot }),
-      width = reactive(plot_size()$w),
-      height = reactive(plot_size()$h)
-    ))
+    output$plot <- renderPlot({
+      req(module_active())
+      details <- plot_details()
+      validate(need(!is.null(details$plot), "No plot available."))
+      print(details$plot)
+    },
+    width = function() {
+      req(module_active())
+      plot_size()$w
+    },
+    height = function() {
+      req(module_active())
+      plot_size()$h
+    },
+    res = 96)
   })
 }
 
 
-visualize_cv_server <- function(id, filtered_data, summary_info) {
+visualize_cv_server <- function(id, filtered_data, summary_info, is_active = NULL) {
   metric_module_server(
     id = id,
     filtered_data = filtered_data,
@@ -272,11 +314,12 @@ visualize_cv_server <- function(id, filtered_data, summary_info) {
     metric_key = "cv",
     y_label = "CV (%)",
     title = "Coefficient of Variation (CV%)",
-    filename_prefix = "cv_summary"
+    filename_prefix = "cv_summary",
+    is_active = is_active
   )
 }
 
-visualize_outliers_server <- function(id, filtered_data, summary_info) {
+visualize_outliers_server <- function(id, filtered_data, summary_info, is_active = NULL) {
   metric_module_server(
     id = id,
     filtered_data = filtered_data,
@@ -284,11 +327,12 @@ visualize_outliers_server <- function(id, filtered_data, summary_info) {
     metric_key = "outliers",
     y_label = "Outlier Count",
     title = "Outlier Counts (1.5×IQR Rule)",
-    filename_prefix = "outlier_summary"
+    filename_prefix = "outlier_summary",
+    is_active = is_active
   )
 }
 
-visualize_missing_server <- function(id, filtered_data, summary_info) {
+visualize_missing_server <- function(id, filtered_data, summary_info, is_active = NULL) {
   metric_module_server(
     id = id,
     filtered_data = filtered_data,
@@ -296,6 +340,7 @@ visualize_missing_server <- function(id, filtered_data, summary_info) {
     metric_key = "missing",
     y_label = "Missing (%)",
     title = "Missingness (%)",
-    filename_prefix = "missing_summary"
+    filename_prefix = "missing_summary",
+    is_active = is_active
   )
 }

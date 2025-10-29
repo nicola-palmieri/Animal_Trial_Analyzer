@@ -28,7 +28,7 @@ visualize_descriptive_ui <- function(id) {
     ),
     mainPanel(
       width = 8,
-      plotOutput(ns("plot"), height = "auto")  # parent-owned plotOutput
+      uiOutput(ns("plot_ui"))  # plot output provided by the active submodule
     )
   )
 }
@@ -37,55 +37,87 @@ visualize_descriptive_ui <- function(id) {
 visualize_descriptive_server <- function(id, filtered_data, descriptive_summary) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
-    
-    # holder for the active submodule's returned reactives
-    active <- reactiveVal(NULL)
-    
+
+    active_type <- reactive({
+      type <- input$plot_type
+      if (is.null(type) || !length(type) || !nzchar(type[[1]])) {
+        "categorical"
+      } else {
+        type[[1]]
+      }
+    })
+
     # ==========================================================
     # 🔹 Inject the correct UI for each submodule
     # ==========================================================
     output$sub_controls <- renderUI({
-      switch(input$plot_type,
+      type <- active_type()
+      switch(type,
              "categorical" = visualize_categorical_barplots_ui(ns("categorical")),
              "boxplots"    = visualize_numeric_boxplots_ui(ns("boxplots")),
              "histograms"  = visualize_numeric_histograms_ui(ns("histograms")),
              "cv"          = visualize_cv_ui(ns("cv")),
              "outliers"    = visualize_outliers_ui(ns("outliers")),
-             "missing"     = visualize_missing_ui(ns("missing"))
+             "missing"     = visualize_missing_ui(ns("missing")),
+             div("No controls available for this plot type.")
       )
     })
-    
-    # ==========================================================
-    # 🔹 Dynamically start the right submodule server
-    # ==========================================================
-    observeEvent(input$plot_type, {
-      type <- input$plot_type
-      if (is.null(type) || length(type) == 0) return()
-      
-      handle <- switch(type[[1]],
-                       "categorical" = visualize_categorical_barplots_server("categorical", filtered_data, descriptive_summary),
-                       "boxplots"    = visualize_numeric_boxplots_server("boxplots", filtered_data, descriptive_summary),
-                       "histograms"  = visualize_numeric_histograms_server("histograms", filtered_data, descriptive_summary),
-                       "cv"          = visualize_cv_server("cv", filtered_data, descriptive_summary),
-                       "outliers"    = visualize_outliers_server("outliers", filtered_data, descriptive_summary),
-                       "missing"     = visualize_missing_server("missing", filtered_data, descriptive_summary),
-                       NULL
+
+    output$plot_ui <- renderUI({
+      type <- active_type()
+      switch(type,
+             "categorical" = visualize_categorical_barplots_plot_ui(ns("categorical")),
+             "boxplots"    = visualize_numeric_boxplots_plot_ui(ns("boxplots")),
+             "histograms"  = visualize_numeric_histograms_plot_ui(ns("histograms")),
+             "cv"          = visualize_cv_plot_ui(ns("cv")),
+             "outliers"    = visualize_outliers_plot_ui(ns("outliers")),
+             "missing"     = visualize_missing_plot_ui(ns("missing")),
+             div("Plot not available for this selection.")
       )
-      active(handle)
-    }, ignoreInit = FALSE)
-    
-    # ==========================================================
-    # 🔹 Parent renders whatever the active submodule produces
-    # ==========================================================
-    output$plot <- renderPlot({
-      h <- active()
-      req(h)
-      p <- h$plot()
-      validate(need(!is.null(p), "No plot available."))
-      print(p)
-    },
-    width  = function() { h <- active(); if (is.null(h)) 800 else h$width()  },
-    height = function() { h <- active(); if (is.null(h)) 600 else h$height() },
-    res = 96)
+    })
+
+    categorical_active <- reactive(active_type() == "categorical")
+    boxplots_active    <- reactive(active_type() == "boxplots")
+    histograms_active  <- reactive(active_type() == "histograms")
+    cv_active          <- reactive(active_type() == "cv")
+    outliers_active    <- reactive(active_type() == "outliers")
+    missing_active     <- reactive(active_type() == "missing")
+
+    visualize_categorical_barplots_server(
+      "categorical",
+      filtered_data,
+      descriptive_summary,
+      is_active = categorical_active
+    )
+    visualize_numeric_boxplots_server(
+      "boxplots",
+      filtered_data,
+      descriptive_summary,
+      is_active = boxplots_active
+    )
+    visualize_numeric_histograms_server(
+      "histograms",
+      filtered_data,
+      descriptive_summary,
+      is_active = histograms_active
+    )
+    visualize_cv_server(
+      "cv",
+      filtered_data,
+      descriptive_summary,
+      is_active = cv_active
+    )
+    visualize_outliers_server(
+      "outliers",
+      filtered_data,
+      descriptive_summary,
+      is_active = outliers_active
+    )
+    visualize_missing_server(
+      "missing",
+      filtered_data,
+      descriptive_summary,
+      is_active = missing_active
+    )
   })
 }
