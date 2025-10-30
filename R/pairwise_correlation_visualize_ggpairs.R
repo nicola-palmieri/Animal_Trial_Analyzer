@@ -24,7 +24,7 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
 
     resolve_input_value <- function(x) {
       if (is.null(x)) return(NULL)
-      if (is.reactive(x)) x() else x
+      if (is.reactive(x) || is.function(x)) x() else x
     }
 
     sanitize_numeric <- function(value, default, min_val, max_val) {

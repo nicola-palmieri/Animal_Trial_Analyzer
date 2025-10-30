@@ -56,7 +56,7 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
 
     resolve_input_value <- function(x) {
       if (is.null(x)) return(NULL)
-      if (is.reactive(x)) x() else x
+      if (is.reactive(x) || is.function(x)) x() else x
     }
 
     module_active <- reactive({
@@ -226,6 +226,10 @@ build_descriptive_categorical_plot <- function(df,
     cols_to_use <- c(var, group_col)
     cols_to_use <- cols_to_use[cols_to_use %in% names(df)]
     var_data <- df[, cols_to_use, drop = FALSE]
+
+    if (!is.null(group_col) && !group_col %in% names(var_data)) {
+      group_col <- NULL
+    }
     
     var_data[[var]] <- as.character(var_data[[var]])
     keep <- !is.na(var_data[[var]]) & trimws(var_data[[var]]) != ""

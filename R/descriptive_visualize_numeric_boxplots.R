@@ -55,7 +55,7 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
 
     resolve_input_value <- function(x) {
       if (is.null(x)) return(NULL)
-      if (is.reactive(x)) x() else x
+      if (is.reactive(x) || is.function(x)) x() else x
     }
 
     module_active <- reactive({

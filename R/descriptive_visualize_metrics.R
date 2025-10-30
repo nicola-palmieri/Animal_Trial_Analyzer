@@ -58,7 +58,7 @@ visualize_missing_plot_ui <- function(id) {
 # ---- Shared computation helpers ----
 resolve_metric_input <- function(x) {
   if (is.null(x)) return(NULL)
-  if (is.reactive(x)) x() else x
+  if (is.reactive(x) || is.function(x)) x() else x
 }
 
 safe_numeric_input <- function(value, default = 1L) {
