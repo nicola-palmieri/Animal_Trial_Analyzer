@@ -156,6 +156,35 @@ prepare_metric_data <- function(data, numeric_vars, group_var, strata_levels, me
   tidy
 }
 
+tidy_descriptive_metric <- function(df, prefix) {
+  if (is.null(df) || nrow(df) == 0) return(NULL)
+  metric_cols <- grep(paste0("^", prefix, "_"), names(df), value = TRUE)
+  if (length(metric_cols) == 0) return(NULL)
+  group_cols <- setdiff(names(df), metric_cols)
+  has_group <- length(group_cols) > 0
+  group_label <- if (has_group) paste(group_cols, collapse = " / ") else NULL
+  if (!has_group) {
+    df <- df |> dplyr::mutate(.group = "Overall")
+    group_cols <- ".group"
+  }
+  tidy <- df |>
+    tidyr::unite(".group", dplyr::all_of(group_cols), sep = " / ", remove = FALSE) |>
+    tidyr::pivot_longer(
+      cols = dplyr::all_of(metric_cols),
+      names_to = "variable",
+      values_to = "value"
+    ) |>
+    dplyr::mutate(
+      variable = gsub(paste0("^", prefix, "_"), "", .data$variable),
+      value = ifelse(is.finite(.data$value), .data$value, NA_real_),
+      .group = factor(.data$.group, levels = unique(.data$.group))
+    ) |>
+    tidyr::drop_na("value")
+  if (nrow(tidy) == 0) return(NULL)
+  list(data = tidy, has_group = has_group, group_label = group_label)
+}
+
+
 
 build_metric_plot <- function(metric_info, y_label, title, n_rows, n_cols) {
   df <- metric_info$data

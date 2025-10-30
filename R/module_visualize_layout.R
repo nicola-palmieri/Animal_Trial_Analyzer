@@ -71,3 +71,58 @@ observe_layout_synchronization <- function(plot_info_reactive, layout_state, ses
   })
   invisible(NULL)
 }
+
+resolve_grid_layout <- function(n_items, rows_input = NULL, cols_input = NULL) {
+  n_items <- suppressWarnings(as.integer(n_items[1]))
+  if (is.na(n_items) || n_items <= 0) {
+    n_items <- 1L
+  }
+  
+  rows_raw <- resolve_grid_value(rows_input)
+  cols_raw <- resolve_grid_value(cols_input)
+  
+  rows <- rows_raw
+  cols <- cols_raw
+  
+  if (is.na(rows) && is.na(cols)) {
+    rows <- ceiling(sqrt(n_items))
+    cols <- ceiling(n_items / rows)
+  } else if (is.na(rows)) {
+    cols <- cols_raw
+    if (is.na(cols) || cols <= 0) {
+      rows <- ceiling(sqrt(n_items))
+      cols <- ceiling(n_items / rows)
+    } else {
+      rows <- ceiling(n_items / cols)
+    }
+  } else if (is.na(cols)) {
+    rows <- rows_raw
+    if (is.na(rows) || rows <= 0) {
+      rows <- ceiling(sqrt(n_items))
+      cols <- ceiling(n_items / rows)
+    } else {
+      cols <- ceiling(n_items / rows)
+    }
+  }
+  
+  if ((is.na(rows_raw) || is.na(cols_raw)) && !is.na(rows) && !is.na(cols)) {
+    while (rows * cols < n_items) {
+      if (cols <= rows) {
+        cols <- cols + 1L
+      } else {
+        rows <- rows + 1L
+      }
+    }
+  }
+  
+  list(nrow = rows, ncol = cols)
+}
+
+resolve_grid_value <- function(value) {
+  if (is.null(value) || length(value) == 0) return(NA_integer_)
+  val <- suppressWarnings(as.integer(value[1]))
+  if (is.na(val) || val < 1) return(NA_integer_)
+  val
+}
+
+

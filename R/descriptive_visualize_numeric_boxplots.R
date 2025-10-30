@@ -154,3 +154,81 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
     res = 96)
   })
 }
+
+
+build_descriptive_numeric_boxplot <- function(df,
+                                              selected_vars = NULL,
+                                              group_var = NULL,
+                                              show_points = TRUE,
+                                              nrow_input = NULL,
+                                              ncol_input = NULL) {
+  if (is.null(df) || !is.data.frame(df) || nrow(df) == 0) return(NULL)
+  
+  num_vars <- names(df)[vapply(df, is.numeric, logical(1))]
+  if (!is.null(selected_vars) && length(selected_vars) > 0) {
+    num_vars <- intersect(num_vars, selected_vars)
+  }
+  if (length(num_vars) == 0) return(NULL)
+  
+  # ensure discrete x if grouped
+  if (!is.null(group_var) && group_var %in% names(df)) {
+    df[[group_var]] <- as.factor(df[[group_var]])
+  } else {
+    group_var <- NULL
+  }
+  
+  plots <- lapply(num_vars, function(var) {
+    # skip all-NA vars early
+    vec <- df[[var]]
+    if (all(is.na(vec))) return(NULL)
+    
+    if (!is.null(group_var)) {
+      group_levels <- levels(df[[group_var]])
+      palette <- resolve_palette_for_levels(group_levels)
+      p <- ggplot(df, aes(x = .data[[group_var]], y = .data[[var]], fill = .data[[group_var]])) +
+        geom_boxplot(outlier.shape = NA, width = 0.6) +
+        scale_fill_manual(values = palette) +
+        theme_minimal(base_size = 13) +
+        labs(title = var, x = NULL, y = var) +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1))
+      if (isTRUE(show_points)) {
+        p <- p +
+          geom_jitter(aes(color = .data[[group_var]]), width = 0.2, alpha = 0.5, size = 1) +
+          scale_color_manual(values = palette, guide = "none")
+      }
+    } else {
+      # ✅ always provide an x aesthetic
+      p <- ggplot(df, aes(x = factor(1), y = .data[[var]])) +
+        geom_boxplot(fill = resolve_single_color(), width = 0.3) +
+        theme_minimal(base_size = 13) +
+        labs(title = var, x = NULL, y = var) +
+        theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+      if (isTRUE(show_points)) {
+        p <- p + geom_jitter(color = resolve_single_color(), width = 0.05, alpha = 0.5, size = 1)
+      }
+    }
+    
+    if (inherits(p, "gg")) p else NULL
+  })
+  
+  # keep only valid ggplots
+  plots <- Filter(Negate(is.null), plots)
+  if (length(plots) == 0) return(NULL)
+  
+  layout <- resolve_grid_layout(
+    n_items = length(plots),
+    rows_input = suppressWarnings(as.numeric(nrow_input)),
+    cols_input = suppressWarnings(as.numeric(ncol_input))
+  )
+  
+  combined <- patchwork::wrap_plots(plots, nrow = layout$nrow, ncol = layout$ncol) +
+    patchwork::plot_annotation(
+      theme = theme(plot.title = element_text(size = 16, face = "bold"))
+    )
+  
+  list(
+    plot = combined,
+    layout = list(nrow = layout$nrow, ncol = layout$ncol),
+    panels = length(plots)
+  )
+}

@@ -184,3 +184,150 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
     res = 96)
   })
 }
+
+
+build_descriptive_categorical_plot <- function(df,
+                                               selected_vars = NULL,
+                                               group_var = NULL,
+                                               strata_levels = NULL,
+                                               show_proportions = FALSE,
+                                               nrow_input = NULL,
+                                               ncol_input = NULL,
+                                               fill_colors = NULL) {
+  if (is.null(df) || !is.data.frame(df) || nrow(df) == 0) return(NULL)
+  
+  factor_vars <- names(df)[vapply(df, function(x) {
+    is.character(x) || is.factor(x) || is.logical(x)
+  }, logical(1))]
+  
+  if (!is.null(selected_vars) && length(selected_vars) > 0) {
+    factor_vars <- intersect(factor_vars, selected_vars)
+  }
+  if (length(factor_vars) == 0) return(NULL)
+  
+  if (!is.null(group_var) && group_var %in% names(df)) {
+    df[[group_var]] <- as.character(df[[group_var]])
+    df[[group_var]][is.na(df[[group_var]]) | trimws(df[[group_var]]) == ""] <- "Missing"
+    
+    if (!is.null(strata_levels) && length(strata_levels) > 0) {
+      keep_levels <- unique(strata_levels)
+      df <- df[df[[group_var]] %in% keep_levels, , drop = FALSE]
+      if (nrow(df) == 0) return(NULL)
+      df[[group_var]] <- factor(df[[group_var]], levels = keep_levels)
+    } else {
+      df[[group_var]] <- factor(df[[group_var]], levels = unique(df[[group_var]]))
+    }
+  } else {
+    group_var <- NULL
+  }
+  
+  plots <- lapply(factor_vars, function(var) {
+    group_col <- if (!is.null(group_var) && !identical(group_var, var)) group_var else NULL
+    cols_to_use <- c(var, group_col)
+    cols_to_use <- cols_to_use[cols_to_use %in% names(df)]
+    var_data <- df[, cols_to_use, drop = FALSE]
+    
+    var_data[[var]] <- as.character(var_data[[var]])
+    keep <- !is.na(var_data[[var]]) & trimws(var_data[[var]]) != ""
+    if (!any(keep)) return(NULL)
+    var_data <- var_data[keep, , drop = FALSE]
+    
+    level_order <- if (is.factor(df[[var]])) {
+      as.character(levels(df[[var]]))
+    } else {
+      unique(var_data[[var]])
+    }
+    var_data[[var]] <- factor(var_data[[var]], levels = level_order)
+    
+    y_label <- if (isTRUE(show_proportions)) "Proportion" else "Count"
+    
+    if (!is.null(group_col)) {
+      var_data[[group_col]] <- droplevels(var_data[[group_col]])
+      count_df <- dplyr::count(var_data, .data[[var]], .data[[group_col]], name = "count")
+      if (nrow(count_df) == 0) return(NULL)
+      
+      if (isTRUE(show_proportions)) {
+        count_df <- count_df |>
+          dplyr::group_by(.data[[group_col]]) |>
+          dplyr::mutate(total = sum(.data$count, na.rm = TRUE)) |>
+          dplyr::mutate(value = ifelse(.data$total > 0, .data$count / .data$total, 0)) |>
+          dplyr::ungroup()
+        count_df$total <- NULL
+      } else {
+        count_df <- dplyr::mutate(count_df, value = .data$count)
+      }
+      
+      count_df[[var]] <- factor(as.character(count_df[[var]]), levels = level_order)
+      group_levels <- levels(droplevels(var_data[[group_col]]))
+      count_df[[group_col]] <- factor(as.character(count_df[[group_col]]), levels = group_levels)
+      
+      palette <- resolve_palette_for_levels(group_levels, custom = fill_colors)
+      
+      p <- ggplot(count_df, aes(x = .data[[var]], y = .data$value, fill = .data[[group_col]])) +
+        geom_col(position = position_dodge(width = 0.75), width = 0.65) +
+        scale_fill_manual(values = palette) +
+        theme_minimal(base_size = 13) +
+        labs(title = var, x = NULL, y = y_label, fill = group_col) +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1))
+      
+      if (isTRUE(show_proportions)) {
+        p <- p + scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0, 1))
+      }
+      
+      p
+    } else {
+      count_df <- dplyr::count(var_data, .data[[var]], name = "count")
+      if (nrow(count_df) == 0) return(NULL)
+      
+      total <- sum(count_df$count, na.rm = TRUE)
+      if (isTRUE(show_proportions) && total > 0) {
+        count_df$value <- count_df$count / total
+      } else {
+        count_df$value <- count_df$count
+      }
+      
+      count_df[[var]] <- factor(as.character(count_df[[var]]), levels = level_order)
+      
+      single_fill <- if (!is.null(fill_colors) && length(fill_colors) > 0) {
+        fill_colors[1]
+      } else {
+        resolve_single_color()
+      }
+      
+      p <- ggplot(count_df, aes(x = .data[[var]], y = .data$value)) +
+        geom_col(fill = single_fill, width = 0.65) +
+        theme_minimal(base_size = 13) +
+        labs(title = var, x = NULL, y = y_label) +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1))
+      
+      
+      if (isTRUE(show_proportions)) {
+        p <- p + scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0, 1))
+      }
+      
+      p
+    }
+  })
+  
+  plots <- Filter(Negate(is.null), plots)
+  if (length(plots) == 0) return(NULL)
+  
+  # ✅ Use the common layout helper to arrange plots using the requested grid
+  layout <- resolve_grid_layout(
+    n_items   = length(plots),
+    rows_input = suppressWarnings(as.numeric(nrow_input)),
+    cols_input = suppressWarnings(as.numeric(ncol_input))
+  )
+  
+  combined <- patchwork::wrap_plots(plots, nrow = layout$nrow, ncol = layout$ncol) +
+    patchwork::plot_annotation(
+      theme = theme(plot.title = element_text(size = 16, face = "bold"))
+    )
+  
+  list(
+    plot = combined,
+    layout = list(nrow = layout$nrow, ncol = layout$ncol),
+    panels = length(plots)
+  )
+}
+
