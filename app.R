@@ -16,6 +16,7 @@ library(shiny)
 library(shinyjqui)
 library(skimr)
 library(tidyr)
+library(zoo)
 
 options(shiny.autoreload = TRUE)
 options(shiny.maxRequestSize = 200 * 1024^2)
