@@ -144,11 +144,16 @@ prepare_stratified_anova <- function(
   fit_fn <- function(fml, data) {
     stats::aov(fml, data = data)
   }
+  safe_fit <- purrr::safely(fit_fn)
   
   if (is.null(strata)) {
     out <- list()
     for (resp in responses) {
-      out[[resp]] <- fit_fn(build_formula(resp), df)
+      fit_result <- safe_fit(build_formula(resp), df)
+      out[[resp]] <- list(
+        model = fit_result$result,
+        error = if (!is.null(fit_result$error)) conditionMessage(fit_result$error) else NULL
+      )
     }
     return(list(
       type = model,
@@ -165,7 +170,11 @@ prepare_stratified_anova <- function(
     sub <- df[df[[stratify_var]] == s, , drop = FALSE]
     sub_models <- list()
     for (resp in responses) {
-      sub_models[[resp]] <- fit_fn(build_formula(resp), sub)
+      fit_result <- safe_fit(build_formula(resp), sub)
+      sub_models[[resp]] <- list(
+        model = fit_result$result,
+        error = if (!is.null(fit_result$error)) conditionMessage(fit_result$error) else NULL
+      )
     }
     out[[s]] <- sub_models
   }
@@ -268,10 +277,21 @@ prepare_anova_outputs <- function(model_obj, factor_names) {
 # ---------------------------------------------------------------
 # Output composition
 # ---------------------------------------------------------------
-print_anova_summary_and_posthoc <- function(model_obj, factors) {
+print_anova_summary_and_posthoc <- function(model_entry, factors) {
+  if (is.null(model_entry) || (is.list(model_entry) && is.null(model_entry$model))) {
+    cat("Model is not available.\n")
+    return(invisible(NULL))
+  }
+
+  if (!is.null(model_entry$error)) {
+    cat("Model fitting failed:\n", model_entry$error, "\n", sep = "")
+    return(invisible(NULL))
+  }
+
+  model_obj <- model_entry$model
   results <- prepare_anova_outputs(model_obj, factors)
   print(results$anova_object)
-  
+
   if (length(results$posthoc_details) == 0) {
     cat("\nNo post-hoc Tukey comparisons were generated.\n")
   } else {
@@ -289,12 +309,12 @@ print_anova_summary_and_posthoc <- function(model_obj, factors) {
 }
 
 bind_single_model_outputs <- function(output, summary_id, download_id,
-                                      model_obj, response_name, factors,
+                                      model_entry, response_name, factors,
                                       stratum_label = NULL) {
   output[[summary_id]] <- renderPrint({
-    print_anova_summary_and_posthoc(model_obj, factors)
+    print_anova_summary_and_posthoc(model_entry, factors)
   })
-  
+
   output[[download_id]] <- downloadHandler(
     filename = function() {
       base <- paste0("anova_results_", sanitize_name(response_name))
@@ -304,8 +324,11 @@ bind_single_model_outputs <- function(output, summary_id, download_id,
       paste0(base, "_", Sys.Date(), ".docx")
     },
     content = function(file) {
-      results <- prepare_anova_outputs(model_obj, factors)
-      write_anova_docx(file, results, model_obj, response_name, stratum_label)
+      if (is.null(model_entry) || !is.null(model_entry$error) || is.null(model_entry$model)) {
+        stop("Model not available for download due to fitting error.")
+      }
+      results <- prepare_anova_outputs(model_entry$model, factors)
+      write_anova_docx(file, results, model_entry$model, response_name, stratum_label)
     }
   )
 }
@@ -390,12 +413,12 @@ bind_anova_outputs <- function(ns, output, models_reactive) {
         local({
           idx <- i
           response_name <- responses[i]
-          model_obj <- model_list[[response_name]]
+          model_entry <- model_list[[response_name]]
           bind_single_model_outputs(
             output,
             summary_id = paste0("summary_", idx),
             download_id = paste0("download_", idx),
-            model_obj = model_obj,
+            model_entry = model_entry,
             response_name = response_name,
             factors = factors
           )
@@ -413,12 +436,12 @@ bind_anova_outputs <- function(ns, output, models_reactive) {
           stratum_idx <- j
           response_name <- responses[i]
           stratum_label <- strata_levels[j]
-          model_obj <- model_list[[stratum_label]][[response_name]]
+          model_entry <- model_list[[stratum_label]][[response_name]]
           bind_single_model_outputs(
             output,
             summary_id = paste0("summary_", idx, "_", stratum_idx),
             download_id = paste0("download_", idx, "_", stratum_idx),
-            model_obj = model_obj,
+            model_entry = model_entry,
             response_name = response_name,
             factors = factors,
             stratum_label = stratum_label
@@ -439,11 +462,15 @@ download_all_anova_results <- function(models_info, file) {
   }
   
   combined_results <- list()
-  
+
   # --- Case 1: no stratification
   if (is.null(models_info$strata)) {
     for (resp in models_info$responses) {
-      model_obj <- models_info$models[[resp]]
+      model_entry <- models_info$models[[resp]]
+      if (is.null(model_entry) || !is.null(model_entry$error) || is.null(model_entry$model)) {
+        next
+      }
+      model_obj <- model_entry$model
       anova_obj <- car::Anova(model_obj, type = 3)
       tbl <- as.data.frame(anova_obj)
       tbl$Response <- resp
@@ -458,7 +485,11 @@ download_all_anova_results <- function(models_info, file) {
     # --- Case 2: stratified
     for (stratum in models_info$strata$levels) {
       for (resp in models_info$responses) {
-        model_obj <- models_info$models[[stratum]][[resp]]
+        model_entry <- models_info$models[[stratum]][[resp]]
+        if (is.null(model_entry) || !is.null(model_entry$error) || is.null(model_entry$model)) {
+          next
+        }
+        model_obj <- model_entry$model
         anova_obj <- car::Anova(model_obj, type = 3)
         tbl <- as.data.frame(anova_obj)
         tbl$Response <- resp
@@ -471,7 +502,11 @@ download_all_anova_results <- function(models_info, file) {
       }
     }
   }
-  
+
+  if (length(combined_results) == 0) {
+    stop("No ANOVA models available to export.")
+  }
+
   write_anova_docx(combined_results, file)
 }
 
