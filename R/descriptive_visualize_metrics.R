@@ -185,32 +185,30 @@ tidy_descriptive_metric <- function(df, prefix) {
 }
 
 
-
 build_metric_plot <- function(metric_info, y_label, title, n_rows, n_cols) {
   df <- metric_info$data
   has_group <- isTRUE(metric_info$has_group)
-
-  n_rows <- safe_numeric_input(n_rows, default = 1L)
-  n_cols <- safe_numeric_input(n_cols, default = 1L)
-
+  
   if (has_group) {
     legend_title <- if (!is.null(metric_info$group_label)) metric_info$group_label else "Group"
     palette <- resolve_palette_for_levels(levels(df$.group))
-    p <- ggplot(df, aes(x = .group, y = value, fill = .group)) +
-      geom_col(position = "dodge", width = 0.65) +
+    p <- ggplot(df, aes(x = variable, y = value, fill = .group)) +
+      geom_col(position = position_dodge(width = 0.7), width = 0.65) +
       scale_fill_manual(values = palette) +
       labs(fill = legend_title)
   } else {
-    p <- ggplot(df, aes(x = .group, y = value)) +
+    p <- ggplot(df, aes(x = variable, y = value)) +
       geom_col(width = 0.65, fill = resolve_single_color()) +
       guides(fill = "none")
   }
-
+  
   p +
-    facet_wrap(~ variable, nrow = n_rows, ncol = n_cols, scales = "free_y") +
     theme_minimal(base_size = 13) +
     labs(x = NULL, y = y_label, title = title) +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      panel.grid.minor = element_blank()
+    )
 }
 
 
