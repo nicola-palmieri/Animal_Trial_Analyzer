@@ -65,6 +65,16 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
         max = 6,
         step = 0.5
       ),
+      checkboxInput(
+        ns("show_loadings"),
+        label = "Show loadings (arrows)",
+        value = FALSE
+      ),
+      numericInput(
+        ns("loading_scale"),
+        label = "Loading arrow scale",
+        value = 1.2, min = 0.1, max = 5, step = 0.1
+      ),
       hr(),
       fluidRow(
         column(
@@ -157,12 +167,14 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
       validate(need(!is.null(input$plot_type) && input$plot_type == "biplot", "Unsupported plot type."))
 
       build_pca_biplot(
-        pca_obj = info$model,
-        data = data,
+        pca_obj   = info$model,
+        data      = data,
         color_var = color_var,
         shape_var = shape_var,
         label_var = label_var,
-        label_size = label_size
+        label_size = label_size,
+        show_loadings = isTRUE(input$show_loadings),
+        loading_scale = ifelse(is.null(input$loading_scale) || is.na(input$loading_scale), 1.2, input$loading_scale)
       )
     })
 
@@ -196,11 +208,16 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
 
 
 build_pca_biplot <- function(pca_obj, data, color_var = NULL, shape_var = NULL,
-                             label_var = NULL, label_size = 2) {
+                             label_var = NULL, label_size = 2,
+                             show_loadings = FALSE, loading_scale = 1.2) {
   stopifnot(!is.null(pca_obj$x))
   
   scores <- as.data.frame(pca_obj$x[, 1:2])
   names(scores)[1:2] <- c("PC1", "PC2")
+  
+  var_exp <- 100 * (pca_obj$sdev^2 / sum(pca_obj$sdev^2))
+  x_lab <- sprintf("PC1 (%.1f%%)", var_exp[1])
+  y_lab <- sprintf("PC2 (%.1f%%)", var_exp[2])
   
   if (!is.null(data) && nrow(data) == nrow(scores)) {
     plot_data <- cbind(scores, data)
@@ -211,7 +228,6 @@ build_pca_biplot <- function(pca_obj, data, color_var = NULL, shape_var = NULL,
   if (!is.null(label_var) && !identical(label_var, "") && !is.null(plot_data[[label_var]])) {
     label_values <- as.character(plot_data[[label_var]])
     label_values[is.na(label_values) | trimws(label_values) == ""] <- NA_character_
-    
     if (any(!is.na(label_values))) {
       plot_data$label_value <- label_values
     } else {
@@ -223,11 +239,7 @@ build_pca_biplot <- function(pca_obj, data, color_var = NULL, shape_var = NULL,
   
   color_levels <- NULL
   if (!is.null(color_var) && !is.null(plot_data[[color_var]])) {
-    color_levels <- if (is.factor(plot_data[[color_var]])) {
-      levels(plot_data[[color_var]])
-    } else {
-      unique(as.character(plot_data[[color_var]]))
-    }
+    color_levels <- if (is.factor(plot_data[[color_var]])) levels(plot_data[[color_var]]) else unique(as.character(plot_data[[color_var]]))
     color_levels <- color_levels[!is.na(color_levels)]
     plot_data[[color_var]] <- factor(as.character(plot_data[[color_var]]), levels = color_levels)
   }
@@ -245,8 +257,8 @@ build_pca_biplot <- function(pca_obj, data, color_var = NULL, shape_var = NULL,
     ) +
     theme_minimal(base_size = 14) +
     labs(
-      x = "PC1",
-      y = "PC2",
+      x = x_lab,
+      y = y_lab,
       color = if (!is.null(color_var)) color_var else NULL,
       shape = if (!is.null(shape_var)) shape_var else NULL
     ) +
@@ -272,6 +284,46 @@ build_pca_biplot <- function(pca_obj, data, color_var = NULL, shape_var = NULL,
       segment.size = 0.2,
       na.rm = TRUE
     )
+  }
+  
+  # ---- Loadings as arrows (optional) ----
+  if (isTRUE(show_loadings) && !is.null(pca_obj$rotation)) {
+    R <- as.data.frame(pca_obj$rotation[, 1:2, drop = FALSE])
+    R$variable <- rownames(pca_obj$rotation)
+    
+    # scale arrows to score space
+    rx <- diff(range(scores$PC1, na.rm = TRUE))
+    ry <- diff(range(scores$PC2, na.rm = TRUE))
+    sx <- ifelse(is.finite(rx) && rx > 0, rx, 1)
+    sy <- ifelse(is.finite(ry) && ry > 0, ry, 1)
+    
+    arrows_df <- transform(
+      R,
+      x = 0, y = 0,
+      xend = PC1 * sx * loading_scale,
+      yend = PC2 * sy * loading_scale
+    )
+    
+    g <- g +
+      geom_segment(
+        data = arrows_df,
+        aes(x = x, y = y, xend = xend, yend = yend),
+        inherit.aes = FALSE,
+        arrow = grid::arrow(length = grid::unit(0.02, "npc")),
+        linewidth = 0.4,
+        color = "grey30"
+      ) +
+      ggrepel::geom_text_repel(
+        data = arrows_df,
+        aes(x = xend, y = yend, label = variable),
+        inherit.aes = FALSE,
+        size = 3,
+        color = "grey20",
+        max.overlaps = Inf,
+        segment.size = 0.2,
+        box.padding = 0.2,
+        point.padding = 0.2
+      )
   }
   
   g
