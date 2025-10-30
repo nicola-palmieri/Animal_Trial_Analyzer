@@ -38,6 +38,9 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
         choices = c("PCA biplot" = "biplot"),
         selected = "biplot"
       ),
+      hr(),
+      uiOutput(ns("layout_controls")),
+      hr(),
       selectInput(
         ns("pca_color"),
         label = "Color points by:",
@@ -81,8 +84,8 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
           width = 6,
           numericInput(
             ns("plot_width"),
-            label = "Subplot width (px)",
-            value = 400,
+            label = "Plot width (px)",
+            value = 600,
             min = 200,
             max = 2000,
             step = 50
@@ -92,8 +95,8 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
           width = 6,
           numericInput(
             ns("plot_height"),
-            label = "Subplot height (px)",
-            value = 300,
+            label = "Plot height (px)",
+            value = 800,
             min = 200,
             max = 2000,
             step = 50
@@ -114,6 +117,7 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
 visualize_pca_server <- function(id, filtered_data, model_fit) {
   moduleServer(id, function(input, output, session) {
     layout_state <- initialize_layout_state(input, session)
+    display_mode <- reactiveVal(NULL)
     # -- Reactives ------------------------------------------------------------
     model_info <- reactive({
       info <- model_fit()
@@ -210,10 +214,67 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
       )
     })
 
-    build_message_panel <- function(title, message) {
-      ggplot() +
+    observeEvent(model_fit(), {
+      info <- model_fit()
+      if (is.null(info) || !identical(info$type, "pca")) {
+        prefix <- "Plot"
+        updateNumericInput(
+          session,
+          "plot_width",
+          label = sprintf("%s width (px)", prefix),
+          value = 600
+        )
+        updateNumericInput(
+          session,
+          "plot_height",
+          label = sprintf("%s height (px)", prefix),
+          value = 800
+        )
+        display_mode(NULL)
+        return()
+      }
+
+      entries <- info$model
+      if (is.null(entries)) {
+        entries <- list()
+      }
+
+      is_stratified <- !is.null(info$group_var) && length(entries) > 1
+      mode_label <- if (is_stratified) "stratified" else "overall"
+      prefix <- if (is_stratified) "Subplot" else "Plot"
+
+      if (!identical(mode_label, display_mode())) {
+        display_mode(mode_label)
+
+        updateNumericInput(
+          session,
+          "plot_width",
+          label = sprintf("%s width (px)", prefix),
+          value = if (is_stratified) 400 else 600
+        )
+        updateNumericInput(
+          session,
+          "plot_height",
+          label = sprintf("%s height (px)", prefix),
+          value = if (is_stratified) 300 else 800
+        )
+      } else {
+        updateNumericInput(
+          session,
+          "plot_width",
+          label = sprintf("%s width (px)", prefix)
+        )
+        updateNumericInput(
+          session,
+          "plot_height",
+          label = sprintf("%s height (px)", prefix)
+        )
+      }
+    }, ignoreNULL = FALSE)
+
+    build_message_panel <- function(title, message, show_title = TRUE) {
+      base_plot <- ggplot() +
         theme_void() +
-        labs(title = title) +
         annotate(
           "text",
           x = 0.5,
@@ -223,8 +284,16 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
           hjust = 0.5,
           vjust = 0.5
         ) +
-        coord_cartesian(xlim = c(0, 1), ylim = c(0, 1), clip = "off") +
-        theme(plot.title = element_text(size = 14, face = "bold", hjust = 0.5))
+        coord_cartesian(xlim = c(0, 1), ylim = c(0, 1), clip = "off")
+
+      if (isTRUE(show_title) && !is.null(title) && nzchar(title)) {
+        base_plot +
+          labs(title = title) +
+          theme(plot.title = element_text(size = 14, face = "bold", hjust = 0.5))
+      } else {
+        base_plot +
+          theme(plot.title = element_blank())
+      }
     }
 
     sanitize_suffix <- function(value) {
@@ -242,8 +311,11 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
     plot_info <- reactive({
       req(input$plot_type)
       validate(need(input$plot_type == "biplot", "Unsupported plot type."))
+      info_full <- model_info()
       entries <- pca_entries()
       validate(need(length(entries) > 0, "No PCA results available."))
+
+      is_stratified <- !is.null(info_full$group_var) && length(entries) > 1
 
       choices <- available_choices()
       color_var <- validate_choice(input$pca_color, choices)
@@ -261,23 +333,24 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
 
       for (i in seq_along(entries)) {
         entry <- entries[[i]]
-        title <- strata_names[[i]]
-        if (!nzchar(title)) {
-          title <- paste0("Stratum ", i)
+        key <- strata_names[[i]]
+        if (!nzchar(key)) {
+          key <- paste0("Stratum ", i)
         }
+        title <- if (is_stratified) key else NULL
 
         if (is.null(entry)) {
-          plot_list[[title]] <- build_message_panel(title, "No PCA results available.")
+          plot_list[[key]] <- build_message_panel(title = title, message = "No PCA results available.", show_title = is_stratified)
           next
         }
 
         if (!is.null(entry$message) && nzchar(entry$message)) {
-          plot_list[[title]] <- build_message_panel(title, entry$message)
+          plot_list[[key]] <- build_message_panel(title = title, message = entry$message, show_title = is_stratified)
           next
         }
 
         if (is.null(entry$model) || is.null(entry$model$x) || nrow(entry$model$x) < 2) {
-          plot_list[[title]] <- build_message_panel(title, "PCA scores not available.")
+          plot_list[[key]] <- build_message_panel(title = title, message = "PCA scores not available.", show_title = is_stratified)
           next
         }
 
@@ -295,11 +368,15 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
           label_size = label_size,
           show_loadings = show_loadings,
           loading_scale = loading_scale
-        ) +
-          ggtitle(title) +
-          theme(plot.title = element_text(size = 14, face = "bold"))
+        )
 
-        plot_list[[title]] <- plot_obj
+        if (is_stratified && !is.null(title) && nzchar(title)) {
+          plot_obj <- plot_obj +
+            ggtitle(title) +
+            theme(plot.title = element_text(size = 14, face = "bold"))
+        }
+
+        plot_list[[key]] <- plot_obj
       }
 
       plot_list <- Filter(Negate(is.null), plot_list)
@@ -340,6 +417,42 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
         w = subplot_w * max(1, layout$ncol),
         h = subplot_h * max(1, layout$nrow)
       )
+
+      combined <- patchwork::wrap_plots(
+        plotlist = plot_list,
+        nrow = layout$nrow,
+        ncol = layout$ncol
+      ) +
+        patchwork::plot_layout(guides = "collect")
+
+      list(
+        plot = combined,
+        layout = layout,
+        strata_names = names(plot_list)
+      )
+    })
+
+    observe_layout_synchronization(plot_info, layout_state, session)
+
+    plot_size <- reactive({
+      width <- suppressWarnings(as.numeric(input$plot_width))
+      height <- suppressWarnings(as.numeric(input$plot_height))
+      info <- plot_info()
+      layout <- info$layout
+
+      subplot_w <- ifelse(is.na(width) || width <= 0, 400, width)
+      subplot_h <- ifelse(is.na(height) || height <= 0, 300, height)
+
+      list(
+        w = subplot_w * max(1, layout$ncol),
+        h = subplot_h * max(1, layout$nrow)
+      )
+    })
+
+    plot_obj <- reactive({
+      info <- plot_info()
+      validate(need(!is.null(info$plot), "No PCA plots available."))
+      info$plot
     })
 
     plot_obj <- reactive({

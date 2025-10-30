@@ -9,7 +9,6 @@ pca_ui <- function(id) {
       selectInput(ns("vars"), "Numeric variables:", choices = NULL, multiple = TRUE),
       br(),
       uiOutput(ns("advanced_options")),
-      br(),
       fluidRow(
         column(6, actionButton(ns("run_pca"), "Show PCA summary", width = "100%")),
         column(6, downloadButton(ns("download_all"), "Download all results", style = "width: 100%;"))
