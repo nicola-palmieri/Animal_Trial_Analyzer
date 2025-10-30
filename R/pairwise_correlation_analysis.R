@@ -161,7 +161,7 @@ ggpairs_server <- function(id, data_reactive) {
       for (name in names(matrices)) {
         mat <- matrices[[name]]
         if (multiple) {
-          cat(sprintf("Stratum: %s\n", name))
+          cat(sprintf("=== Stratum: %s ===\n", name))
         }
         if (is.null(mat)) {
           cat("  No data available for this stratum.\n\n")
@@ -171,6 +171,41 @@ ggpairs_server <- function(id, data_reactive) {
         }
       }
     })
+    
+    # ---- Download results ----
+    output$download_model <- downloadHandler(
+      filename = function() paste0("Correlation_results_", Sys.Date(), ".txt"),
+      content = function(file) {
+        res <- correlation_store()
+        if (is.null(res)) return()
+        sink(file)
+        on.exit(sink(), add = TRUE)
+        
+        if (!is.null(res$message)) {
+          cat(res$message, "\n")
+          return()
+        }
+        
+        matrices <- res$matrices
+        if (is.null(matrices) || length(matrices) == 0) {
+          cat("No correlation matrices available.\n")
+          return()
+        }
+        
+        multiple <- length(matrices) > 1
+        for (nm in names(matrices)) {
+          mat <- matrices[[nm]]
+          if (multiple) cat(sprintf("=== Stratum: %s ===\n", nm))
+          if (is.null(mat)) {
+            cat("No data available for this stratum.\n\n")
+          } else {
+            print(round(mat, 3))
+            cat("\n")
+          }
+        }
+
+      }
+    )
 
     # ---- Return structured output for visualization ----
     reactive({
