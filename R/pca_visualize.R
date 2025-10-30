@@ -38,9 +38,6 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
         choices = c("PCA biplot" = "biplot"),
         selected = "biplot"
       ),
-      hr(),
-      uiOutput(ns("layout_controls")),
-      hr(),
       selectInput(
         ns("pca_color"),
         label = "Color points by:",
@@ -69,7 +66,7 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
       ),
       checkboxInput(
         ns("show_loadings"),
-        label = "Show loadings (arrows)",
+        label = "Show loadings",
         value = FALSE
       ),
       numericInput(
@@ -78,6 +75,7 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
         value = 1.2, min = 0.1, max = 5, step = 0.1
       ),
       hr(),
+      uiOutput(ns("layout_controls")),
       fluidRow(
         column(
           width = 6,
