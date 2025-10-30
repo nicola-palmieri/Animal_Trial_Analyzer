@@ -1,5 +1,5 @@
 # ===============================================================
-# 🧪 Animal Trial Analyzer — Two-way ANOVA Module (Refactored)
+# 🧪 Table Analyzer — Two-way ANOVA Module
 # ===============================================================
 
 two_way_anova_ui <- function(id) {

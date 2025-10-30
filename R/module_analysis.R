@@ -1,5 +1,5 @@
 # ===============================================================
-# 🧪 Animal Trial Analyzer — Analysis Coordinator (clean + stable)
+# 🧪 Table Analyzer — Analysis Coordinator
 # ===============================================================
 
 analysis_ui <- function(id) {

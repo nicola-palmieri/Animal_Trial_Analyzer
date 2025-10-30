@@ -1,5 +1,5 @@
 # ===============================================================
-# 🧪 Animal Trial Analyzer — PCA Module (analysis side only)
+# 🧪 Table Analyzer — PCA Module
 # ===============================================================
 
 pca_ui <- function(id) {

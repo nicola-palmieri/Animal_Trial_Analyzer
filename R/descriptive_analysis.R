@@ -1,5 +1,5 @@
 # ===============================================================
-# 🧾 Animal Trial Analyzer — Descriptive Statistics Module (Aligned Layout)
+# 🧾 Table Analyzer — Descriptive Statistics Modules
 # ===============================================================
 
 descriptive_ui <- function(id) {

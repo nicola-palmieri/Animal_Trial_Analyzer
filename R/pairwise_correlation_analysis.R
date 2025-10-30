@@ -1,5 +1,5 @@
 # ===============================================================
-# 🧪 Animal Trial Analyzer — Pairwise Correlation Module
+# 🧪 Table  Analyzer — Pairwise Correlation Module
 # ===============================================================
 
 ggpairs_ui <- function(id) {
