@@ -56,7 +56,7 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
     # ---- Build plot info ----
     plot_info <- reactive({
       info <- model_info()
-      if (is.null(info)) return(NULL)
+      if (is.null(info) || info$type != "oneway_anova") return(NULL)
       data <- df()
       build_anova_plot_info(
         data,
