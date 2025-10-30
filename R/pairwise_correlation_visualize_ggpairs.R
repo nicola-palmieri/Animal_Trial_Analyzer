@@ -85,6 +85,22 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
       plot_obj
     }
 
+    convert_ggmatrix_to_plot <- function(plot_obj) {
+      if (!inherits(plot_obj, "ggmatrix")) {
+        return(plot_obj)
+      }
+
+      gtable <- GGally::ggmatrix_gtable(plot_obj)
+
+      ggplot2::ggplot() +
+        ggplot2::theme_void() +
+        ggplot2::annotation_custom(
+          grob = gtable,
+          xmin = -Inf, xmax = Inf,
+          ymin = -Inf, ymax = Inf
+        )
+    }
+
     plot_info <- reactive({
       info <- correlation_info()
       validate(need(!is.null(info), "Correlation results are not available."))
@@ -149,7 +165,9 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
           if (nrow(subset_data) == 0) {
             next
           }
-          plots[[level]] <- build_ggpairs_plot(subset_data, colors[[level]], title = level)
+          plots[[level]] <- convert_ggmatrix_to_plot(
+            build_ggpairs_plot(subset_data, colors[[level]], title = level)
+          )
         }
 
         validate(need(length(plots) > 0, "No data available for the selected strata."))
