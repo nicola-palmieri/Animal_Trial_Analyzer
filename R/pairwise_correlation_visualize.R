@@ -13,7 +13,7 @@ visualize_ggpairs_ui <- function(id) {
       selectInput(
         ns("plot_type"),
         label = "Select visualization type:",
-        choices = c("GGPairs" = "GGPairs"),
+        choices = c("Pairwise scatterplot matrix" = "GGPairs"),
         selected = "GGPairs"
       ),
       hr(),
