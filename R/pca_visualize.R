@@ -85,7 +85,7 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
           numericInput(
             ns("plot_width"),
             label = "Plot width (px)",
-            value = 600,
+            value = 800,
             min = 200,
             max = 2000,
             step = 50
@@ -96,7 +96,7 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
           numericInput(
             ns("plot_height"),
             label = "Plot height (px)",
-            value = 800,
+            value = 600,
             min = 200,
             max = 2000,
             step = 50
