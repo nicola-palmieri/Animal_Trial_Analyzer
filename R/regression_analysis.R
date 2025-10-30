@@ -21,7 +21,7 @@ regression_ui <- function(id, engine = c("lm", "lmm"), allow_multi_response = FA
       br(),
       fluidRow(
         column(6, actionButton(ns("run"), "Show results", width = "100%")),
-        column(6, downloadButton(ns("download_model"), "Download all results", width = "100%"))
+        column(6, downloadButton(ns("download_model"), "Download all results", style = "width: 100%;"))
       )
     ),
     results = tagList(
@@ -334,7 +334,7 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
             column(6, plotOutput(ns(paste0("qq_", idx))))
           ),
           br(),
-          downloadButton(ns(paste0("download_", idx)), "Download results")
+          downloadButton(ns(paste0("download_", idx)), "Download results", style = "width: 100%;")
         )
       } else {
           stratum_tabs <- lapply(seq_along(strata), function(j) {
@@ -351,7 +351,7 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
                 column(6, plotOutput(ns(paste0("qq_", idx, "_", j))))
               ),
               br(),
-              downloadButton(ns(paste0("download_", idx, "_", j)), "Download results")
+              downloadButton(ns(paste0("download_", idx, "_", j)), "Download results", style = "width: 100%;")
             )
           } else {
             div(

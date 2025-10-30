@@ -17,7 +17,7 @@ metric_panel_ui <- function(id, default_width = 400, default_height = 300,
       column(6, numericInput(ns("n_cols"), "Grid columns", value = default_cols, min = 1, max = 10, step = 1))
     ),
     hr(),
-    downloadButton(ns("download_plot"), "Download plot")
+    downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;")
   )
 }
 

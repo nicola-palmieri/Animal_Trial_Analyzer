@@ -91,7 +91,7 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
         )
       ),
       hr(),
-      downloadButton(ns("download_plot"), "Download plot")
+      downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;")
     ),
     mainPanel(
       width = 8,

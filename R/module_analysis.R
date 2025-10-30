@@ -1,5 +1,5 @@
 # ===============================================================
-# 🧪 Animal Trial Analyzer — Analysis Coordinator (fixed + cleaned)
+# 🧪 Animal Trial Analyzer — Analysis Coordinator (clean + stable)
 # ===============================================================
 
 analysis_ui <- function(id) {
@@ -10,13 +10,16 @@ analysis_ui <- function(id) {
       h4("Step 3 — Analyze results"),
       p("Select the statistical approach that fits your trial design, then inspect the summaries on the right."),
       hr(),
+      
+      # --- CSS: expand dropdown height for better visibility ---
       tags$style(HTML(sprintf("
-        /* Make only this input's dropdown tall enough to show all items */
         #%s + .selectize-control .selectize-dropdown,
         #%s + .selectize-control .selectize-dropdown .selectize-dropdown-content {
-          max-height: none !important;   /* show everything, no internal scroll */
+          max-height: none !important;
         }
       ", ns("analysis_type"), ns("analysis_type")))),
+      
+      # --- Analysis type selector ---
       selectInput(
         ns("analysis_type"),
         "Select analysis type:",
@@ -36,9 +39,11 @@ analysis_ui <- function(id) {
         ),
         selected = ""
       ),
+      
       hr(),
       uiOutput(ns("config_panel"))
     ),
+    
     mainPanel(
       width = 8,
       h4("Analysis results"),
@@ -47,135 +52,77 @@ analysis_ui <- function(id) {
   )
 }
 
+
 analysis_server <- function(id, filtered_data) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     df <- reactive(filtered_data())
     
-    # --- Mapping between analysis type and submodules ---
-    submodules <- list(
-      "Descriptive Statistics" = list(
-        id = "descriptive",
-        ui = descriptive_ui,
-        server = descriptive_server,
-        type = "descriptive"
-      ),
-      "One-way ANOVA" = list(
-        id = "anova_one",
-        ui = one_way_anova_ui,
-        server = one_way_anova_server,
-        type = "oneway_anova"
-      ),
-      "Two-way ANOVA" = list(
-        id = "anova_two",
-        ui = two_way_anova_ui,
-        server = two_way_anova_server,
-        type = "twoway_anova"
-      ),
-      "Linear Model (LM)" = list(
-        id = "lm",
-        ui = lm_ui,
-        server = lm_server,
-        type = "lm"
-      ),
-      "Linear Mixed Model (LMM)" = list(
-        id = "lmm",
-        ui = lmm_ui,
-        server = lmm_server,
-        type = "lmm"
-      ),
-      "Pairwise Correlation" = list(
-        id = "ggpairs",
-        ui = ggpairs_ui,
-        server = ggpairs_server,
-        type = "pairwise_correlation"
-      ),
-      "PCA" = list(
-        id = "pca",
-        ui = pca_ui,
-        server = pca_server,
-        type = "pca"
-      )
+    # --- Submodule mapping ---
+    modules <- list(
+      "Descriptive Statistics" = list(id = "desc", ui = descriptive_ui, server = descriptive_server, type = "desc"),
+      "One-way ANOVA"          = list(id = "anova1", ui = one_way_anova_ui, server = one_way_anova_server, type = "anova1"),
+      "Two-way ANOVA"          = list(id = "anova2", ui = two_way_anova_ui, server = two_way_anova_server, type = "anova2"),
+      "Linear Model (LM)"      = list(id = "lm", ui = lm_ui, server = lm_server, type = "lm"),
+      "Linear Mixed Model (LMM)" = list(id = "lmm", ui = lmm_ui, server = lmm_server, type = "lmm"),
+      "Pairwise Correlation"   = list(id = "pairs", ui = ggpairs_ui, server = ggpairs_server, type = "pairs"),
+      "PCA"                    = list(id = "pca", ui = pca_ui, server = pca_server, type = "pca")
     )
     
-    # --- Render selected submodule UI dynamically ---
-    current_module_ui <- reactive({
+    # --- Get current module definition ---
+    current_mod <- reactive({
       req(input$analysis_type)
-      mod <- submodules[[input$analysis_type]]
-      req(mod)
-      mod$ui(ns(mod$id))
+      modules[[input$analysis_type]]
     })
     
+    # --- Render submodule UI ---
     output$config_panel <- renderUI({
-      ui <- current_module_ui()
+      ui <- current_mod()$ui(ns(current_mod()$id))
       req(ui$config)
       ui$config
     })
     
     output$results_panel <- renderUI({
-      ui <- current_module_ui()
+      ui <- current_mod()$ui(ns(current_mod()$id))
       req(ui$results)
       ui$results
     })
     
-    # --- Dynamically call selected server ---
-    model_fit <- reactiveVal(NULL)
+    # --- Run submodule server and normalize its output ---
+    model_out <- reactiveVal(NULL)
     
     observeEvent(input$analysis_type, {
-      mod <- submodules[[input$analysis_type]]
-      if (is.null(mod)) {
-        model_fit(NULL)
-        return()
-      }
-
-      server_result <- mod$server(mod$id, df)
-
-      if (is.null(server_result) || !is.function(server_result)) {
-        model_fit(reactive(list(type = mod$type, models = NULL)))
-        return()
-      }
-
-      model_fit(reactive({
-        raw <- tryCatch(
-          server_result(),
-          error = function(e) {
-            if (inherits(e, "shiny.silent.stop")) {
-              return(NULL)
-            }
-            stop(e)
-          }
-        )
-        
-        # Case 1: module returned nothing
-        if (is.null(raw)) {
-          return(list(type = mod$type, model = NULL, models = NULL))
-        }
-        
-        # Case 2: module returned a list-like structure (e.g. ANOVA)
-        if (is.list(raw)) {
-          if (is.null(raw$type)) raw$type <- mod$type
-          if (!is.null(raw$model) && is.null(raw$models)) raw$models <- raw$model
-          if (!is.null(raw$models) && is.null(raw$model)) raw$model <- raw$models
-          return(raw)
-        }
-        
-        # Case 3: module returned a bare model object (lm, lmerMod, etc.)
-        list(
-          type   = mod$type,
-          model  = raw,
-          models = raw  # alias for compatibility
-        )
-      }))
+      mod <- current_mod()
+      if (is.null(mod)) return(model_out(NULL))
       
+      result <- tryCatch(
+        mod$server(mod$id, df),
+        error = function(e) NULL
+      )
+      
+      if (is.null(result)) {
+        model_out(reactive({ list(type = mod$type, model = NULL) }))
+        return()
+      }
+      
+      if (is.reactive(result)) {
+        model_out(reactive({
+          val <- result()
+          if (is.list(val)) modifyList(list(type = mod$type), val)
+          else list(type = mod$type, model = val)
+        }))
+      } else if (is.list(result)) {
+        model_out(reactive({ modifyList(list(type = mod$type), result) }))
+      } else {
+        model_out(reactive({ list(type = mod$type, model = result) }))
+      }
     }, ignoreNULL = FALSE)
     
-    # --- Expose final fitted model ---
+    # --- Expose unified model output ---
     reactive({
-      model_reactive <- model_fit()
-      req(model_reactive)
-      model <- model_reactive()
-      req(model)
-      model
+      res <- model_out()
+      req(res)
+      res()
     })
   })
 }

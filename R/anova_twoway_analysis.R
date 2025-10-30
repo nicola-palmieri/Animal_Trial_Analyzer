@@ -13,7 +13,7 @@ two_way_anova_ui <- function(id) {
       br(),
       fluidRow(
         column(6, actionButton(ns("run"), "Show results", width = "100%")),
-        column(6, downloadButton(ns("download_all"), "Download all results"))
+        column(6, downloadButton(ns("download_all"), "Download all results", style = "width: 100%;"))
       )
     ),
     results = tagList(

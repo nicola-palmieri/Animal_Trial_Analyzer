@@ -25,7 +25,7 @@ visualize_twoway_ui <- function(id) {
       hr(),
       add_color_customization_ui(ns, multi_group = TRUE),
       hr(),
-      downloadButton(ns("download_plot"), "Download plot")
+      downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;")
     ),
     mainPanel(
       width = 8,

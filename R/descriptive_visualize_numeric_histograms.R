@@ -16,7 +16,7 @@ visualize_numeric_histograms_ui <- function(id) {
       column(6, numericInput(ns("n_cols"), "Grid columns", value = 3, min = 1, max = 10, step = 1))
     ),
     hr(),
-    downloadButton(ns("download_plot"), "Download plot")
+    downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;")
   )
 }
 

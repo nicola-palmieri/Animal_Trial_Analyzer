@@ -14,7 +14,7 @@ pairwise_correlation_visualize_ggpairs_ui <- function(id) {
       column(6, numericInput(ns("grid_cols"),    "Grid columns", 1, 1, 10, 1))
     ),
     hr(),
-    downloadButton(ns("download_plot"), "Download Plot")
+    downloadButton(ns("download_plot"), "Download Plot", style = "width: 100%;")
   )
 }
 
