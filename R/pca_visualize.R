@@ -69,7 +69,7 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
       ),
       checkboxInput(
         ns("show_loadings"),
-        label = "Show loadings (arrows)",
+        label = "Show loadings",
         value = FALSE
       ),
       numericInput(
@@ -78,6 +78,7 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
         value = 1.2, min = 0.1, max = 5, step = 0.1
       ),
       hr(),
+      uiOutput(ns("layout_controls")),
       fluidRow(
         column(
           width = 6,
@@ -416,6 +417,42 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
         w = subplot_w * max(1, layout$ncol),
         h = subplot_h * max(1, layout$nrow)
       )
+
+      combined <- patchwork::wrap_plots(
+        plotlist = plot_list,
+        nrow = layout$nrow,
+        ncol = layout$ncol
+      ) +
+        patchwork::plot_layout(guides = "collect")
+
+      list(
+        plot = combined,
+        layout = layout,
+        strata_names = names(plot_list)
+      )
+    })
+
+    observe_layout_synchronization(plot_info, layout_state, session)
+
+    plot_size <- reactive({
+      width <- suppressWarnings(as.numeric(input$plot_width))
+      height <- suppressWarnings(as.numeric(input$plot_height))
+      info <- plot_info()
+      layout <- info$layout
+
+      subplot_w <- ifelse(is.na(width) || width <= 0, 400, width)
+      subplot_h <- ifelse(is.na(height) || height <= 0, 300, height)
+
+      list(
+        w = subplot_w * max(1, layout$ncol),
+        h = subplot_h * max(1, layout$nrow)
+      )
+    })
+
+    plot_obj <- reactive({
+      info <- plot_info()
+      validate(need(!is.null(info$plot), "No PCA plots available."))
+      info$plot
     })
 
     plot_obj <- reactive({
