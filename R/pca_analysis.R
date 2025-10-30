@@ -59,20 +59,21 @@ pca_server <- function(id, filtered_data) {
         ))
       }
 
-      model <- tryCatch(
-        prcomp(numeric_subset, center = TRUE, scale. = TRUE),
-        error = function(e) e
-      )
+      safe_prcomp <- purrr::safely(function(mat) {
+        prcomp(mat, center = TRUE, scale. = TRUE)
+      })
 
-      if (inherits(model, "error")) {
+      model <- safe_prcomp(numeric_subset)
+
+      if (!is.null(model$error)) {
         return(list(
           model = NULL,
           data = plot_data,
-          message = conditionMessage(model)
+          message = conditionMessage(model$error)
         ))
       }
 
-      list(model = model, data = plot_data, message = NULL)
+      list(model = model$result, data = plot_data, message = NULL)
     }
 
     # Run PCA
