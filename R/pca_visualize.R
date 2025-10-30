@@ -39,6 +39,8 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
         selected = "biplot"
       ),
       hr(),
+      uiOutput(ns("strata_selector")),
+      hr(),
       selectInput(
         ns("pca_color"),
         label = "Color points by:",
@@ -114,23 +116,76 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
 visualize_pca_server <- function(id, filtered_data, model_fit) {
   moduleServer(id, function(input, output, session) {
     # -- Reactives ------------------------------------------------------------
-    df <- reactive({
-      data <- filtered_data()
-      validate(need(!is.null(data) && is.data.frame(data), "No data available."))
-      data
-    })
-
     model_info <- reactive({
       info <- model_fit()
       validate(need(!is.null(info) && identical(info$type, "pca"), "Run PCA first."))
-      validate(need(!is.null(info$model), "PCA model missing."))
       info
     })
 
-    categorical_vars <- reactive({
-      data <- df()
-      keep <- vapply(data, .is_categorical, logical(1))
-      names(data)[keep]
+    pca_entries <- reactive({
+      info <- model_info()
+      entries <- info$model
+      validate(need(!is.null(entries) && length(entries) > 0, "PCA model missing."))
+      entries
+    })
+
+    resolve_entry <- function(entries, stratum = NULL) {
+      if (is.null(entries) || length(entries) == 0) {
+        return(NULL)
+      }
+
+      if (!is.null(stratum) && stratum %in% names(entries)) {
+        return(entries[[stratum]])
+      }
+
+      valid <- entries[vapply(entries, function(x) !is.null(x) && !is.null(x$model), logical(1))]
+      if (length(valid) > 0) {
+        return(valid[[1]])
+      }
+
+      entries[[1]]
+    }
+
+    resolve_stratum_name <- function(entries, stratum = NULL) {
+      if (is.null(entries) || length(entries) == 0) {
+        return(NULL)
+      }
+
+      available <- names(entries)
+      if (length(available) == 0) {
+        return(NULL)
+      }
+
+      if (!is.null(stratum) && stratum %in% available) {
+        return(stratum)
+      }
+
+      valid <- available[vapply(entries, function(x) !is.null(x) && !is.null(x$model), logical(1))]
+      if (length(valid) > 0) {
+        return(valid[[1]])
+      }
+
+      available[[1]]
+    }
+
+    output$strata_selector <- renderUI({
+      entries <- pca_entries()
+      if (length(entries) <= 1) {
+        return(NULL)
+      }
+
+      choices <- names(entries)
+      if (length(choices) == 0) {
+        return(NULL)
+      }
+
+      default <- resolve_stratum_name(entries, input$active_stratum)
+      selectInput(
+        session$ns("active_stratum"),
+        "Select stratum:",
+        choices = choices,
+        selected = default
+      )
     })
 
     validate_choice <- function(value, pool) {
@@ -153,21 +208,49 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
       )
     })
 
-    build_current_plot <- reactive({
-      info <- model_info()
-      data <- df()
-      categorical <- categorical_vars()
+    observeEvent(list(pca_entries(), input$active_stratum), {
+      entries <- pca_entries()
+      stratum <- resolve_stratum_name(entries, input$active_stratum)
+      entry <- resolve_entry(entries, stratum)
+      data <- if (!is.null(entry)) entry$data else NULL
+      choices <- .pca_aesthetic_choices(data)
 
-      color_var <- validate_choice(input$pca_color, categorical)
-      shape_var <- validate_choice(input$pca_shape, categorical)
-      label_var <- validate_choice(input$pca_label, categorical)
+      select_valid <- function(current) {
+        if (!is.null(current) && current %in% choices) {
+          current
+        } else {
+          "None"
+        }
+      }
+
+      updateSelectInput(session, "pca_color", choices = choices, selected = select_valid(input$pca_color))
+      updateSelectInput(session, "pca_shape", choices = choices, selected = select_valid(input$pca_shape))
+      updateSelectInput(session, "pca_label", choices = choices, selected = select_valid(input$pca_label))
+    }, ignoreNULL = FALSE)
+
+    build_current_plot <- reactive({
+      entries <- pca_entries()
+      stratum <- resolve_stratum_name(entries, input$active_stratum)
+      entry <- resolve_entry(entries, stratum)
+
+      validate(need(!is.null(entry), "No PCA results available."))
+      if (!is.null(entry$message) && nzchar(entry$message)) {
+        validate(need(FALSE, entry$message))
+      }
+
+      data <- entry$data
+      choices <- .pca_aesthetic_choices(data)
+
+      color_var <- validate_choice(input$pca_color, choices)
+      shape_var <- validate_choice(input$pca_shape, choices)
+      label_var <- validate_choice(input$pca_label, choices)
       label_size <- ifelse(is.null(input$pca_label_size) || is.na(input$pca_label_size), 2, input$pca_label_size)
 
-      validate(need(!is.null(info$model$x) && nrow(info$model$x) >= 2, "PCA scores not available."))
+      validate(need(!is.null(entry$model$x) && nrow(entry$model$x) >= 2, "PCA scores not available."))
       validate(need(!is.null(input$plot_type) && input$plot_type == "biplot", "Unsupported plot type."))
 
       build_pca_biplot(
-        pca_obj   = info$model,
+        pca_obj   = entry$model,
         data      = data,
         color_var = color_var,
         shape_var = shape_var,
@@ -186,7 +269,16 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
     res = 96)
 
     output$download_plot <- downloadHandler(
-      filename = function() paste0("pca_biplot_", Sys.Date(), ".png"),
+      filename = function() {
+        entries <- pca_entries()
+        stratum <- resolve_stratum_name(entries, input$active_stratum)
+        suffix <- if (!is.null(stratum) && nzchar(stratum)) {
+          paste0("_", gsub("[^A-Za-z0-9]+", "_", stratum))
+        } else {
+          ""
+        }
+        paste0("pca_biplot", suffix, "_", Sys.Date(), ".png")
+      },
       content = function(file) {
         plot_obj <- build_current_plot()
         size <- plot_size()
