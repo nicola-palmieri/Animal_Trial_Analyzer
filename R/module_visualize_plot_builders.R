@@ -253,7 +253,6 @@ build_descriptive_categorical_plot <- function(df,
   
   combined <- patchwork::wrap_plots(plots, nrow = layout$nrow, ncol = layout$ncol) +
     patchwork::plot_annotation(
-      title = "Categorical Distributions",
       theme = theme(plot.title = element_text(size = 16, face = "bold"))
     )
   
@@ -332,7 +331,6 @@ build_descriptive_numeric_boxplot <- function(df,
   
   combined <- patchwork::wrap_plots(plots, nrow = layout$nrow, ncol = layout$ncol) +
     patchwork::plot_annotation(
-      title = "Numeric Distributions (Boxplots)",
       theme = theme(plot.title = element_text(size = 16, face = "bold"))
     )
   
@@ -437,15 +435,8 @@ build_descriptive_numeric_histogram <- function(df,
     cols_input = suppressWarnings(as.numeric(ncol_input))
   )
 
-  title_text <- if (isTRUE(use_density)) {
-    "Numeric Distributions (Density)"
-  } else {
-    "Numeric Distributions (Histograms)"
-  }
-
   combined <- patchwork::wrap_plots(plots, nrow = layout$nrow, ncol = layout$ncol) +
     patchwork::plot_annotation(
-      title = title_text,
       theme = theme(plot.title = element_text(size = 16, face = "bold"))
     )
 
@@ -753,7 +744,6 @@ build_pca_biplot <- function(pca_obj, data, color_var = NULL, shape_var = NULL,
     ) +
     theme_minimal(base_size = 14) +
     labs(
-      title = "PCA Biplot",
       x = "PC1",
       y = "PC2",
       color = if (!is.null(color_var)) color_var else NULL,

@@ -48,7 +48,7 @@ ui <- navbarPage(
     "1️⃣ Upload",
     fluidPage(upload_ui("upload"))
   ),
-  tabPanel(
+  tabPanel(a
     "2️⃣ Filter",
     fluidPage(filter_ui("filter"))
   ),
@@ -90,7 +90,7 @@ one_way_anova_ui <- function(id) {
       br(),
       fluidRow(
         column(6, actionButton(ns("run"), "Show results", width = "100%")),
-        column(6, downloadButton(ns("download_all"), "Download all results", width = "100%"))
+        column(6, downloadButton(ns("download_all"), "Download all results", style = "width: 100%;"))
       )
     ),
     results = tagList(
@@ -234,10 +234,11 @@ visualize_oneway_ui <- function(id) {
       hr(),
       add_color_customization_ui(ns, multi_group = FALSE),
       hr(),
-      downloadButton(ns("download_plot"), "Download plot")
+      downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;")
     ),
     mainPanel(
       width = 8,
+      h4("Plots"),
       plotOutput(ns("plot"), height = "auto")
     )
   )
@@ -966,7 +967,7 @@ two_way_anova_ui <- function(id) {
       br(),
       fluidRow(
         column(6, actionButton(ns("run"), "Show results", width = "100%")),
-        column(6, downloadButton(ns("download_all"), "Download all results"))
+        column(6, downloadButton(ns("download_all"), "Download all results", style = "width: 100%;"))
       )
     ),
     results = tagList(
@@ -1133,10 +1134,11 @@ visualize_twoway_ui <- function(id) {
       hr(),
       add_color_customization_ui(ns, multi_group = TRUE),
       hr(),
-      downloadButton(ns("download_plot"), "Download plot")
+      downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;")
     ),
     mainPanel(
       width = 8,
+      h4("Plots"),
       plotOutput(ns("plot"), height = "auto")   # ✅ same as one-way
     )
   )
@@ -1348,7 +1350,7 @@ descriptive_ui <- function(id) {
       br(),
       fluidRow(
         column(6, actionButton(ns("run"), "Show summary", width = "100%")),
-        column(6, downloadButton(ns("download_summary"), "Download summary", width = "100%"))
+        column(6, downloadButton(ns("download_summary"), "Download summary", style = "width: 100%;"))
       ),
       hr()
     ),
@@ -1614,6 +1616,7 @@ visualize_descriptive_ui <- function(id) {
     ),
     mainPanel(
       width = 8,
+      h4("Plots"),
       uiOutput(ns("plot_ui"))  # plot output provided by the active submodule
     )
   )
@@ -1747,7 +1750,7 @@ visualize_categorical_barplots_ui <- function(id) {
     hr(),
     add_color_customization_ui(ns, multi_group = TRUE),
     hr(),
-    downloadButton(ns("download_plot"), "Download plot")
+    downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;")
   )
 }
 
@@ -1912,7 +1915,7 @@ metric_panel_ui <- function(id, default_width = 400, default_height = 300,
       column(6, numericInput(ns("n_cols"), "Grid columns", value = default_cols, min = 1, max = 10, step = 1))
     ),
     hr(),
-    downloadButton(ns("download_plot"), "Download plot")
+    downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;")
   )
 }
 
@@ -2277,7 +2280,7 @@ visualize_numeric_boxplots_ui <- function(id) {
       )
     ),
     hr(),
-    downloadButton(ns("download_plot"), "Download plot")
+    downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;")
   )
 }
 
@@ -2413,7 +2416,7 @@ visualize_numeric_histograms_ui <- function(id) {
       column(6, numericInput(ns("n_cols"), "Grid columns", value = 3, min = 1, max = 10, step = 1))
     ),
     hr(),
-    downloadButton(ns("download_plot"), "Download plot")
+    downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;")
   )
 }
 
@@ -2618,7 +2621,7 @@ compute_icc <- function(model) {
   icc_df
 }
 # ===============================================================
-# 🧪 Animal Trial Analyzer — Analysis Coordinator (fixed + cleaned)
+# 🧪 Animal Trial Analyzer — Analysis Coordinator (clean + stable)
 # ===============================================================
 
 analysis_ui <- function(id) {
@@ -2629,13 +2632,16 @@ analysis_ui <- function(id) {
       h4("Step 3 — Analyze results"),
       p("Select the statistical approach that fits your trial design, then inspect the summaries on the right."),
       hr(),
+      
+      # --- CSS: expand dropdown height for better visibility ---
       tags$style(HTML(sprintf("
-        /* Make only this input's dropdown tall enough to show all items */
         #%s + .selectize-control .selectize-dropdown,
         #%s + .selectize-control .selectize-dropdown .selectize-dropdown-content {
-          max-height: none !important;   /* show everything, no internal scroll */
+          max-height: none !important;
         }
       ", ns("analysis_type"), ns("analysis_type")))),
+      
+      # --- Analysis type selector ---
       selectInput(
         ns("analysis_type"),
         "Select analysis type:",
@@ -2655,9 +2661,11 @@ analysis_ui <- function(id) {
         ),
         selected = ""
       ),
+      
       hr(),
       uiOutput(ns("config_panel"))
     ),
+    
     mainPanel(
       width = 8,
       h4("Analysis results"),
@@ -2666,135 +2674,77 @@ analysis_ui <- function(id) {
   )
 }
 
+
 analysis_server <- function(id, filtered_data) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     df <- reactive(filtered_data())
     
-    # --- Mapping between analysis type and submodules ---
-    submodules <- list(
-      "Descriptive Statistics" = list(
-        id = "descriptive",
-        ui = descriptive_ui,
-        server = descriptive_server,
-        type = "descriptive"
-      ),
-      "One-way ANOVA" = list(
-        id = "anova_one",
-        ui = one_way_anova_ui,
-        server = one_way_anova_server,
-        type = "oneway_anova"
-      ),
-      "Two-way ANOVA" = list(
-        id = "anova_two",
-        ui = two_way_anova_ui,
-        server = two_way_anova_server,
-        type = "twoway_anova"
-      ),
-      "Linear Model (LM)" = list(
-        id = "lm",
-        ui = lm_ui,
-        server = lm_server,
-        type = "lm"
-      ),
-      "Linear Mixed Model (LMM)" = list(
-        id = "lmm",
-        ui = lmm_ui,
-        server = lmm_server,
-        type = "lmm"
-      ),
-      "Pairwise Correlation" = list(
-        id = "ggpairs",
-        ui = ggpairs_ui,
-        server = ggpairs_server,
-        type = "pairwise_correlation"
-      ),
-      "PCA" = list(
-        id = "pca",
-        ui = pca_ui,
-        server = pca_server,
-        type = "pca"
-      )
+    # --- Submodule mapping ---
+    modules <- list(
+      "Descriptive Statistics" = list(id = "desc", ui = descriptive_ui, server = descriptive_server, type = "desc"),
+      "One-way ANOVA"          = list(id = "anova1", ui = one_way_anova_ui, server = one_way_anova_server, type = "anova1"),
+      "Two-way ANOVA"          = list(id = "anova2", ui = two_way_anova_ui, server = two_way_anova_server, type = "anova2"),
+      "Linear Model (LM)"      = list(id = "lm", ui = lm_ui, server = lm_server, type = "lm"),
+      "Linear Mixed Model (LMM)" = list(id = "lmm", ui = lmm_ui, server = lmm_server, type = "lmm"),
+      "Pairwise Correlation"   = list(id = "pairs", ui = ggpairs_ui, server = ggpairs_server, type = "pairs"),
+      "PCA"                    = list(id = "pca", ui = pca_ui, server = pca_server, type = "pca")
     )
     
-    # --- Render selected submodule UI dynamically ---
-    current_module_ui <- reactive({
+    # --- Get current module definition ---
+    current_mod <- reactive({
       req(input$analysis_type)
-      mod <- submodules[[input$analysis_type]]
-      req(mod)
-      mod$ui(ns(mod$id))
+      modules[[input$analysis_type]]
     })
     
+    # --- Render submodule UI ---
     output$config_panel <- renderUI({
-      ui <- current_module_ui()
+      ui <- current_mod()$ui(ns(current_mod()$id))
       req(ui$config)
       ui$config
     })
     
     output$results_panel <- renderUI({
-      ui <- current_module_ui()
+      ui <- current_mod()$ui(ns(current_mod()$id))
       req(ui$results)
       ui$results
     })
     
-    # --- Dynamically call selected server ---
-    model_fit <- reactiveVal(NULL)
+    # --- Run submodule server and normalize its output ---
+    model_out <- reactiveVal(NULL)
     
     observeEvent(input$analysis_type, {
-      mod <- submodules[[input$analysis_type]]
-      if (is.null(mod)) {
-        model_fit(NULL)
-        return()
-      }
-
-      server_result <- mod$server(mod$id, df)
-
-      if (is.null(server_result) || !is.function(server_result)) {
-        model_fit(reactive(list(type = mod$type, models = NULL)))
-        return()
-      }
-
-      model_fit(reactive({
-        raw <- tryCatch(
-          server_result(),
-          error = function(e) {
-            if (inherits(e, "shiny.silent.stop")) {
-              return(NULL)
-            }
-            stop(e)
-          }
-        )
-        
-        # Case 1: module returned nothing
-        if (is.null(raw)) {
-          return(list(type = mod$type, model = NULL, models = NULL))
-        }
-        
-        # Case 2: module returned a list-like structure (e.g. ANOVA)
-        if (is.list(raw)) {
-          if (is.null(raw$type)) raw$type <- mod$type
-          if (!is.null(raw$model) && is.null(raw$models)) raw$models <- raw$model
-          if (!is.null(raw$models) && is.null(raw$model)) raw$model <- raw$models
-          return(raw)
-        }
-        
-        # Case 3: module returned a bare model object (lm, lmerMod, etc.)
-        list(
-          type   = mod$type,
-          model  = raw,
-          models = raw  # alias for compatibility
-        )
-      }))
+      mod <- current_mod()
+      if (is.null(mod)) return(model_out(NULL))
       
+      result <- tryCatch(
+        mod$server(mod$id, df),
+        error = function(e) NULL
+      )
+      
+      if (is.null(result)) {
+        model_out(reactive({ list(type = mod$type, model = NULL) }))
+        return()
+      }
+      
+      if (is.reactive(result)) {
+        model_out(reactive({
+          val <- result()
+          if (is.list(val)) modifyList(list(type = mod$type), val)
+          else list(type = mod$type, model = val)
+        }))
+      } else if (is.list(result)) {
+        model_out(reactive({ modifyList(list(type = mod$type), result) }))
+      } else {
+        model_out(reactive({ list(type = mod$type, model = result) }))
+      }
     }, ignoreNULL = FALSE)
     
-    # --- Expose final fitted model ---
+    # --- Expose unified model output ---
     reactive({
-      model_reactive <- model_fit()
-      req(model_reactive)
-      model <- model_reactive()
-      req(model)
-      model
+      res <- model_out()
+      req(res)
+      res()
     })
   })
 }
@@ -3690,7 +3640,6 @@ build_descriptive_categorical_plot <- function(df,
   
   combined <- patchwork::wrap_plots(plots, nrow = layout$nrow, ncol = layout$ncol) +
     patchwork::plot_annotation(
-      title = "Categorical Distributions",
       theme = theme(plot.title = element_text(size = 16, face = "bold"))
     )
   
@@ -3769,7 +3718,6 @@ build_descriptive_numeric_boxplot <- function(df,
   
   combined <- patchwork::wrap_plots(plots, nrow = layout$nrow, ncol = layout$ncol) +
     patchwork::plot_annotation(
-      title = "Numeric Distributions (Boxplots)",
       theme = theme(plot.title = element_text(size = 16, face = "bold"))
     )
   
@@ -4295,7 +4243,7 @@ ggpairs_ui <- function(id) {
       br(),
       fluidRow(
         column(6, actionButton(ns("run"), "Show correlation matrix", width = "100%")),
-        column(6, downloadButton(ns("download_model"), "Download all results", width = "100%"))
+        column(6, downloadButton(ns("download_model"), "Download all results", style = "width: 100%;"))
       )
     ),
     results = tagList(
@@ -4490,6 +4438,7 @@ visualize_ggpairs_ui <- function(id) {
     ),
     mainPanel(
       width = 8,
+      h4("Plots"),
       plotOutput(ns("plot"), height = "auto")
     )
   )
@@ -4570,7 +4519,7 @@ pairwise_correlation_visualize_ggpairs_ui <- function(id) {
       column(6, numericInput(ns("grid_cols"),    "Grid columns", 1, 1, 10, 1))
     ),
     hr(),
-    downloadButton(ns("download_plot"), "Download Plot")
+    downloadButton(ns("download_plot"), "Download Plot", style = "width: 100%;")
   )
 }
 
@@ -4773,7 +4722,7 @@ pca_ui <- function(id) {
       selectInput(ns("vars"), "Numeric variables:", choices = NULL, multiple = TRUE),
       fluidRow(
         column(6, actionButton(ns("run_pca"), "Show PCA summary", width = "100%")),
-        column(6, downloadButton(ns("download_all"), "Download all results", width = "100%"))
+        column(6, downloadButton(ns("download_all"), "Download all results", style = "width: 100%;"))
       )
     ),
     results = tagList(
@@ -4915,11 +4864,11 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
         )
       ),
       hr(),
-      downloadButton(ns("download_plot"), "Download plot")
+      downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;")
     ),
     mainPanel(
       width = 8,
-      h4("PCA biplot"),
+      h4("Plots"),
       plotOutput(ns("plot"))
     )
   )
@@ -5040,7 +4989,7 @@ regression_ui <- function(id, engine = c("lm", "lmm"), allow_multi_response = FA
       br(),
       fluidRow(
         column(6, actionButton(ns("run"), "Show results", width = "100%")),
-        column(6, downloadButton(ns("download_model"), "Download all results", width = "100%"))
+        column(6, downloadButton(ns("download_model"), "Download all results", style = "width: 100%;"))
       )
     ),
     results = tagList(
@@ -5353,7 +5302,7 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
             column(6, plotOutput(ns(paste0("qq_", idx))))
           ),
           br(),
-          downloadButton(ns(paste0("download_", idx)), "Download results")
+          downloadButton(ns(paste0("download_", idx)), "Download results", style = "width: 100%;")
         )
       } else {
           stratum_tabs <- lapply(seq_along(strata), function(j) {
@@ -5370,7 +5319,7 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
                 column(6, plotOutput(ns(paste0("qq_", idx, "_", j))))
               ),
               br(),
-              downloadButton(ns(paste0("download_", idx, "_", j)), "Download results")
+              downloadButton(ns(paste0("download_", idx, "_", j)), "Download results", style = "width: 100%;")
             )
           } else {
             div(

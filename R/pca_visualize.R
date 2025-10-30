@@ -95,7 +95,7 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
     ),
     mainPanel(
       width = 8,
-      h4("PCA biplot"),
+      h4("Plots"),
       plotOutput(ns("plot"))
     )
   )

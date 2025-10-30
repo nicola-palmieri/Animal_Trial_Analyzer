@@ -21,6 +21,7 @@ visualize_ggpairs_ui <- function(id) {
     ),
     mainPanel(
       width = 8,
+      h4("Plots"),
       plotOutput(ns("plot"), height = "auto")
     )
   )

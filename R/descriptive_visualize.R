@@ -28,6 +28,7 @@ visualize_descriptive_ui <- function(id) {
     ),
     mainPanel(
       width = 8,
+      h4("Plots"),
       uiOutput(ns("plot_ui"))  # plot output provided by the active submodule
     )
   )

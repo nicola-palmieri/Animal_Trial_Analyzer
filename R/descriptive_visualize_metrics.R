@@ -313,7 +313,7 @@ visualize_cv_server <- function(id, filtered_data, summary_info, is_active = NUL
     summary_info = summary_info,
     metric_key = "cv",
     y_label = "CV (%)",
-    title = "Coefficient of Variation (CV%)",
+    title = "",
     filename_prefix = "cv_summary",
     is_active = is_active
   )
@@ -326,7 +326,7 @@ visualize_outliers_server <- function(id, filtered_data, summary_info, is_active
     summary_info = summary_info,
     metric_key = "outliers",
     y_label = "Outlier Count",
-    title = "Outlier Counts (1.5×IQR Rule)",
+    title = "",
     filename_prefix = "outlier_summary",
     is_active = is_active
   )
@@ -339,7 +339,7 @@ visualize_missing_server <- function(id, filtered_data, summary_info, is_active 
     summary_info = summary_info,
     metric_key = "missing",
     y_label = "Missing (%)",
-    title = "Missingness (%)",
+    title = "",
     filename_prefix = "missing_summary",
     is_active = is_active
   )
