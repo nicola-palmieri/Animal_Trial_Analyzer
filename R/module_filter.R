@@ -1,5 +1,5 @@
 # ===============================================================
-# 🧪 Animal Trial Analyzer — Filter Module (cleaned, identical behavior)
+# 🧪 Table Analyzer — Filter Module
 # ===============================================================
 
 filter_ui <- function(id) {
