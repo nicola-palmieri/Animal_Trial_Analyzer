@@ -39,6 +39,8 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
         selected = "biplot"
       ),
       hr(),
+      uiOutput(ns("layout_controls")),
+      hr(),
       selectInput(
         ns("pca_color"),
         label = "Color points by:",
@@ -81,22 +83,22 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
           width = 6,
           numericInput(
             ns("plot_width"),
-            label = "Plot width (px)",
-            value = 800,
-            min = 400,
+            label = "Subplot width (px)",
+            value = 400,
+            min = 200,
             max = 2000,
-            step = 100
+            step = 50
           )
         ),
         column(
           width = 6,
           numericInput(
             ns("plot_height"),
-            label = "Plot height (px)",
-            value = 600,
-            min = 400,
+            label = "Subplot height (px)",
+            value = 300,
+            min = 200,
             max = 2000,
-            step = 100
+            step = 50
           )
         )
       ),
@@ -113,24 +115,19 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
 
 visualize_pca_server <- function(id, filtered_data, model_fit) {
   moduleServer(id, function(input, output, session) {
+    layout_state <- initialize_layout_state(input, session)
     # -- Reactives ------------------------------------------------------------
-    df <- reactive({
-      data <- filtered_data()
-      validate(need(!is.null(data) && is.data.frame(data), "No data available."))
-      data
-    })
-
     model_info <- reactive({
       info <- model_fit()
       validate(need(!is.null(info) && identical(info$type, "pca"), "Run PCA first."))
-      validate(need(!is.null(info$model), "PCA model missing."))
       info
     })
 
-    categorical_vars <- reactive({
-      data <- df()
-      keep <- vapply(data, .is_categorical, logical(1))
-      names(data)[keep]
+    pca_entries <- reactive({
+      info <- model_info()
+      entries <- info$model
+      validate(need(!is.null(entries) && length(entries) > 0, "PCA model missing."))
+      entries
     })
 
     validate_choice <- function(value, pool) {
@@ -143,57 +140,242 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
       value
     }
 
+    pick_reference_entry <- function(entries) {
+      if (is.null(entries) || length(entries) == 0) {
+        return(NULL)
+      }
+
+      valid <- entries[vapply(entries, function(x) !is.null(x) && !is.null(x$data) && nrow(x$data) > 0, logical(1))]
+      if (length(valid) > 0) {
+        return(valid[[1]])
+      }
+
+      entries[[1]]
+    }
+
+    available_choices <- reactive({
+      entries <- pca_entries()
+      entry <- pick_reference_entry(entries)
+      data <- if (!is.null(entry)) entry$data else NULL
+      .pca_aesthetic_choices(data)
+    })
+
+    observeEvent(available_choices(), {
+      choices <- available_choices()
+
+      select_valid <- function(current) {
+        if (!is.null(current) && current %in% choices) {
+          current
+        } else {
+          "None"
+        }
+      }
+
+      updateSelectInput(session, "pca_color", choices = choices, selected = select_valid(input$pca_color))
+      updateSelectInput(session, "pca_shape", choices = choices, selected = select_valid(input$pca_shape))
+      updateSelectInput(session, "pca_label", choices = choices, selected = select_valid(input$pca_label))
+    }, ignoreNULL = FALSE)
+
+    output$layout_controls <- renderUI({
+      entries <- pca_entries()
+      if (length(entries) <= 1) {
+        return(NULL)
+      }
+
+      ns <- session$ns
+      tagList(
+        h4("Layout controls"),
+        fluidRow(
+          column(
+            width = 6,
+            numericInput(
+              ns("strata_rows"),
+              "Grid rows",
+              value = isolate(layout_state$default_ui_value(input$strata_rows)),
+              min = 1,
+              max = 10,
+              step = 1
+            )
+          ),
+          column(
+            width = 6,
+            numericInput(
+              ns("strata_cols"),
+              "Grid columns",
+              value = isolate(layout_state$default_ui_value(input$strata_cols)),
+              min = 1,
+              max = 10,
+              step = 1
+            )
+          )
+        )
+      )
+    })
+
+    build_message_panel <- function(title, message) {
+      ggplot() +
+        theme_void() +
+        labs(title = title) +
+        annotate(
+          "text",
+          x = 0.5,
+          y = 0.5,
+          label = message,
+          size = 4,
+          hjust = 0.5,
+          vjust = 0.5
+        ) +
+        coord_cartesian(xlim = c(0, 1), ylim = c(0, 1), clip = "off") +
+        theme(plot.title = element_text(size = 14, face = "bold", hjust = 0.5))
+    }
+
+    sanitize_suffix <- function(value) {
+      value <- value[1]
+      safe <- gsub("[^A-Za-z0-9]+", "_", value)
+      safe <- gsub("_+", "_", safe)
+      safe <- gsub("^_|_$", "", safe)
+      if (!nzchar(safe)) {
+        "stratum"
+      } else {
+        tolower(safe)
+      }
+    }
+
+    plot_info <- reactive({
+      req(input$plot_type)
+      validate(need(input$plot_type == "biplot", "Unsupported plot type."))
+      entries <- pca_entries()
+      validate(need(length(entries) > 0, "No PCA results available."))
+
+      choices <- available_choices()
+      color_var <- validate_choice(input$pca_color, choices)
+      shape_var <- validate_choice(input$pca_shape, choices)
+      label_var <- validate_choice(input$pca_label, choices)
+      label_size <- ifelse(is.null(input$pca_label_size) || is.na(input$pca_label_size), 2, input$pca_label_size)
+      show_loadings <- isTRUE(input$show_loadings)
+      loading_scale <- ifelse(is.null(input$loading_scale) || is.na(input$loading_scale), 1.2, input$loading_scale)
+
+      plot_list <- list()
+      strata_names <- names(entries)
+      if (is.null(strata_names) || length(strata_names) == 0) {
+        strata_names <- paste0("Stratum ", seq_along(entries))
+      }
+
+      for (i in seq_along(entries)) {
+        entry <- entries[[i]]
+        title <- strata_names[[i]]
+        if (!nzchar(title)) {
+          title <- paste0("Stratum ", i)
+        }
+
+        if (is.null(entry)) {
+          plot_list[[title]] <- build_message_panel(title, "No PCA results available.")
+          next
+        }
+
+        if (!is.null(entry$message) && nzchar(entry$message)) {
+          plot_list[[title]] <- build_message_panel(title, entry$message)
+          next
+        }
+
+        if (is.null(entry$model) || is.null(entry$model$x) || nrow(entry$model$x) < 2) {
+          plot_list[[title]] <- build_message_panel(title, "PCA scores not available.")
+          next
+        }
+
+        data <- entry$data
+        local_color <- if (!is.null(color_var) && !is.null(data) && color_var %in% names(data)) color_var else NULL
+        local_shape <- if (!is.null(shape_var) && !is.null(data) && shape_var %in% names(data)) shape_var else NULL
+        local_label <- if (!is.null(label_var) && !is.null(data) && label_var %in% names(data)) label_var else NULL
+
+        plot_obj <- build_pca_biplot(
+          pca_obj = entry$model,
+          data = data,
+          color_var = local_color,
+          shape_var = local_shape,
+          label_var = local_label,
+          label_size = label_size,
+          show_loadings = show_loadings,
+          loading_scale = loading_scale
+        ) +
+          ggtitle(title) +
+          theme(plot.title = element_text(size = 14, face = "bold"))
+
+        plot_list[[title]] <- plot_obj
+      }
+
+      plot_list <- Filter(Negate(is.null), plot_list)
+      validate(need(length(plot_list) > 0, "No PCA plots available."))
+
+      layout <- resolve_grid_layout(
+        n_items = length(plot_list),
+        rows_input = layout_state$effective_input("strata_rows"),
+        cols_input = layout_state$effective_input("strata_cols")
+      )
+
+      combined <- patchwork::wrap_plots(
+        plotlist = plot_list,
+        nrow = layout$nrow,
+        ncol = layout$ncol
+      ) +
+        patchwork::plot_layout(guides = "collect")
+
+      list(
+        plot = combined,
+        layout = layout,
+        strata_names = names(plot_list)
+      )
+    })
+
+    observe_layout_synchronization(plot_info, layout_state, session)
+
     plot_size <- reactive({
       width <- suppressWarnings(as.numeric(input$plot_width))
       height <- suppressWarnings(as.numeric(input$plot_height))
+      info <- plot_info()
+      layout <- info$layout
+
+      subplot_w <- ifelse(is.na(width) || width <= 0, 400, width)
+      subplot_h <- ifelse(is.na(height) || height <= 0, 300, height)
 
       list(
-        w = ifelse(is.na(width) || width <= 0, 800, width),
-        h = ifelse(is.na(height) || height <= 0, 600, height)
+        w = subplot_w * max(1, layout$ncol),
+        h = subplot_h * max(1, layout$nrow)
       )
     })
 
-    build_current_plot <- reactive({
-      info <- model_info()
-      data <- df()
-      categorical <- categorical_vars()
-
-      color_var <- validate_choice(input$pca_color, categorical)
-      shape_var <- validate_choice(input$pca_shape, categorical)
-      label_var <- validate_choice(input$pca_label, categorical)
-      label_size <- ifelse(is.null(input$pca_label_size) || is.na(input$pca_label_size), 2, input$pca_label_size)
-
-      validate(need(!is.null(info$model$x) && nrow(info$model$x) >= 2, "PCA scores not available."))
-      validate(need(!is.null(input$plot_type) && input$plot_type == "biplot", "Unsupported plot type."))
-
-      build_pca_biplot(
-        pca_obj   = info$model,
-        data      = data,
-        color_var = color_var,
-        shape_var = shape_var,
-        label_var = label_var,
-        label_size = label_size,
-        show_loadings = isTRUE(input$show_loadings),
-        loading_scale = ifelse(is.null(input$loading_scale) || is.na(input$loading_scale), 1.2, input$loading_scale)
-      )
+    plot_obj <- reactive({
+      info <- plot_info()
+      validate(need(!is.null(info$plot), "No PCA plots available."))
+      info$plot
     })
 
     output$plot <- renderPlot({
-      build_current_plot()
+      req(plot_obj())
+      plot_obj()
     },
     width = function() plot_size()$w,
     height = function() plot_size()$h,
     res = 96)
 
     output$download_plot <- downloadHandler(
-      filename = function() paste0("pca_biplot_", Sys.Date(), ".png"),
+      filename = function() {
+        info <- plot_info()
+        strata <- info$strata_names
+        suffix <- if (length(strata) == 1) {
+          paste0("_", sanitize_suffix(strata))
+        } else {
+          "_all_strata"
+        }
+        paste0("pca_biplot", suffix, "_", Sys.Date(), ".png")
+      },
       content = function(file) {
-        plot_obj <- build_current_plot()
+        info <- plot_info()
         size <- plot_size()
 
         ggsave(
           filename = file,
-          plot = plot_obj,
+          plot = info$plot,
           device = "png",
           dpi = 300,
           width = size$w / 96,
