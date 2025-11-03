@@ -61,8 +61,7 @@ stratification_ui <- function(id, ns = NULL) {
   }
 
   shiny::renderUI({
-    shiny::tags$details(
-      shiny::tags$summary(shiny::strong(STRAT_SECTION_TITLE)),
+    shiny::tagList(
       shiny::uiOutput(ns_fn("stratify_var_ui")),
       shiny::uiOutput(ns_fn("strata_order_ui"))
     )

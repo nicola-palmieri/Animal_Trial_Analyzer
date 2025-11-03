@@ -27,7 +27,13 @@ ggpairs_server <- function(id, data_reactive) {
     ns <- session$ns
     df <- reactive(data_reactive())
 
-    output$advanced_options <- stratification_ui(ns("strat"))
+    output$stratification_controls <- stratification_ui(ns("strat"))
+    output$advanced_options <- renderUI({
+      tags$details(
+        tags$summary(strong(STRAT_SECTION_TITLE)),
+        uiOutput(ns("stratification_controls"))
+      )
+    })
     strat_info <- stratification_server("strat", df)
 
     # ---- Update variable selector ----

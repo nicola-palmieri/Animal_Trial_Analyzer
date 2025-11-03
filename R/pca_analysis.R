@@ -33,7 +33,13 @@ pca_server <- function(id, filtered_data) {
       updateSelectInput(session, "vars", choices = num_vars, selected = num_vars)
     })
 
-    output$advanced_options <- stratification_ui(ns("strat"))
+    output$stratification_controls <- stratification_ui(ns("strat"))
+    output$advanced_options <- renderUI({
+      tags$details(
+        tags$summary(strong(STRAT_SECTION_TITLE)),
+        uiOutput(ns("stratification_controls"))
+      )
+    })
     strat_info <- stratification_server("strat", df)
 
     run_pca_on_subset <- function(subset_data, selected_vars) {
