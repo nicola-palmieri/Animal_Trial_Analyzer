@@ -135,13 +135,15 @@ one_way_anova_server <- function(id, filtered_data) {
       render_response_inputs(ns, df(), input)
     })
     
+    output$stratification_controls <- stratification_ui(ns("strat"))
     output$advanced_options <- renderUI({
-      render_stratification_controls(ns, df, input)
+      tags$details(
+        tags$summary(strong("Advanced options")),
+        br(),
+        uiOutput(ns("stratification_controls"))
+      )
     })
-    
-    output$strata_order_ui <- renderUI({
-      render_strata_order_input(ns, df, input$stratify_var)
-    })
+    strat_info <- stratification_server("strat", df)
     
     # -----------------------------------------------------------
     # Level order selection
@@ -170,8 +172,7 @@ one_way_anova_server <- function(id, filtered_data) {
         model = "oneway_anova",
         factor1_var = input$group,
         factor1_order = input$order,
-        stratify_var = input$stratify_var,
-        strata_order = input$strata_order
+        stratification = strat_info()
       )
     })
     
@@ -426,10 +427,20 @@ prepare_stratified_anova <- function(
     factor1_order = NULL,
     factor2_var = NULL,
     factor2_order = NULL,
+    stratification = NULL,
     stratify_var = NULL,
     strata_order = NULL
 ) {
   req(df, responses, model)
+
+  if (!is.null(stratification)) {
+    if (!is.null(stratification$var)) {
+      stratify_var <- stratification$var
+    }
+    if (!is.null(stratification$levels)) {
+      strata_order <- stratification$levels
+    }
+  }
   
   if (!is.null(factor1_var) && !is.null(factor1_order)) {
     df[[factor1_var]] <- factor(as.character(df[[factor1_var]]), levels = factor1_order)
@@ -440,10 +451,6 @@ prepare_stratified_anova <- function(
   }
   
   if (!is.null(stratify_var) && stratify_var %in% names(df)) {
-    if (!guard_stratification_levels(df, stratify_var)) {
-      return(NULL)
-    }
-
     if (!is.null(strata_order) && length(strata_order) > 0) {
       df[[stratify_var]] <- factor(as.character(df[[stratify_var]]), levels = strata_order)
     } else {
@@ -480,11 +487,16 @@ prepare_stratified_anova <- function(
   fit_fn <- function(fml, data) {
     stats::aov(fml, data = data)
   }
+  safe_fit <- purrr::safely(fit_fn)
   
   if (is.null(strata)) {
     out <- list()
     for (resp in responses) {
-      out[[resp]] <- fit_fn(build_formula(resp), df)
+      fit_result <- safe_fit(build_formula(resp), df)
+      out[[resp]] <- list(
+        model = fit_result$result,
+        error = if (!is.null(fit_result$error)) conditionMessage(fit_result$error) else NULL
+      )
     }
     return(list(
       type = model,
@@ -501,7 +513,11 @@ prepare_stratified_anova <- function(
     sub <- df[df[[stratify_var]] == s, , drop = FALSE]
     sub_models <- list()
     for (resp in responses) {
-      sub_models[[resp]] <- fit_fn(build_formula(resp), sub)
+      fit_result <- safe_fit(build_formula(resp), sub)
+      sub_models[[resp]] <- list(
+        model = fit_result$result,
+        error = if (!is.null(fit_result$error)) conditionMessage(fit_result$error) else NULL
+      )
     }
     out[[s]] <- sub_models
   }
@@ -604,10 +620,21 @@ prepare_anova_outputs <- function(model_obj, factor_names) {
 # ---------------------------------------------------------------
 # Output composition
 # ---------------------------------------------------------------
-print_anova_summary_and_posthoc <- function(model_obj, factors) {
+print_anova_summary_and_posthoc <- function(model_entry, factors) {
+  if (is.null(model_entry) || (is.list(model_entry) && is.null(model_entry$model))) {
+    cat("Model is not available.\n")
+    return(invisible(NULL))
+  }
+
+  if (!is.null(model_entry$error)) {
+    cat("Model fitting failed:\n", model_entry$error, "\n", sep = "")
+    return(invisible(NULL))
+  }
+
+  model_obj <- model_entry$model
   results <- prepare_anova_outputs(model_obj, factors)
   print(results$anova_object)
-  
+
   if (length(results$posthoc_details) == 0) {
     cat("\nNo post-hoc Tukey comparisons were generated.\n")
   } else {
@@ -625,12 +652,12 @@ print_anova_summary_and_posthoc <- function(model_obj, factors) {
 }
 
 bind_single_model_outputs <- function(output, summary_id, download_id,
-                                      model_obj, response_name, factors,
+                                      model_entry, response_name, factors,
                                       stratum_label = NULL) {
   output[[summary_id]] <- renderPrint({
-    print_anova_summary_and_posthoc(model_obj, factors)
+    print_anova_summary_and_posthoc(model_entry, factors)
   })
-  
+
   output[[download_id]] <- downloadHandler(
     filename = function() {
       base <- paste0("anova_results_", sanitize_name(response_name))
@@ -640,8 +667,11 @@ bind_single_model_outputs <- function(output, summary_id, download_id,
       paste0(base, "_", Sys.Date(), ".docx")
     },
     content = function(file) {
-      results <- prepare_anova_outputs(model_obj, factors)
-      write_anova_docx(file, results, model_obj, response_name, stratum_label)
+      if (is.null(model_entry) || !is.null(model_entry$error) || is.null(model_entry$model)) {
+        stop("Model not available for download due to fitting error.")
+      }
+      results <- prepare_anova_outputs(model_entry$model, factors)
+      write_anova_docx(file, results, model_entry$model, response_name, stratum_label)
     }
   )
 }
@@ -726,12 +756,12 @@ bind_anova_outputs <- function(ns, output, models_reactive) {
         local({
           idx <- i
           response_name <- responses[i]
-          model_obj <- model_list[[response_name]]
+          model_entry <- model_list[[response_name]]
           bind_single_model_outputs(
             output,
             summary_id = paste0("summary_", idx),
             download_id = paste0("download_", idx),
-            model_obj = model_obj,
+            model_entry = model_entry,
             response_name = response_name,
             factors = factors
           )
@@ -749,12 +779,12 @@ bind_anova_outputs <- function(ns, output, models_reactive) {
           stratum_idx <- j
           response_name <- responses[i]
           stratum_label <- strata_levels[j]
-          model_obj <- model_list[[stratum_label]][[response_name]]
+          model_entry <- model_list[[stratum_label]][[response_name]]
           bind_single_model_outputs(
             output,
             summary_id = paste0("summary_", idx, "_", stratum_idx),
             download_id = paste0("download_", idx, "_", stratum_idx),
-            model_obj = model_obj,
+            model_entry = model_entry,
             response_name = response_name,
             factors = factors,
             stratum_label = stratum_label
@@ -775,11 +805,15 @@ download_all_anova_results <- function(models_info, file) {
   }
   
   combined_results <- list()
-  
+
   # --- Case 1: no stratification
   if (is.null(models_info$strata)) {
     for (resp in models_info$responses) {
-      model_obj <- models_info$models[[resp]]
+      model_entry <- models_info$models[[resp]]
+      if (is.null(model_entry) || !is.null(model_entry$error) || is.null(model_entry$model)) {
+        next
+      }
+      model_obj <- model_entry$model
       anova_obj <- car::Anova(model_obj, type = 3)
       tbl <- as.data.frame(anova_obj)
       tbl$Response <- resp
@@ -794,7 +828,11 @@ download_all_anova_results <- function(models_info, file) {
     # --- Case 2: stratified
     for (stratum in models_info$strata$levels) {
       for (resp in models_info$responses) {
-        model_obj <- models_info$models[[stratum]][[resp]]
+        model_entry <- models_info$models[[stratum]][[resp]]
+        if (is.null(model_entry) || !is.null(model_entry$error) || is.null(model_entry$model)) {
+          next
+        }
+        model_obj <- model_entry$model
         anova_obj <- car::Anova(model_obj, type = 3)
         tbl <- as.data.frame(anova_obj)
         tbl$Response <- resp
@@ -807,7 +845,11 @@ download_all_anova_results <- function(models_info, file) {
       }
     }
   }
-  
+
+  if (length(combined_results) == 0) {
+    stop("No ANOVA models available to export.")
+  }
+
   write_anova_docx(combined_results, file)
 }
 
@@ -1226,13 +1268,15 @@ two_way_anova_server <- function(id, filtered_data) {
       render_response_selector(ns, df, input)
     })
     
+    output$stratification_controls <- stratification_ui(ns("strat"))
     output$advanced_options <- renderUI({
-      render_stratification_controls(ns, df, input)
+      tags$details(
+        tags$summary(strong("Advanced options")),
+        br(),
+        uiOutput(ns("stratification_controls"))
+      )
     })
-    
-    output$strata_order_ui <- renderUI({
-      render_strata_order_input(ns, df, input$stratify_var)
-    })
+    strat_info <- stratification_server("strat", df)
     
     # -----------------------------------------------------------
     # Level order selections
@@ -1275,8 +1319,7 @@ two_way_anova_server <- function(id, filtered_data) {
         factor1_order = input$order1,
         factor2_var = input$factor2,
         factor2_order = input$order2,
-        stratify_var = input$stratify_var,
-        strata_order = input$strata_order
+        stratification = strat_info()
       )
     })
     
@@ -1575,7 +1618,7 @@ descriptive_server <- function(id, filtered_data) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     df <- filtered_data
-    
+
     # ------------------------------------------------------------
     # Dynamic inputs
     # ------------------------------------------------------------
@@ -1592,16 +1635,15 @@ descriptive_server <- function(id, filtered_data) {
       )
     })
     
+    output$stratification_controls <- stratification_ui(ns("strat"))
     output$advanced_options <- renderUI({
-      tagList(
-        render_stratification_controls(ns, df, input),
-        uiOutput(ns("strata_order_ui"))
+      tags$details(
+        tags$summary(strong("Advanced options")),
+        br(),
+        uiOutput(ns("stratification_controls"))
       )
     })
-    
-    output$strata_order_ui <- renderUI({
-      render_strata_order_input(ns, df, input$stratify_var)
-    })
+    strat_info <- stratification_server("strat", df)
     
     # ------------------------------------------------------------
     # Summary computation
@@ -1613,16 +1655,13 @@ descriptive_server <- function(id, filtered_data) {
       selected_vars <- unique(c(input$cat_vars, input$num_vars))
       validate(need(length(selected_vars) > 0, "Please select at least one variable."))
 
-      group_var <- if (is.null(input$stratify_var) || input$stratify_var == "None") NULL else input$stratify_var
-      if (!guard_stratification_levels(raw_data, group_var)) {
-        return(NULL)
-      }
-
+      strat_details <- strat_info()
+      group_var <- strat_details$var
       data_columns <- selected_vars
 
       if (!is.null(group_var)) {
         # keep ONLY selected levels, in the exact order; drop NA and unused levels
-        sel <- input$strata_order
+        sel <- strat_details$levels
         if (!is.null(sel) && length(sel) > 0) {
           local_data <- dplyr::filter(local_data, .data[[group_var]] %in% sel)
           local_data[[group_var]] <- factor(as.character(local_data[[group_var]]), levels = sel)
@@ -1637,13 +1676,6 @@ descriptive_server <- function(id, filtered_data) {
       data_columns <- data_columns[!is.na(data_columns) & nzchar(data_columns)]
       data_columns <- intersect(data_columns, names(local_data))
       local_data <- local_data[, data_columns, drop = FALSE]
-
-      if (!is.null(group_var) && !is.null(input$strata_order)) {
-        if (group_var %in% names(local_data)) {
-          local_data[[group_var]] <- factor(as.character(local_data[[group_var]]),
-                                            levels = input$strata_order)
-        }
-      }
 
       strata_levels <- if (!is.null(group_var) && group_var %in% names(local_data)) {
         levels(local_data[[group_var]])
@@ -3300,72 +3332,90 @@ analysis_server <- function(id, filtered_data) {
     ns <- session$ns
     df <- reactive(filtered_data())
     
-    # --- Submodule mapping ---
+    # ---- Mapping of available modules ----
     modules <- list(
-      "Descriptive Statistics" = list(id = "desc", ui = descriptive_ui, server = descriptive_server, type = "desc"),
+      "Descriptive Statistics" = list(id = "desc",  ui = descriptive_ui, server = descriptive_server, type = "desc"),
       "One-way ANOVA"          = list(id = "anova1", ui = one_way_anova_ui, server = one_way_anova_server, type = "anova1"),
       "Two-way ANOVA"          = list(id = "anova2", ui = two_way_anova_ui, server = two_way_anova_server, type = "anova2"),
-      "Linear Model (LM)"      = list(id = "lm", ui = lm_ui, server = lm_server, type = "lm"),
-      "Linear Mixed Model (LMM)" = list(id = "lmm", ui = lmm_ui, server = lmm_server, type = "lmm"),
-      "Pairwise Correlation"   = list(id = "pairs", ui = ggpairs_ui, server = ggpairs_server, type = "pairs"),
-      "PCA"                    = list(id = "pca", ui = pca_ui, server = pca_server, type = "pca")
+      "Linear Model (LM)"      = list(id = "lm",     ui = lm_ui, server = lm_server, type = "lm"),
+      "Linear Mixed Model (LMM)" = list(id = "lmm",  ui = lmm_ui, server = lmm_server, type = "lmm"),
+      "Pairwise Correlation"   = list(id = "pairs",  ui = ggpairs_ui, server = ggpairs_server, type = "pairs"),
+      "PCA"                    = list(id = "pca",    ui = pca_ui, server = pca_server, type = "pca")
     )
     
-    # --- Get current module definition ---
+    # ---- Cache for lazily created servers ----
+    server_cache <- reactiveValues()
+    
+    # ---- Current module getter ----
     current_mod <- reactive({
-      req(input$analysis_type)
-      modules[[input$analysis_type]]
+      type <- input$analysis_type
+      if (is.null(type) || !nzchar(type)) return(NULL)
+      modules[[type]]
     })
     
-    # --- Render submodule UI ---
+    current_ui <- reactive({
+      mod <- current_mod()
+      if (is.null(mod)) return(NULL)
+      mod$ui(ns(mod$id))
+    })
+    
+    # ---- Lazy server initialization ----
+    ensure_module_server <- function(mod) {
+      key <- mod$id
+      if (!is.null(server_cache[[key]])) return(server_cache[[key]])
+      
+      result <- tryCatch(mod$server(mod$id, df), error = function(e) {
+        warning(sprintf("Module '%s' failed to initialize: %s", key, conditionMessage(e)))
+        NULL
+      })
+      
+      # Wrap result into a reactive returning a list with 'type' and 'model'
+      if (is.null(result)) {
+        server_cache[[key]] <- reactive(list(type = mod$type, model = NULL))
+      } else if (is.reactive(result)) {
+        server_cache[[key]] <- reactive({
+          val <- result()
+          # If submodule already returns a list, just add 'type' key
+          if (is.list(val)) c(val, list(type = mod$type))
+          else list(type = mod$type, model = val)
+        })
+      } else {
+        # Submodule returned a non-reactive object
+        server_cache[[key]] <- reactive(list(type = mod$type, model = result))
+      }
+      
+      server_cache[[key]]
+    }
+    
+    # ---- Render active submodule UI ----
     output$config_panel <- renderUI({
-      ui <- current_mod()$ui(ns(current_mod()$id))
-      req(ui$config)
+      ui <- current_ui()
+      if (is.null(ui)) return(NULL)
       ui$config
     })
     
     output$results_panel <- renderUI({
-      ui <- current_mod()$ui(ns(current_mod()$id))
-      req(ui$results)
+      ui <- current_ui()
+      if (is.null(ui)) return(NULL)
       ui$results
     })
     
-    # --- Run submodule server and normalize its output ---
-    model_out <- reactiveVal(NULL)
-    
-    observeEvent(input$analysis_type, {
+    # ---- Connect the current selected module's server ----
+    current_server <- reactive({
       mod <- current_mod()
-      if (is.null(mod)) return(model_out(NULL))
-      
-      result <- tryCatch(
-        mod$server(mod$id, df),
-        error = function(e) NULL
-      )
-      
-      if (is.null(result)) {
-        model_out(reactive({ list(type = mod$type, model = NULL) }))
-        return()
-      }
-      
-      if (is.reactive(result)) {
-        model_out(reactive({
-          val <- result()
-          if (is.list(val)) modifyList(list(type = mod$type), val)
-          else list(type = mod$type, model = val)
-        }))
-      } else if (is.list(result)) {
-        model_out(reactive({ modifyList(list(type = mod$type), result) }))
-      } else {
-        model_out(reactive({ list(type = mod$type, model = result) }))
-      }
-    }, ignoreNULL = FALSE)
-    
-    # --- Expose unified model output ---
-    reactive({
-      res <- model_out()
-      req(res)
-      res()
+      if (is.null(mod)) return(NULL)
+      ensure_module_server(mod)
     })
+    
+    # ---- Unified model output ----
+    model_out <- reactive({
+      srv <- current_server()
+      if (is.null(srv)) return(NULL)
+      srv()
+    })
+    
+    # Return the active model output as a reactive
+    model_out
   })
 }
 # ===============================================================
@@ -3375,6 +3425,7 @@ analysis_server <- function(id, filtered_data) {
 add_color_customization_ui <- function(ns, multi_group = TRUE) {
   tags$details(
     tags$summary(strong("Advanced options")),
+    br(),
     uiOutput(ns("color_custom_ui"))
   )
 }
@@ -4089,13 +4140,15 @@ ggpairs_server <- function(id, data_reactive) {
     ns <- session$ns
     df <- reactive(data_reactive())
 
+    output$stratification_controls <- stratification_ui(ns("strat"))
     output$advanced_options <- renderUI({
-      render_stratification_controls(ns, df, input)
+      tags$details(
+        tags$summary(strong("Advanced options")),
+        br(),
+        uiOutput(ns("stratification_controls"))
+      )
     })
-
-    output$strata_order_ui <- renderUI({
-      render_strata_order_input(ns, df, input$stratify_var)
-    })
+    strat_info <- stratification_server("strat", df)
 
     # ---- Update variable selector ----
     observe({
@@ -4149,26 +4202,21 @@ ggpairs_server <- function(id, data_reactive) {
         return()
       }
 
-      group_var <- input$stratify_var
-      if (is.null(group_var) || identical(group_var, "None") || identical(group_var, "")) {
-        group_var <- NULL
-      }
-
-      if (!is.null(group_var) && !guard_stratification_levels(data, group_var)) {
-        correlation_store(NULL)
-        return()
-      }
+      strat_details <- strat_info()
+      group_var <- strat_details$var
 
       strata_levels <- "Overall"
       if (!is.null(group_var) && group_var %in% names(data)) {
-        values <- data[[group_var]]
-        values <- values[!is.na(values)]
-        if (!is.null(input$strata_order) && length(input$strata_order) > 0) {
-          unique_values <- unique(as.character(values))
-          strata_levels <- input$strata_order[input$strata_order %in% unique_values]
-        } else {
+        levels <- strat_details$levels
+        if (is.null(levels) || length(levels) == 0) {
+          values <- data[[group_var]]
+          values <- values[!is.na(values)]
           strata_levels <- unique(as.character(values))
+        } else {
+          strata_levels <- levels
         }
+      } else {
+        group_var <- NULL
       }
 
       matrices <- list()
@@ -4274,8 +4322,14 @@ ggpairs_server <- function(id, data_reactive) {
       list(
         type = "pairwise_correlation",
         data = df,
-        group_var = reactive(input$stratify_var),
-        strata_order = reactive(input$strata_order),
+        group_var = reactive({
+          details <- strat_info()
+          details$var
+        }),
+        strata_order = reactive({
+          details <- strat_info()
+          details$levels
+        }),
         results = reactive(correlation_store())
       )
     })
@@ -4630,13 +4684,15 @@ pca_server <- function(id, filtered_data) {
       updateSelectInput(session, "vars", choices = num_vars, selected = num_vars)
     })
 
+    output$stratification_controls <- stratification_ui(ns("strat"))
     output$advanced_options <- renderUI({
-      render_stratification_controls(ns, df, input)
+      tags$details(
+        tags$summary(strong("Advanced options")),
+        br(),
+        uiOutput(ns("stratification_controls"))
+      )
     })
-
-    output$strata_order_ui <- renderUI({
-      render_strata_order_input(ns, df, input$stratify_var)
-    })
+    strat_info <- stratification_server("strat", df)
 
     run_pca_on_subset <- function(subset_data, selected_vars) {
       if (is.null(subset_data) || nrow(subset_data) == 0) {
@@ -4656,20 +4712,21 @@ pca_server <- function(id, filtered_data) {
         ))
       }
 
-      model <- tryCatch(
-        prcomp(numeric_subset, center = TRUE, scale. = TRUE),
-        error = function(e) e
-      )
+      safe_prcomp <- purrr::safely(function(mat) {
+        prcomp(mat, center = TRUE, scale. = TRUE)
+      })
 
-      if (inherits(model, "error")) {
+      model <- safe_prcomp(numeric_subset)
+
+      if (!is.null(model$error)) {
         return(list(
           model = NULL,
           data = plot_data,
-          message = conditionMessage(model)
+          message = conditionMessage(model$error)
         ))
       }
 
-      list(model = model, data = plot_data, message = NULL)
+      list(model = model$result, data = plot_data, message = NULL)
     }
 
     # Run PCA
@@ -4683,28 +4740,16 @@ pca_server <- function(id, filtered_data) {
       selected_vars <- intersect(input$vars, numeric_vars)
       validate(need(length(selected_vars) > 1, "Select at least two numeric variables for PCA."))
 
-      stratify_var <- input$stratify_var
-      if (is.null(stratify_var) || identical(stratify_var, "None") ||
-          !nzchar(stratify_var) || !(stratify_var %in% names(data))) {
-        stratify_var <- NULL
-      }
-
-      if (!is.null(stratify_var) && !guard_stratification_levels(data, stratify_var)) {
-        return(NULL)
-      }
-
-      strata_levels <- NULL
+      strat_details <- strat_info()
+      stratify_var <- strat_details$var
+      strata_levels <- strat_details$levels
       local_data <- data
 
       if (!is.null(stratify_var)) {
-        values <- local_data[[stratify_var]]
-        values <- values[!is.na(values)]
-        available_levels <- unique(as.character(values))
-
-        if (!is.null(input$strata_order) && length(input$strata_order) > 0) {
-          strata_levels <- input$strata_order[input$strata_order %in% available_levels]
-        } else {
-          strata_levels <- available_levels
+        if (is.null(strata_levels) || length(strata_levels) == 0) {
+          values <- local_data[[stratify_var]]
+          values <- values[!is.na(values)]
+          strata_levels <- unique(as.character(values))
         }
 
         strata_levels <- strata_levels[nzchar(strata_levels)]
@@ -5502,7 +5547,7 @@ regression_ui <- function(id, engine = c("lm", "lmm"), allow_multi_response = FA
       uiOutput(ns("covar_selector")),
       if (engine == "lmm") uiOutput(ns("random_selector")),
       uiOutput(ns("interaction_select")),
-      uiOutput(ns("stratification_controls")),
+      uiOutput(ns("advanced_options")),
       hr(),
       uiOutput(ns("formula_preview")),
       br(),
@@ -5523,6 +5568,7 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
 
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
+    strat_info <- stratification_server("strat", data)
 
     output$response_ui <- renderUI({
       req(data())
@@ -5606,13 +5652,13 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
       reg_interactions_ui(ns, input$fixed, types$fac)
     })
 
-    output$stratification_controls <- renderUI({
-      req(data())
-      render_stratification_controls(ns, data, input)
-    })
-
-    output$strata_order_ui <- renderUI({
-      render_strata_order_input(ns, data, input$stratify_var)
+    output$stratification_controls <- stratification_ui(ns("strat"))
+    output$advanced_options <- renderUI({
+      tags$details(
+        tags$summary(strong("Advanced options")),
+        br(),
+        uiOutput(ns("stratification_controls"))
+      )
     })
 
     selected_responses <- reactive({
@@ -5622,28 +5668,6 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
         req(input$dep)
         input$dep
       }
-    })
-
-    get_stratification_info <- reactive({
-      req(data())
-      strat_var <- input$stratify_var
-      if (is.null(strat_var) || identical(strat_var, "None")) return(NULL)
-
-      df <- data()
-      if (is.null(df[[strat_var]])) return(NULL)
-
-      available_levels <- unique(as.character(stats::na.omit(df[[strat_var]])))
-      if (length(available_levels) == 0) return(NULL)
-
-      selected_levels <- input$strata_order
-      if (!is.null(selected_levels) && length(selected_levels) > 0) {
-        strata_levels <- selected_levels[selected_levels %in% available_levels]
-        if (length(strata_levels) == 0) strata_levels <- available_levels
-      } else {
-        strata_levels <- available_levels
-      }
-
-      list(var = strat_var, levels = strata_levels)
     })
 
     output$formula_preview <- renderUI({
@@ -5664,12 +5688,6 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
       df <- data()
       responses <- selected_responses()
       req(length(responses) > 0)
-      
-      # ---- Validate stratification complexity ----
-      strat_var <- input$stratify_var
-      if (!guard_stratification_levels(df, strat_var)) {
-        return(NULL)
-      }
 
       rhs <- reg_compose_rhs(
         input$fixed,
@@ -5679,7 +5697,7 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
         engine = engine
       )
 
-      strat_info <- get_stratification_info()
+      strat_details <- strat_info()
       safe_fit <- purrr::safely(reg_fit_model)
 
       fits <- list()
@@ -5692,7 +5710,7 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
       primary_error <- NULL
 
       for (resp in responses) {
-        if (is.null(strat_info)) {
+        if (is.null(strat_details$var)) {
           result <- safe_fit(resp, rhs, df, engine = engine)
           entry <- list(
             stratified = FALSE,
@@ -5723,8 +5741,8 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
           strata_entries <- list()
           successful_strata <- list()
 
-          for (level in strat_info$levels) {
-            subset_data <- df[df[[strat_info$var]] == level, , drop = FALSE]
+          for (level in strat_details$levels) {
+            subset_data <- df[df[[strat_details$var]] == level, , drop = FALSE]
             if (nrow(subset_data) == 0) {
               msg <- paste0("No observations available for stratum '", level, "'.")
               strata_entries[[length(strata_entries) + 1]] <- list(
@@ -5803,7 +5821,7 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
         error = primary_error,
         rhs = rhs,
         allow_multi = allow_multi_response,
-        stratification = strat_info
+        stratification = strat_details
       )
     })
 
@@ -6383,6 +6401,157 @@ format_regression_table <- function(df, bold_p = TRUE) {
   ft <- padding(ft, padding.top = 2, padding.bottom = 2, padding.left = 2, padding.right = 2)
   ft
 }# ===============================================================
+# 🧭 Stratification helpers (shared across analysis modules)
+# ===============================================================
+
+STRAT_CHOOSE_LABEL <- "Stratify by:"
+STRAT_NONE_LABEL <- "None"
+STRAT_ORDER_LABEL <- "Order of levels (first = reference):"
+MAX_STRATIFICATION_LEVELS <- 10
+
+stratification_ui <- function(id, ns = NULL) {
+  ns_fn <- if (is.null(ns)) {
+    NS(id)
+  } else if (is.function(ns)) {
+    function(x) ns(paste(id, x, sep = "-"))
+  } else {
+    NS(id)
+  }
+  
+  shiny::renderUI({
+    shiny::tagList(
+      shiny::uiOutput(ns_fn("stratify_var_ui")),
+      shiny::uiOutput(ns_fn("strata_order_ui"))
+    )
+  })
+}
+
+
+stratification_server <- function(id, data) {
+  moduleServer(id, function(input, output, session) {
+    
+    # ---- Resolve reactive or static data frame ----
+    resolved_data <- reactive({
+      if (is.function(data)) data() else data
+    })
+    
+    # ---- UI for selecting stratification variable ----
+    output$stratify_var_ui <- shiny::renderUI({
+      df <- resolved_data()
+      
+      choices <- STRAT_NONE_LABEL
+      if (is.data.frame(df) && ncol(df) > 0) {
+        cat_cols <- names(df)[vapply(df, function(x) is.character(x) || is.factor(x), logical(1))]
+        cat_cols <- setdiff(unique(cat_cols), STRAT_NONE_LABEL)
+        if (length(cat_cols) > 0) {
+          choices <- c(STRAT_NONE_LABEL, cat_cols)
+        }
+      }
+      
+      current <- isolate(input$stratify_var)
+      if (is.null(current) || !(current %in% choices)) {
+        current <- STRAT_NONE_LABEL
+      }
+      
+      shiny::selectInput(
+        session$ns("stratify_var"),
+        STRAT_CHOOSE_LABEL,
+        choices = choices,
+        selected = current
+      )
+    })
+    
+    
+    # ---- Reactive containing selected variable + levels ----
+    strat_details <- reactive({
+      df <- resolved_data()
+      if (is.null(df) || !is.data.frame(df) || nrow(df) == 0) {
+        return(list(var = NULL, levels = NULL, available_levels = NULL))
+      }
+      
+      strat_var <- input$stratify_var
+      if (is.null(strat_var) || identical(strat_var, STRAT_NONE_LABEL) ||
+          !nzchar(strat_var) || !(strat_var %in% names(df))) {
+        return(list(var = NULL, levels = NULL, available_levels = NULL))
+      }
+      
+      # ---- Inline guard_stratification_levels ----
+      values <- df[[strat_var]]
+      values <- values[!is.na(values)]
+      n_levels <- length(unique(as.character(values)))
+      
+      if (n_levels > MAX_STRATIFICATION_LEVELS) {
+        msg <- sprintf(
+          "❌ Stratification variable '%s' has %d levels — please select one with at most %d.",
+          strat_var, n_levels, MAX_STRATIFICATION_LEVELS
+        )
+        shiny::showNotification(msg, type = "error", duration = 8)
+        shiny::updateSelectInput(session, "stratify_var", selected = STRAT_NONE_LABEL)
+        return(list(var = NULL, levels = NULL, available_levels = NULL))
+      }
+      
+      # ---- Extract available levels ----
+      if (is.factor(values)) {
+        available_levels <- levels(values)
+      } else {
+        available_levels <- unique(as.character(values))
+      }
+      
+      available_levels <- available_levels[!is.na(available_levels)]
+      
+      if (length(available_levels) == 0) {
+        return(list(var = strat_var, levels = character(0), available_levels = character(0)))
+      }
+      
+      selected_levels <- input$strata_order
+      if (!is.null(selected_levels) && length(selected_levels) > 0) {
+        selected_levels <- selected_levels[selected_levels %in% available_levels]
+      }
+      
+      if (is.null(selected_levels) || length(selected_levels) == 0) {
+        selected_levels <- available_levels
+      }
+      
+      list(
+        var = strat_var,
+        levels = selected_levels,
+        available_levels = available_levels
+      )
+    })
+    
+    
+    # ---- UI for level ordering ----
+    output$strata_order_ui <- shiny::renderUI({
+      details <- strat_details()
+      strat_var <- details$var
+      if (is.null(strat_var)) return(NULL)
+      
+      available_levels <- details$available_levels
+      if (is.null(available_levels) || length(available_levels) == 0) return(NULL)
+      
+      selected_levels <- details$levels
+      if (is.null(selected_levels) || length(selected_levels) == 0) {
+        selected_levels <- available_levels
+      }
+      
+      shiny::selectInput(
+        session$ns("strata_order"),
+        STRAT_ORDER_LABEL,
+        choices = available_levels,
+        selected = selected_levels,
+        multiple = TRUE
+      )
+    })
+    
+    
+    # ---- Output unified reactive for all modules ----
+    reactive({
+      details <- strat_details()
+      list(var = details$var, levels = details$levels)
+    })
+  })
+}
+# ===============================================================
 # 🔁 Shared utilities for multiple-response models
 # ===============================================================
 
@@ -6420,114 +6589,3 @@ get_selected_responses <- function(input) {
   if (!isTRUE(input$multi_resp)) responses <- responses[1]
   unique(responses)
 }
-# ===============================================================
-# 🧭 Stratification helpers (shared across analysis modules)
-# ===============================================================
-
-# -- Utility to resolve either a reactive expression or raw data frame
-.resolve_data <- function(data) {
-  if (is.function(data)) data() else data
-}
-
-MAX_STRATIFICATION_LEVELS <- 10
-
-guard_stratification_levels <- function(data, stratify_var,
-                                        max_levels = MAX_STRATIFICATION_LEVELS,
-                                        session = shiny::getDefaultReactiveDomain(),
-                                        notify = TRUE) {
-  if (is.null(stratify_var) || identical(stratify_var, "None") || identical(stratify_var, "")) {
-    return(TRUE)
-  }
-
-  df <- .resolve_data(data)
-  if (is.null(df) || !is.data.frame(df) || !(stratify_var %in% names(df))) {
-    return(TRUE)
-  }
-
-  values <- df[[stratify_var]]
-  values <- values[!is.na(values)]
-  n_levels <- length(unique(as.character(values)))
-
-  if (n_levels <= max_levels) {
-    return(TRUE)
-  }
-
-  message <- paste0(
-    "❌ Stratification variable '", stratify_var,
-    "' has ", n_levels,
-    " levels — please select a variable with at most ", max_levels, "."
-  )
-
-  if (isTRUE(notify) && !is.null(session)) {
-    shiny::showNotification(message, type = "error", duration = 8)
-  }
-
-  FALSE
-}
-
-# ---------------------------------------------------------------
-# Stratification options panel (select strat variable + placeholder for order)
-# ---------------------------------------------------------------
-render_stratification_controls <- function(ns, data, input,
-                                           section_title = "Advanced options",
-                                           stratify_label = "Stratify by:",
-                                           none_label = "None") {
-  df <- .resolve_data(data)
-  req(df)
-  
-  cat_cols <- names(df)[sapply(df, function(x) is.character(x) || is.factor(x))]
-  choices <- c(none_label, setdiff(unique(cat_cols), none_label))
-  
-  tags$details(
-    tags$summary(strong(section_title)),
-    selectInput(
-      ns("stratify_var"),
-      stratify_label,
-      choices = choices,
-      selected = none_label
-    ),
-    uiOutput(ns("strata_order_ui"))
-  )
-}
-
-# Backwards compat alias for ANOVA modules (legacy name)
-render_advanced_options <- render_stratification_controls
-
-# ---------------------------------------------------------------
-# Stratification order selector (shared across modules)
-# ---------------------------------------------------------------
-render_strata_order_input <- function(ns, data, strat_var,
-                                      input_id = "strata_order",
-                                      order_label = NULL) {
-  if (is.null(strat_var) || identical(strat_var, "None")) return(NULL)
-  
-  df <- .resolve_data(data)
-  if (is.null(df)) return(NULL)
-  if (nrow(df) == 0) return(NULL)
-  
-  values <- df[[strat_var]]
-  if (is.null(values)) return(NULL)
-  
-  if (is.factor(values)) {
-    strata_levels <- levels(values)
-  } else {
-    values <- values[!is.na(values)]
-    strata_levels <- unique(as.character(values))
-  }
-  
-  if (length(strata_levels) == 0) return(NULL)
-  
-  if (is.null(order_label)) {
-    order_label <- "Order of levels (first = reference):"
-  }
-  
-  selectInput(
-    ns(input_id),
-    order_label,
-    choices = strata_levels,
-    selected = strata_levels,
-    multiple = TRUE
-  )
-}
-
-
