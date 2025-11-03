@@ -8,7 +8,10 @@ pca_ui <- function(id) {
     config = tagList(
       selectInput(ns("vars"), "Numeric variables:", choices = NULL, multiple = TRUE),
       br(),
-      uiOutput(ns("advanced_options")),
+      tags$details(
+        tags$summary(strong(STRAT_SECTION_TITLE)),
+        stratification_ui("strat", ns)
+      ),
       br(),
       fluidRow(
         column(6, actionButton(ns("run_pca"), "Show PCA summary", width = "100%")),
@@ -33,13 +36,7 @@ pca_server <- function(id, filtered_data) {
       updateSelectInput(session, "vars", choices = num_vars, selected = num_vars)
     })
 
-    output$advanced_options <- renderUI({
-      render_stratification_controls(ns, df, input)
-    })
-
-    output$strata_order_ui <- renderUI({
-      render_strata_order_input(ns, df, input$stratify_var)
-    })
+    strat_info <- stratification_server("strat", df)
 
     run_pca_on_subset <- function(subset_data, selected_vars) {
       if (is.null(subset_data) || nrow(subset_data) == 0) {
@@ -87,28 +84,16 @@ pca_server <- function(id, filtered_data) {
       selected_vars <- intersect(input$vars, numeric_vars)
       validate(need(length(selected_vars) > 1, "Select at least two numeric variables for PCA."))
 
-      stratify_var <- input$stratify_var
-      if (is.null(stratify_var) || identical(stratify_var, "None") ||
-          !nzchar(stratify_var) || !(stratify_var %in% names(data))) {
-        stratify_var <- NULL
-      }
-
-      if (!is.null(stratify_var) && !guard_stratification_levels(data, stratify_var)) {
-        return(NULL)
-      }
-
-      strata_levels <- NULL
+      strat_details <- strat_info()
+      stratify_var <- strat_details$var
+      strata_levels <- strat_details$levels
       local_data <- data
 
       if (!is.null(stratify_var)) {
-        values <- local_data[[stratify_var]]
-        values <- values[!is.na(values)]
-        available_levels <- unique(as.character(values))
-
-        if (!is.null(input$strata_order) && length(input$strata_order) > 0) {
-          strata_levels <- input$strata_order[input$strata_order %in% available_levels]
-        } else {
-          strata_levels <- available_levels
+        if (is.null(strata_levels) || length(strata_levels) == 0) {
+          values <- local_data[[stratify_var]]
+          values <- values[!is.na(values)]
+          strata_levels <- unique(as.character(values))
         }
 
         strata_levels <- strata_levels[nzchar(strata_levels)]

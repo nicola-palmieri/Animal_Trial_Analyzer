@@ -9,7 +9,10 @@ two_way_anova_ui <- function(id) {
       uiOutput(ns("inputs")),
       uiOutput(ns("level_order_1")),
       uiOutput(ns("level_order_2")),
-      uiOutput(ns("advanced_options")),
+      tags$details(
+        tags$summary(strong(STRAT_SECTION_TITLE)),
+        stratification_ui("strat", ns)
+      ),
       br(),
       fluidRow(
         column(6, actionButton(ns("run"), "Show results", width = "100%")),
@@ -61,13 +64,7 @@ two_way_anova_server <- function(id, filtered_data) {
       render_response_selector(ns, df, input)
     })
     
-    output$advanced_options <- renderUI({
-      render_stratification_controls(ns, df, input)
-    })
-    
-    output$strata_order_ui <- renderUI({
-      render_strata_order_input(ns, df, input$stratify_var)
-    })
+    strat_info <- stratification_server("strat", df)
     
     # -----------------------------------------------------------
     # Level order selections
@@ -110,8 +107,7 @@ two_way_anova_server <- function(id, filtered_data) {
         factor1_order = input$order1,
         factor2_var = input$factor2,
         factor2_order = input$order2,
-        stratify_var = input$stratify_var,
-        strata_order = input$strata_order
+        stratification = strat_info()
       )
     })
     
