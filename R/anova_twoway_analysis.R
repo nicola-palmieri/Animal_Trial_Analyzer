@@ -9,7 +9,11 @@ two_way_anova_ui <- function(id) {
       uiOutput(ns("inputs")),
       uiOutput(ns("level_order_1")),
       uiOutput(ns("level_order_2")),
-      uiOutput(ns("advanced_options")),
+      tags$details(
+        tags$summary(strong("Advanced options")),
+        br(),
+        stratification_ui("strat", ns)
+      ),
       br(),
       fluidRow(
         column(6, actionButton(ns("run"), "Show results", width = "100%")),
@@ -61,14 +65,6 @@ two_way_anova_server <- function(id, filtered_data) {
       render_response_selector(ns, df, input)
     })
     
-    output$stratification_controls <- stratification_ui(ns("strat"))
-    output$advanced_options <- renderUI({
-      tags$details(
-        tags$summary(strong("Advanced options")),
-        br(),
-        uiOutput(ns("stratification_controls"))
-      )
-    })
     strat_info <- stratification_server("strat", df)
     
     # -----------------------------------------------------------

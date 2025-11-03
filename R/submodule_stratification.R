@@ -15,13 +15,11 @@ stratification_ui <- function(id, ns = NULL) {
   } else {
     NS(id)
   }
-  
-  shiny::renderUI({
-    shiny::tagList(
-      shiny::uiOutput(ns_fn("stratify_var_ui")),
-      shiny::uiOutput(ns_fn("strata_order_ui"))
-    )
-  })
+
+  shiny::tagList(
+    shiny::uiOutput(ns_fn("stratify_var_ui")),
+    shiny::uiOutput(ns_fn("strata_order_ui"))
+  )
 }
 
 
