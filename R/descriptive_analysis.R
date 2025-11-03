@@ -7,7 +7,11 @@ descriptive_ui <- function(id) {
   list(
     config = tagList(
       uiOutput(ns("inputs")),
-      uiOutput(ns("advanced_options")),
+      tags$details(
+        tags$summary(strong("Advanced options")),
+        br(),
+        stratification_ui("strat", ns)
+      ),
       br(),
       fluidRow(
         column(6, actionButton(ns("run"), "Show summary", width = "100%")),
@@ -42,14 +46,6 @@ descriptive_server <- function(id, filtered_data) {
       )
     })
     
-    output$stratification_controls <- stratification_ui(ns("strat"))
-    output$advanced_options <- renderUI({
-      tags$details(
-        tags$summary(strong("Advanced options")),
-        br(),
-        uiOutput(ns("stratification_controls"))
-      )
-    })
     strat_info <- stratification_server("strat", df)
     
     # ------------------------------------------------------------

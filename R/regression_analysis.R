@@ -15,7 +15,11 @@ regression_ui <- function(id, engine = c("lm", "lmm"), allow_multi_response = FA
       uiOutput(ns("covar_selector")),
       if (engine == "lmm") uiOutput(ns("random_selector")),
       uiOutput(ns("interaction_select")),
-      uiOutput(ns("advanced_options")),
+      tags$details(
+        tags$summary(strong("Advanced options")),
+        br(),
+        stratification_ui("strat", ns)
+      ),
       hr(),
       uiOutput(ns("formula_preview")),
       br(),
@@ -118,15 +122,6 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
       req(data())
       types <- reg_detect_types(data())
       reg_interactions_ui(ns, input$fixed, types$fac)
-    })
-
-    output$stratification_controls <- stratification_ui(ns("strat"))
-    output$advanced_options <- renderUI({
-      tags$details(
-        tags$summary(strong("Advanced options")),
-        br(),
-        uiOutput(ns("stratification_controls"))
-      )
     })
 
     selected_responses <- reactive({

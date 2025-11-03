@@ -8,7 +8,11 @@ ggpairs_ui <- function(id) {
     config = tagList(
       selectInput(ns("vars"), "Numeric variables:", choices = NULL, multiple = TRUE),
       br(),
-      uiOutput(ns("advanced_options")),
+      tags$details(
+        tags$summary(strong("Advanced options")),
+        br(),
+        stratification_ui("strat", ns)
+      ),
       br(),
       fluidRow(
         column(6, actionButton(ns("run"), "Show correlation matrix", width = "100%")),
@@ -27,14 +31,6 @@ ggpairs_server <- function(id, data_reactive) {
     ns <- session$ns
     df <- reactive(data_reactive())
 
-    output$stratification_controls <- stratification_ui(ns("strat"))
-    output$advanced_options <- renderUI({
-      tags$details(
-        tags$summary(strong("Advanced options")),
-        br(),
-        uiOutput(ns("stratification_controls"))
-      )
-    })
     strat_info <- stratification_server("strat", df)
 
     # ---- Update variable selector ----
