@@ -1,133 +1,183 @@
-# 🧪 Table Analyzer
+# 📊 Table Analyzer (R/Shiny)
 
-The **Table Analyzer** is a Shiny dashboard that guides veterinary teams from raw monitoring spreadsheets to exploratory statistics, downloadable model summaries, and publication-ready visualisations. The code in this repository reflects the current production app and is ready to run locally in R.
+Table Analyzer is a modular R/Shiny application for end‑to‑end data analysis and visualization. It emphasizes **modern statistical practice** (e.g., PCA and **linear mixed models** instead of restrictive repeated‑measures ANOVA), enables **parallel analysis of multiple response variables**, supports **stratification** (analyze the same model within subgroups), and exports **publication‑ready tables and plots**.
+
+- **Why it’s useful**
+  - Uses **PCA** and **LMM** to model complex designs and correlations within experimental units.
+  - **Parallel responses**: fit the same design across many numeric outcomes at once.
+  - **Stratification**: automatically repeat analyses within selected subgroups (e.g., *Batch*, *Animal*, *Plate*).
+  - **Reproducible**: formulas are shown in‑app; level ordering and contrasts are explicit; downloadable Word tables with formatted p‑values.
+  - **Publication‑ready**: beautiful plots and journal‑style tables are one click away.
 
 ---
 
-## 📌 Project status
+## 🔧 Installation
 
-- **Maturity:** Stable for routine use in-house. Feature work is ongoing, but the current UI/UX mirrors the deployed tool.
-- **Deployment:** No hosted instance is shipped in this repository—run locally via `app.R` or publish to your own Shiny Server / Posit Connect deployment.
-- **Maintenance:** Issues and feature requests are handled on a rolling basis. Contributions are welcome through pull requests.
+```r
+# In R
+install.packages(c(
+  "shiny", "bslib", "dplyr", "tidyr", "ggplot2", "patchwork",
+  "DT", "GGally", "skimr", "emmeans", "lmerTest", "car",
+  "flextable", "officer", "zoo", "shinyjqui"
+  # ggrepel is used via ggrepel::geom_text_repel in the PCA plot; install if needed:
+  # "ggrepel"
+))
+
+# Run the app (repository root)
+shiny::runApp(".")
+```
+
+The app sources all module files from the `R/` directory at startup.
 
 ---
 
 ## 🚀 Quick start
 
-### Requirements
-
-- R 4.2 or newer.
-- The CRAN packages loaded in [`app.R`](app.R): `bslib`, `dplyr`, `DT`, `flextable`, `GGally`, `ggplot2`, `lmerTest`, `officer`, `patchwork`, `shiny`, `shinyjqui`, `skimr`, and `tidyr`.
-
-Install any missing packages with:
-
-```r
-install.packages(c(
-  "bslib", "dplyr", "DT", "flextable", "GGally", "ggplot2", "lmerTest",
-  "officer", "patchwork", "shiny", "shinyjqui", "skimr", "tidyr"
-))
-```
-
-### Run the app locally
-
-1. Open the project in RStudio or start an R session in the repository root.
-2. Source `app.R` or click **Run App** in RStudio.
-3. Navigate the four guided tabs (`Upload → Filter → Analyze → Visualize`).
-
-Sample workbooks in [`data/`](data) demonstrate the expected long- and wide-format inputs.
+1. **Upload** a tidy table (CSV/TSV/Excel) or use the demo dataset.
+2. **Filter** rows and columns of interest.
+3. **Analyze** using:
+   - Descriptive Statistics
+   - One‑way ANOVA
+   - Two‑way ANOVA
+   - Linear Model (LM)
+   - Linear Mixed Model (LMM)
+   - Pairwise Correlation
+   - Principal Component Analysis (PCA)
+4. **Visualize** results (pairwise matrices, PCA biplots, descriptive plots).
+5. **Export**: Download results as text or as a Word (`.docx`) report with journal‑style tables.
 
 ---
 
-## 🧭 Guided workflow
+## 📂 Data expectations
 
-### 1️⃣ Upload
-
-- Supports Excel workbooks (`.xlsx`, `.xls`, `.xlsm`).
-- Provides templates for long and two-row wide layouts before you upload.
-- Displays a 5-row preview with detected column types so you can verify the import.
-
-### 2️⃣ Filter
-
-- Filter by any column (categorical, numeric, logical).
-- Apply range filters, include/exclude factor levels, and keep notes columns for context.
-- The filtered dataset is shared with every downstream analysis module.
-
-### 3️⃣ Analyze
-
-Select from the following analysis modules—each ships with bespoke configuration inputs and downloadable reports:
-
-| Module | Typical use case | Key outputs |
-| --- | --- | --- |
-| **Descriptive Statistics** | Quick cohort summaries before modelling | Flextable summary tables, missingness and distribution diagnostics |
-| **One-way ANOVA** | Compare one categorical factor | Type III ANOVA, Tukey post-hoc tests, per-response DOCX exports |
-| **Two-way ANOVA** | Factorial designs (e.g. treatment × time) | Type III ANOVA, interaction plots, combined DOCX exports |
-| **Linear Model (LM)** | Continuous covariates or additive fixed effects | Model summary, ANOVA table, diagnostic plots |
-| **Linear Mixed Model (LMM)** | Repeated measures or clustered designs | `lmerTest` fit, intraclass correlation, diagnostics, Word export |
-| **Pairwise Correlation** | Explore multivariate biomarker panels | `GGally::ggpairs` matrix with scatter, density, and correlation cells |
-| **Principal Component Analysis (PCA)** | Dimensionality reduction and outlier checks | Scree plots, loadings tables, biplots |
-
-Advanced options allow response batching, stratified analyses (up to 10 strata), manual factor ordering, and templated report downloads for each response/stratum combination.
-
-### 4️⃣ Visualize
-
-- Generates mean ± standard error plots that respect the selected model structure and strata.
-- Automatically adapts layout controls for ANOVA grids, correlation matrices, and PCA biplots.
-- Lets you override panel dimensions and grid arrangements before downloading high-resolution PNG files.
+- Numeric responses must be in numeric columns.
+- Categorical predictors (factors) should be factors or character columns.
+- Missing values are tolerated; modules handle complete‑case subsets where required.
+- **Stratification**: choose one factor (max ~10 levels recommended by the UI) to run the same analysis within each level.
 
 ---
 
-## 📋 Preparing your workbook
+## 🧭 Workflow & UI
 
-| Column | Purpose | Example |
-| --- | --- | --- |
-| `animal_id` | Unique identifier | `Cow-101` |
-| `treatment_group` | Allocation or protocol | `Vaccine A` |
-| `time_point` | Sampling moment | `Day 14` |
-| `outcome_measure` | Primary outcome | `EPG` |
-| Additional outcomes | Numeric measurements (e.g., FAMACHA, weight, serology) | `3.5` |
-| Optional notes | Clinical observations | `Mild swelling at injection site` |
-
-- **Long format:** one row per measurement, per animal, per time point.
-- **Wide format:** two header rows (outcome name + replicate); the app reshapes to long format for you.
-- Use consistent naming (underscores over spaces) and harmonise factor levels to avoid filtering mismatches.
+- **1️⃣ Upload**: choose example or upload your file; large uploads supported (max request size increases).
+- **2️⃣ Filter**: subset columns/rows interactively.
+- **3️⃣ Analyze**: pick an analysis type. Most modules support:
+  - **Multiple responses**: select several numeric columns at once.
+  - **Stratification**: run per‑level analyses (with order control).
+  - **Level order** controls ensure the factor reference level is explicit.
+- **4️⃣ Visualize**: dedicated plotting panels per analysis (pairwise correlation, PCA biplots, descriptive summaries).
+- **Downloads**: each module provides “Download all results” buttons (text or Word).
 
 ---
 
-## 📦 Outputs
+## 🧪 Methods (what the app runs under the hood)
 
-- **Word reports (`.docx`)** for every model tab, capturing statistical tables, diagnostics, and stratified summaries.
-- **PNG figures** sized according to your chosen layout (300 dpi by default) for inclusion in reports or presentations.
-- Auto-generated filenames include the analysis type, response variable, and date stamp for easy archiving.
+Below are the exact R functions/packages/parameters used by each analysis. This section is intended for peer reviewers and readers replicating your results.
+
+### Descriptive Statistics
+- **Summaries** computed with:
+  - `skimr::skim()` for a compact overview of variables (grouped by stratum when set).
+  - **Coefficient of Variation (CV %)** per numeric column: `100 * sd(x, na.rm=TRUE) / mean(x, na.rm=TRUE)` using `dplyr::summarise()`.
+  - **Outlier counts** per numeric column using the 1.5×IQR rule on quartiles from `stats::quantile()`.
+  - **Missingness (%)** per numeric column: `100 * mean(is.na(x))`.
+  - **Normality** via `stats::shapiro.test(x)$p.value` (computed per stratum when applicable).
+- **Outputs**: Printed text summary sections; downloadable text file.
+
+### Pairwise Correlation
+- Pairwise matrix plotted with **`GGally::ggpairs()`**:
+  - `upper = GGally::wrap("cor", size = 4, colour/color = <palette color>)`
+  - `lower = GGally::wrap("points", alpha = 0.6, size = 1.5, colour/color = <palette color>)`
+  - `diag  = GGally::wrap("densityDiag", fill = <palette color>, alpha = 0.4)`
+- Grid export with `ggplot2::ggsave(..., dpi = 300)`.
+
+### Principal Component Analysis (PCA)
+- Model: `stats::prcomp(X, center = TRUE, scale. = TRUE)` on complete rows of the selected numeric variables.
+- Printed outputs include `summary(prcomp_obj)`, **rotation** (loadings), and **explained variance** (%).
+- Visualization: a **biplot** built via `ggplot2` using the first two PCs; optional loadings as arrows with labels via `ggrepel::geom_text_repel`.
+- **Stratified PCA**: when a stratum is selected, the PCA is fit within each subgroup independently and reported per‑level.
+
+### One‑way ANOVA
+- Per‑response model: `stats::aov(y ~ group, data)`.
+- **Type‑III ANOVA table** for display/post‑hoc: `car::Anova(model, type = 3)` with contrasts temporarily set to sum‑to‑zero (`options(contrasts = c("contr.sum","contr.poly"))` during table prep).
+- **Post‑hoc** pairwise comparisons: `emmeans::emmeans(model, specs = "group")` + `emmeans::contrast(..., method = "revpairwise", adjust = "tukey")`.
+- **Stratification**: fits the same ANOVA within each selected stratum (level ordering is respected).
+
+### Two‑way ANOVA
+- Per‑response model: `stats::aov(y ~ A * B, data)` if both factors chosen (includes main effects and interaction). When only one factor is available, it reduces to one‑way.
+- **Type‑III ANOVA**: `car::Anova(model, type = 3)` with sum contrasts for interpretability of main effects in presence of interactions.
+- **Post‑hoc** for each factor via `emmeans` (Tukey‑adjusted, `revpairwise`).
+
+### Linear Model (LM)
+- Fit: `stats::lm(y ~ fixed + covariates + interactions, data)`.
+- **Type‑III** ANOVA for fixed effects: `car::Anova(model, type = 3)`.
+- Displayed outputs include `summary(model)` (coefficients) and the Type‑III table.
+- **Multiple responses** and **stratification** supported.
+
+### Linear Mixed Model (LMM)
+- Fit: `lmerTest::lmer(y ~ fixed + covariates + interactions + (1|Random), data)` (single random intercept via formula `(1|...)`).
+- **Type‑III** for fixed effects: `anova(model, type = 3)` (from `lmerTest`).
+- **Random‑effects variance** summary: `lme4::VarCorr(model)`.
+- **Intraclass Correlation (ICC)** reported from variance components: for each grouping factor, `ICC = var_random / (var_random + var_residual)`.
+- **Multiple responses** and **stratification** supported.
+
+> **Notes on contrasts and reference levels**
+>
+> - For ANOVA/LM displays, Type‑III tables are produced with **sum contrasts** to make main effects interpretable. Factor **level order** controls in the UI set the reference level (first level = reference).
 
 ---
 
-## 🛠 Troubleshooting & tips
+## 🖼️ Visualization modules
 
-| Issue | What to check | Suggested fix |
-| --- | --- | --- |
-| Upload fails | File is not Excel or is password protected | Save as `.xlsx` without protection and retry |
-| Columns missing | Header spelling differs or trailing spaces exist | Normalise headers (e.g., `janitor::clean_names()`) |
-| Filters remove all rows | Filters exclude every record | Reset filters or widen numeric bounds |
-| Model errors | Groups have too few observations or random effects are singular | Simplify the model or collect more data per level |
-| Flat plots | Little variation in the selected outcome | Verify data entry or consider transformations |
-
-- Pair quantitative outputs with clinical notes to interpret biological relevance.
-- Confirm random-effect identifiers (e.g., `animal_id`) match the true grouping structure before running LMMs.
-- Save exported documents to your case management system for audit trails.
+- **Pairwise correlation**: scatter/density/correlation panels (see above).
+- **PCA biplot**: points colored/shaped/labeled by selected categorical variables; optional loadings arrows and labels; adjustable plot size; multi‑panel layout for stratified results.
+- **Descriptive plots**: categorical barplots, numeric histograms/densities, boxplots, CV %, outlier counts, and missingness % views; layouts composed using `patchwork::wrap_plots`.
 
 ---
 
-## 🤝 Contributing
+## 🧾 Reporting & Export
 
-1. Fork the repository and create a feature branch.
-2. Update or add tests if you modify analysis logic.
-3. Open a pull request describing the change and attach screenshots when altering UI elements.
+- **Text outputs**: Each module provides a “Download all results” text file (e.g., combined ANOVA tables, PCA summaries).
+- **Word reports (`.docx`)** for LM/LMM:
+  - Built with **`officer` + `flextable`** (journal style; bold p‑values; auto‑fit width).
+  - Sections include **Type‑III ANOVA**, **Model coefficients**, **Random‑effects & ICC** (for LMM), and a footer indicating generation date.
+  - Example call in code path: `write_lm_docx(model, file, subtitle = "Stratum: ...")`.
 
 ---
 
-## 💬 Support
+## ✳️ Reproducibility checklist
 
-Open an issue if you encounter bugs or would like to propose enhancements. For deployment questions, mention your target environment (e.g., Shiny Server, Posit Connect) so we can point you toward the relevant configuration notes.
+- **Model formulas** are printed in the UI (`y ~ ...`).  
+- **Factor level order** is explicitly selectable and used in modeling.  
+- **Contrasts** for Type‑III tables use sum‑to‑zero during table preparation.  
+- **Stratification** repeats the entire workflow within each selected level.  
+- **Multiple responses**: identical design is fit across all chosen numeric outcomes.  
+- **Downloadables** include all the summaries/tables needed for peer review.
 
-Thank you for using the **Animal Trial Analyzer** to support evidence-based animal health decisions!
+---
 
+## 🧪 Citing the app
+
+If you use Table Analyzer in your work, please cite the repository URL in your Methods and provide the exact module names you used (e.g., “Linear Mixed Model with (1|Animal) random intercept; Type‑III ANOVA; Tukey‑adjusted pairwise contrasts via `emmeans`”).
+
+**Example**:
+> Analyses were performed in Table Analyzer (R/Shiny app, v\<commit\>) using:
+> PCA (`prcomp`, centered & scaled), One‑way ANOVA (`aov` with Type‑III from `car` and Tukey contrasts via `emmeans`), Linear Mixed Models (`lmerTest::lmer` with (1|Subject) random intercept and Type‑III tests), and pairwise correlation (`GGally::ggpairs`).
+
+---
+
+## 📦 Packages
+
+Core packages: `shiny`, `bslib`, `dplyr`, `tidyr`, `ggplot2`, `patchwork`, `DT`, `GGally`, `skimr`, `emmeans`, `lmerTest`, `car`, `flextable`, `officer`, `zoo`, `shinyjqui`  
+Optional: `ggrepel` (loadings labels in PCA biplot via namespaced call).
+
+---
+
+## 📝 License
+
+MIT (or fill in your project’s license).
+
+---
+
+## 🙏 Acknowledgments
+
+Built by the Table Analyzer team. Inspired by best practices for transparent statistical reporting and reproducible research.
