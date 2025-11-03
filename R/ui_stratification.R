@@ -44,68 +44,134 @@ guard_stratification_levels <- function(data, stratify_var,
 }
 
 # ---------------------------------------------------------------
-# Stratification options panel (select strat variable + placeholder for order)
+# Stratification UI module (select + order controls)
 # ---------------------------------------------------------------
-render_stratification_controls <- function(ns, data, input,
-                                           section_title = "Advanced options",
-                                           stratify_label = "Stratify by:",
-                                           none_label = "None") {
-  df <- .resolve_data(data)
-  req(df)
-  
-  cat_cols <- names(df)[sapply(df, function(x) is.character(x) || is.factor(x))]
-  choices <- c(none_label, setdiff(unique(cat_cols), none_label))
-  
-  tags$details(
-    tags$summary(strong(section_title)),
-    selectInput(
-      ns("stratify_var"),
-      stratify_label,
-      choices = choices,
-      selected = none_label
-    ),
-    uiOutput(ns("strata_order_ui"))
-  )
-}
+STRAT_SECTION_TITLE <- "Advanced options"
+STRAT_CHOOSE_LABEL <- "Stratify by:"
+STRAT_NONE_LABEL <- "None"
+STRAT_ORDER_LABEL <- "Order of levels (first = reference):"
 
-# Backwards compat alias for ANOVA modules (legacy name)
-render_advanced_options <- render_stratification_controls
-
-# ---------------------------------------------------------------
-# Stratification order selector (shared across modules)
-# ---------------------------------------------------------------
-render_strata_order_input <- function(ns, data, strat_var,
-                                      input_id = "strata_order",
-                                      order_label = NULL) {
-  if (is.null(strat_var) || identical(strat_var, "None")) return(NULL)
-  
-  df <- .resolve_data(data)
-  if (is.null(df)) return(NULL)
-  if (nrow(df) == 0) return(NULL)
-  
-  values <- df[[strat_var]]
-  if (is.null(values)) return(NULL)
-  
-  if (is.factor(values)) {
-    strata_levels <- levels(values)
+stratification_ui <- function(id, ns = NULL) {
+  ns_fn <- if (is.null(ns)) {
+    NS(id)
+  } else if (is.function(ns)) {
+    function(x) ns(paste(id, x, sep = "-"))
   } else {
-    values <- values[!is.na(values)]
-    strata_levels <- unique(as.character(values))
+    NS(id)
   }
-  
-  if (length(strata_levels) == 0) return(NULL)
-  
-  if (is.null(order_label)) {
-    order_label <- "Order of levels (first = reference):"
-  }
-  
-  selectInput(
-    ns(input_id),
-    order_label,
-    choices = strata_levels,
-    selected = strata_levels,
-    multiple = TRUE
-  )
+
+  shiny::renderUI({
+    shiny::tagList(
+      shiny::uiOutput(ns_fn("stratify_var_ui")),
+      shiny::uiOutput(ns_fn("strata_order_ui"))
+    )
+  })
 }
 
+stratification_server <- function(id, data) {
+  moduleServer(id, function(input, output, session) {
+    resolved_data <- reactive({
+      .resolve_data(data)
+    })
+
+    output$stratify_var_ui <- shiny::renderUI({
+      df <- resolved_data()
+
+      choices <- STRAT_NONE_LABEL
+      if (is.data.frame(df) && ncol(df) > 0) {
+        cat_cols <- names(df)[vapply(df, function(x) is.character(x) || is.factor(x), logical(1))]
+        cat_cols <- setdiff(unique(cat_cols), STRAT_NONE_LABEL)
+        if (length(cat_cols) > 0) {
+          choices <- c(STRAT_NONE_LABEL, cat_cols)
+        }
+      }
+
+      current <- isolate(input$stratify_var)
+      if (is.null(current) || !(current %in% choices)) {
+        current <- STRAT_NONE_LABEL
+      }
+
+      shiny::selectInput(
+        session$ns("stratify_var"),
+        STRAT_CHOOSE_LABEL,
+        choices = choices,
+        selected = current
+      )
+    })
+
+    strat_details <- reactive({
+      df <- resolved_data()
+      if (is.null(df) || !is.data.frame(df) || nrow(df) == 0) {
+        return(list(var = NULL, levels = NULL, available_levels = NULL))
+      }
+
+      strat_var <- input$stratify_var
+      if (is.null(strat_var) || identical(strat_var, STRAT_NONE_LABEL) ||
+          !nzchar(strat_var) || !(strat_var %in% names(df))) {
+        return(list(var = NULL, levels = NULL, available_levels = NULL))
+      }
+
+      if (!guard_stratification_levels(df, strat_var, session = session)) {
+        shiny::updateSelectInput(session, "stratify_var", selected = STRAT_NONE_LABEL)
+        return(list(var = NULL, levels = NULL, available_levels = NULL))
+      }
+
+      values <- df[[strat_var]]
+      if (is.factor(values)) {
+        available_levels <- levels(values)
+      } else {
+        values <- values[!is.na(values)]
+        available_levels <- unique(as.character(values))
+      }
+
+      available_levels <- available_levels[!is.na(available_levels)]
+
+      if (length(available_levels) == 0) {
+        return(list(var = strat_var, levels = character(0), available_levels = character(0)))
+      }
+
+      selected_levels <- input$strata_order
+      if (!is.null(selected_levels) && length(selected_levels) > 0) {
+        selected_levels <- selected_levels[selected_levels %in% available_levels]
+      }
+
+      if (is.null(selected_levels) || length(selected_levels) == 0) {
+        selected_levels <- available_levels
+      }
+
+      list(
+        var = strat_var,
+        levels = selected_levels,
+        available_levels = available_levels
+      )
+    })
+
+    output$strata_order_ui <- shiny::renderUI({
+      details <- strat_details()
+      strat_var <- details$var
+      if (is.null(strat_var)) return(NULL)
+
+      available_levels <- details$available_levels
+      if (is.null(available_levels) || length(available_levels) == 0) return(NULL)
+
+      selected_levels <- details$levels
+      if (is.null(selected_levels) || length(selected_levels) == 0) {
+        selected_levels <- available_levels
+      }
+
+      shiny::selectInput(
+        session$ns("strata_order"),
+        STRAT_ORDER_LABEL,
+        choices = available_levels,
+        selected = selected_levels,
+        multiple = TRUE
+      )
+    })
+
+    reactive({
+      details <- strat_details()
+      list(var = details$var, levels = details$levels)
+    })
+  })
+}
 

@@ -54,13 +54,14 @@ one_way_anova_server <- function(id, filtered_data) {
       render_response_inputs(ns, df(), input)
     })
     
+    output$stratification_controls <- stratification_ui(ns("strat"))
     output$advanced_options <- renderUI({
-      render_stratification_controls(ns, df, input)
+      tags$details(
+        tags$summary(strong(STRAT_SECTION_TITLE)),
+        uiOutput(ns("stratification_controls"))
+      )
     })
-    
-    output$strata_order_ui <- renderUI({
-      render_strata_order_input(ns, df, input$stratify_var)
-    })
+    strat_info <- stratification_server("strat", df)
     
     # -----------------------------------------------------------
     # Level order selection
@@ -89,8 +90,7 @@ one_way_anova_server <- function(id, filtered_data) {
         model = "oneway_anova",
         factor1_var = input$group,
         factor1_order = input$order,
-        stratify_var = input$stratify_var,
-        strata_order = input$strata_order
+        stratification = strat_info()
       )
     })
     
