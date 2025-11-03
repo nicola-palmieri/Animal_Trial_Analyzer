@@ -1,6 +1,6 @@
 # 📊 Table Analyzer (R/Shiny)
 
-Table Analyzer is a modular R/Shiny application for end‑to‑end data analysis and visualization. It emphasizes **modern statistical practice** (e.g., PCA and **linear mixed models** instead of restrictive repeated‑measures ANOVA), enables **parallel analysis of multiple response variables**, supports **stratification** (analyze the same model within subgroups), and exports **publication‑ready tables and plots**.
+Table Analyzer is a modular R/Shiny application for end‑to‑end data analysis and visualization. It emphasizes **modern statistical practice** (e.g., **PCA** and **linear mixed models**), enables **parallel analysis of multiple response variables**, supports **stratification** (analyze the same model within subgroups), and exports **publication‑ready tables and plots**.
 
 - **Why it’s useful**
   - Uses **PCA** and **LMM** to model complex designs and correlations within experimental units.
