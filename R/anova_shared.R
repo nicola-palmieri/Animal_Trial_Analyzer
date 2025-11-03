@@ -90,10 +90,20 @@ prepare_stratified_anova <- function(
     factor1_order = NULL,
     factor2_var = NULL,
     factor2_order = NULL,
+    stratification = NULL,
     stratify_var = NULL,
     strata_order = NULL
 ) {
   req(df, responses, model)
+
+  if (!is.null(stratification)) {
+    if (!is.null(stratification$var)) {
+      stratify_var <- stratification$var
+    }
+    if (!is.null(stratification$levels)) {
+      strata_order <- stratification$levels
+    }
+  }
   
   if (!is.null(factor1_var) && !is.null(factor1_order)) {
     df[[factor1_var]] <- factor(as.character(df[[factor1_var]]), levels = factor1_order)

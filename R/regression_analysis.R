@@ -36,6 +36,7 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
 
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
+    strat_info <- stratification_server("strat", data)
 
     output$response_ui <- renderUI({
       req(data())
@@ -119,14 +120,7 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
       reg_interactions_ui(ns, input$fixed, types$fac)
     })
 
-    output$stratification_controls <- renderUI({
-      req(data())
-      render_stratification_controls(ns, data, input)
-    })
-
-    output$strata_order_ui <- renderUI({
-      render_strata_order_input(ns, data, input$stratify_var)
-    })
+    output$stratification_controls <- stratification_ui(ns("strat"))
 
     selected_responses <- reactive({
       if (allow_multi_response) {
@@ -135,28 +129,6 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
         req(input$dep)
         input$dep
       }
-    })
-
-    get_stratification_info <- reactive({
-      req(data())
-      strat_var <- input$stratify_var
-      if (is.null(strat_var) || identical(strat_var, "None")) return(NULL)
-
-      df <- data()
-      if (is.null(df[[strat_var]])) return(NULL)
-
-      available_levels <- unique(as.character(stats::na.omit(df[[strat_var]])))
-      if (length(available_levels) == 0) return(NULL)
-
-      selected_levels <- input$strata_order
-      if (!is.null(selected_levels) && length(selected_levels) > 0) {
-        strata_levels <- selected_levels[selected_levels %in% available_levels]
-        if (length(strata_levels) == 0) strata_levels <- available_levels
-      } else {
-        strata_levels <- available_levels
-      }
-
-      list(var = strat_var, levels = strata_levels)
     })
 
     output$formula_preview <- renderUI({
@@ -177,12 +149,6 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
       df <- data()
       responses <- selected_responses()
       req(length(responses) > 0)
-      
-      # ---- Validate stratification complexity ----
-      strat_var <- input$stratify_var
-      if (!guard_stratification_levels(df, strat_var)) {
-        return(NULL)
-      }
 
       rhs <- reg_compose_rhs(
         input$fixed,
@@ -192,7 +158,7 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
         engine = engine
       )
 
-      strat_info <- get_stratification_info()
+      strat_details <- strat_info()
       safe_fit <- purrr::safely(reg_fit_model)
 
       fits <- list()
@@ -205,7 +171,7 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
       primary_error <- NULL
 
       for (resp in responses) {
-        if (is.null(strat_info)) {
+        if (is.null(strat_details$var)) {
           result <- safe_fit(resp, rhs, df, engine = engine)
           entry <- list(
             stratified = FALSE,
@@ -236,8 +202,8 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
           strata_entries <- list()
           successful_strata <- list()
 
-          for (level in strat_info$levels) {
-            subset_data <- df[df[[strat_info$var]] == level, , drop = FALSE]
+          for (level in strat_details$levels) {
+            subset_data <- df[df[[strat_details$var]] == level, , drop = FALSE]
             if (nrow(subset_data) == 0) {
               msg <- paste0("No observations available for stratum '", level, "'.")
               strata_entries[[length(strata_entries) + 1]] <- list(
@@ -316,7 +282,7 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
         error = primary_error,
         rhs = rhs,
         allow_multi = allow_multi_response,
-        stratification = strat_info
+        stratification = strat_details
       )
     })
 
