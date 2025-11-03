@@ -57,70 +57,63 @@ analysis_server <- function(id, filtered_data) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     df <- reactive(filtered_data())
-    
-    # --- Submodule mapping ---
-    modules <- list(
-      "Descriptive Statistics" = list(id = "desc", ui = descriptive_ui, server = descriptive_server, type = "desc"),
-      "One-way ANOVA"          = list(id = "anova1", ui = one_way_anova_ui, server = one_way_anova_server, type = "anova1"),
-      "Two-way ANOVA"          = list(id = "anova2", ui = two_way_anova_ui, server = two_way_anova_server, type = "anova2"),
-      "Linear Model (LM)"      = list(id = "lm", ui = lm_ui, server = lm_server, type = "lm"),
-      "Linear Mixed Model (LMM)" = list(id = "lmm", ui = lmm_ui, server = lmm_server, type = "lmm"),
-      "Pairwise Correlation"   = list(id = "pairs", ui = ggpairs_ui, server = ggpairs_server, type = "pairs"),
-      "PCA"                    = list(id = "pca", ui = pca_ui, server = pca_server, type = "pca")
+
+    # --- Initialize all submodules once ---
+    handles <- list(
+      desc  = descriptive_server("desc", df),
+      anova1= one_way_anova_server("anova1", df),
+      anova2= two_way_anova_server("anova2", df),
+      lm    = lm_server("lm", df),
+      lmm   = lmm_server("lmm", df),
+      pairs = ggpairs_server("pairs", df),
+      pca   = pca_server("pca", df)
     )
-    
-    # --- Get current module definition ---
-    current_mod <- reactive({
-      req(input$analysis_type)
-      modules[[input$analysis_type]]
-    })
-    
-    # --- Render submodule UI ---
-    output$config_panel <- renderUI({
-      ui <- current_mod()$ui(ns(current_mod()$id))
-      req(ui$config)
-      ui$config
-    })
-    
-    output$results_panel <- renderUI({
-      ui <- current_mod()$ui(ns(current_mod()$id))
-      req(ui$results)
-      ui$results
-    })
-    
-    # --- Run submodule server and normalize its output ---
-    model_out <- reactiveVal(NULL)
-    
-    observeEvent(input$analysis_type, {
-      mod <- current_mod()
-      if (is.null(mod)) return(model_out(NULL))
-      
-      result <- tryCatch(
-        mod$server(mod$id, df),
-        error = function(e) NULL
+
+    # --- Helper to get current handle ---
+    current <- reactive({
+      switch(input$analysis_type,
+        "Descriptive Statistics" = handles$desc,
+        "One-way ANOVA"          = handles$anova1,
+        "Two-way ANOVA"          = handles$anova2,
+        "Linear Model (LM)"      = handles$lm,
+        "Linear Mixed Model (LMM)" = handles$lmm,
+        "Pairwise Correlation"   = handles$pairs,
+        "PCA"                    = handles$pca
       )
-      
-      if (is.null(result)) {
-        model_out(reactive({ list(type = mod$type, model = NULL) }))
-        return()
-      }
-      
-      if (is.reactive(result)) {
-        model_out(reactive({
-          val <- result()
-          if (is.list(val)) modifyList(list(type = mod$type), val)
-          else list(type = mod$type, model = val)
-        }))
-      } else if (is.list(result)) {
-        model_out(reactive({ modifyList(list(type = mod$type), result) }))
-      } else {
-        model_out(reactive({ list(type = mod$type, model = result) }))
-      }
-    }, ignoreNULL = FALSE)
-    
-    # --- Expose unified model output ---
+    })
+
+    # --- Render the right config and results panels ---
+    output$config_panel <- renderUI({
+      req(input$analysis_type)
+      mod_ui <- switch(input$analysis_type,
+        "Descriptive Statistics" = descriptive_ui(ns("desc")),
+        "One-way ANOVA"          = one_way_anova_ui(ns("anova1")),
+        "Two-way ANOVA"          = two_way_anova_ui(ns("anova2")),
+        "Linear Model (LM)"      = lm_ui(ns("lm")),
+        "Linear Mixed Model (LMM)" = lmm_ui(ns("lmm")),
+        "Pairwise Correlation"   = ggpairs_ui(ns("pairs")),
+        "PCA"                    = pca_ui(ns("pca"))
+      )
+      mod_ui$config
+    })
+
+    output$results_panel <- renderUI({
+      req(input$analysis_type)
+      mod_ui <- switch(input$analysis_type,
+        "Descriptive Statistics" = descriptive_ui(ns("desc")),
+        "One-way ANOVA"          = one_way_anova_ui(ns("anova1")),
+        "Two-way ANOVA"          = two_way_anova_ui(ns("anova2")),
+        "Linear Model (LM)"      = lm_ui(ns("lm")),
+        "Linear Mixed Model (LMM)" = lmm_ui(ns("lmm")),
+        "Pairwise Correlation"   = ggpairs_ui(ns("pairs")),
+        "PCA"                    = pca_ui(ns("pca"))
+      )
+      mod_ui$results
+    })
+
+    # --- Unified model output ---
     reactive({
-      res <- model_out()
+      res <- current()
       req(res)
       res()
     })

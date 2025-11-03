@@ -49,9 +49,9 @@ visualize_lm_server <- function(id, filtered_data, model_fit) {
     ns <- session$ns
     
     df  <- reactive(filtered_data())
-    mod <- reactive(model_fit())   # regression_server output (has fits/flat_models/attr(engine)) :contentReference[oaicite:6]{index=6}
+    mod <- reactive(model_fit())s
     
-    layout_state <- initialize_layout_state(input, session)  # shared layout mgmt :contentReference[oaicite:7]{index=7}
+    layout_state <- initialize_layout_state(input, session) 
     
     # ---- Extract first successful model and its terms ----
     primary_model <- reactive({
