@@ -37,14 +37,15 @@ one_way_anova_server <- function(id, filtered_data) {
     # -----------------------------------------------------------
     # Dynamic inputs
     # -----------------------------------------------------------
+    responses <- multi_response_server("response", df)
+
     output$inputs <- renderUI({
       req(df())
       data <- df()
-      num_cols <- names(data)[sapply(data, is.numeric)]
       cat_cols <- names(data)[sapply(data, function(x) is.character(x) || is.factor(x))]
-      
+
       tagList(
-        uiOutput(ns("response_inputs")),
+        multi_response_ui(ns("response")),
         selectInput(
           ns("group"),
           "Categorical predictor:",
@@ -52,10 +53,6 @@ one_way_anova_server <- function(id, filtered_data) {
           selected = if (length(cat_cols) > 0) cat_cols[1] else NULL
         )
       )
-    })
-    
-    output$response_inputs <- renderUI({
-      render_response_inputs(ns, df(), input)
     })
     
     strat_info <- stratification_server("strat", df)
@@ -79,11 +76,12 @@ one_way_anova_server <- function(id, filtered_data) {
     # Model fitting (via shared helper)
     # -----------------------------------------------------------
     models <- eventReactive(input$run, {
-      req(df(), input$response, input$group, input$order)
-      responses <- get_selected_responses(input)
+      req(df(), input$group, input$order)
+      resp_vals <- responses()
+      req(length(resp_vals) > 0)
       prepare_stratified_anova(
         df = df(),
-        responses = responses,
+        responses = resp_vals,
         model = "oneway_anova",
         factor1_var = input$group,
         factor1_order = input$order,

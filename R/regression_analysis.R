@@ -9,7 +9,7 @@ regression_ui <- function(id, engine = c("lm", "lmm"), allow_multi_response = FA
 
   list(
     config = tagList(
-      uiOutput(ns("response_ui")),
+      if (allow_multi_response) multi_response_ui(ns("response")) else uiOutput(ns("response_ui")),
       uiOutput(ns("fixed_selector")),
       uiOutput(ns("level_order")),
       uiOutput(ns("covar_selector")),
@@ -42,15 +42,20 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
     ns <- session$ns
     strat_info <- stratification_server("strat", data)
 
-    output$response_ui <- renderUI({
-      req(data())
-      if (allow_multi_response) {
-        render_response_inputs(ns, data, input)
-      } else {
+    if (allow_multi_response) {
+      selected_responses <- multi_response_server("response", data)
+    } else {
+      output$response_ui <- renderUI({
+        req(data())
         types <- reg_detect_types(data())
         selectInput(ns("dep"), "Response variable (numeric):", choices = types$num)
-      }
-    })
+      })
+
+      selected_responses <- reactive({
+        req(input$dep)
+        input$dep
+      })
+    }
 
     output$fixed_selector <- renderUI({
       req(data())
@@ -122,15 +127,6 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
       req(data())
       types <- reg_detect_types(data())
       reg_interactions_ui(ns, input$fixed, types$fac)
-    })
-
-    selected_responses <- reactive({
-      if (allow_multi_response) {
-        get_selected_responses(input)
-      } else {
-        req(input$dep)
-        input$dep
-      }
     })
 
     output$formula_preview <- renderUI({

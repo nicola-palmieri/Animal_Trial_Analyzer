@@ -38,14 +38,15 @@ two_way_anova_server <- function(id, filtered_data) {
     # -----------------------------------------------------------
     # Dynamic inputs
     # -----------------------------------------------------------
+    responses <- multi_response_server("response", df)
+
     output$inputs <- renderUI({
       req(df())
       data <- df()
       cat_cols <- names(data)[sapply(data, function(x) is.character(x) || is.factor(x))]
-      
+
       tagList(
-        checkboxInput(ns("multi_resp"), "Allow multiple response variables", value = FALSE),
-        uiOutput(ns("response_selector")),
+        multi_response_ui(ns("response")),
         selectInput(
           ns("factor1"),
           "Categorical predictor 1 (x-axis):",
@@ -59,10 +60,6 @@ two_way_anova_server <- function(id, filtered_data) {
           selected = if (length(cat_cols) > 1) cat_cols[2] else NULL
         )
       )
-    })
-    
-    output$response_selector <- renderUI({
-      render_response_selector(ns, df, input)
     })
     
     strat_info <- stratification_server("strat", df)
@@ -98,11 +95,12 @@ two_way_anova_server <- function(id, filtered_data) {
     # Model fitting (via shared helper)
     # -----------------------------------------------------------
     models <- eventReactive(input$run, {
-      req(df(), input$response, input$factor1, input$order1, input$factor2, input$order2)
-      responses <- get_selected_responses(input)
+      req(df(), input$factor1, input$order1, input$factor2, input$order2)
+      resp_vals <- responses()
+      req(length(resp_vals) > 0)
       prepare_stratified_anova(
         df = df(),
-        responses = responses,
+        responses = resp_vals,
         model = "twoway_anova",
         factor1_var = input$factor1,
         factor1_order = input$order1,

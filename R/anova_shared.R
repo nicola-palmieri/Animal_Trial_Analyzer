@@ -339,30 +339,6 @@ bind_single_model_outputs <- function(output, summary_id, download_id,
   )
 }
 
-render_response_selector <- function(ns, df, input) {
-  req(df())
-  data <- df()
-  num_cols <- names(data)[sapply(data, is.numeric)]
-
-  if (isTRUE(input$multi_resp)) {
-    selectizeInput(
-      ns("response"),
-      "Response variables (numeric):",
-      choices = num_cols,
-      selected = head(num_cols, 1),
-      multiple = TRUE,
-      options = list(maxItems = 10)
-    )
-  } else {
-    selectInput(
-      ns("response"),
-      "Response variable (numeric):",
-      choices = num_cols,
-      selected = if (length(num_cols) > 0) num_cols[1] else NULL
-    )
-  }
-}
-
 render_anova_results <- function(ns, model_info, module_label = "ANOVA") {
   if (is.null(model_info)) return(NULL)
   
