@@ -123,7 +123,8 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
     output$stratification_controls <- stratification_ui(ns("strat"))
     output$advanced_options <- renderUI({
       tags$details(
-        tags$summary(strong(STRAT_SECTION_TITLE)),
+        tags$summary(strong("Advanced options")),
+        br(),
         uiOutput(ns("stratification_controls"))
       )
     })

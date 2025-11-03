@@ -36,7 +36,8 @@ pca_server <- function(id, filtered_data) {
     output$stratification_controls <- stratification_ui(ns("strat"))
     output$advanced_options <- renderUI({
       tags$details(
-        tags$summary(strong(STRAT_SECTION_TITLE)),
+        tags$summary(strong("Advanced options")),
+        br(),
         uiOutput(ns("stratification_controls"))
       )
     })

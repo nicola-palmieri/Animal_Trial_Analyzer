@@ -114,10 +114,6 @@ prepare_stratified_anova <- function(
   }
   
   if (!is.null(stratify_var) && stratify_var %in% names(df)) {
-    if (!guard_stratification_levels(df, stratify_var)) {
-      return(NULL)
-    }
-
     if (!is.null(strata_order) && length(strata_order) > 0) {
       df[[stratify_var]] <- factor(as.character(df[[stratify_var]]), levels = strata_order)
     } else {

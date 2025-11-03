@@ -5,6 +5,7 @@
 add_color_customization_ui <- function(ns, multi_group = TRUE) {
   tags$details(
     tags$summary(strong("Advanced options")),
+    br(),
     uiOutput(ns("color_custom_ui"))
   )
 }
