@@ -25,7 +25,7 @@ descriptive_server <- function(id, filtered_data) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     df <- filtered_data
-    
+
     # ------------------------------------------------------------
     # Dynamic inputs
     # ------------------------------------------------------------
@@ -42,16 +42,8 @@ descriptive_server <- function(id, filtered_data) {
       )
     })
     
-    output$advanced_options <- renderUI({
-      tagList(
-        render_stratification_controls(ns, df, input),
-        uiOutput(ns("strata_order_ui"))
-      )
-    })
-    
-    output$strata_order_ui <- renderUI({
-      render_strata_order_input(ns, df, input$stratify_var)
-    })
+    output$advanced_options <- stratification_ui(ns("strat"))
+    strat_info <- stratification_server("strat", df)
     
     # ------------------------------------------------------------
     # Summary computation
@@ -63,16 +55,13 @@ descriptive_server <- function(id, filtered_data) {
       selected_vars <- unique(c(input$cat_vars, input$num_vars))
       validate(need(length(selected_vars) > 0, "Please select at least one variable."))
 
-      group_var <- if (is.null(input$stratify_var) || input$stratify_var == "None") NULL else input$stratify_var
-      if (!guard_stratification_levels(raw_data, group_var)) {
-        return(NULL)
-      }
-
+      strat_details <- strat_info()
+      group_var <- strat_details$var
       data_columns <- selected_vars
 
       if (!is.null(group_var)) {
         # keep ONLY selected levels, in the exact order; drop NA and unused levels
-        sel <- input$strata_order
+        sel <- strat_details$levels
         if (!is.null(sel) && length(sel) > 0) {
           local_data <- dplyr::filter(local_data, .data[[group_var]] %in% sel)
           local_data[[group_var]] <- factor(as.character(local_data[[group_var]]), levels = sel)
@@ -87,13 +76,6 @@ descriptive_server <- function(id, filtered_data) {
       data_columns <- data_columns[!is.na(data_columns) & nzchar(data_columns)]
       data_columns <- intersect(data_columns, names(local_data))
       local_data <- local_data[, data_columns, drop = FALSE]
-
-      if (!is.null(group_var) && !is.null(input$strata_order)) {
-        if (group_var %in% names(local_data)) {
-          local_data[[group_var]] <- factor(as.character(local_data[[group_var]]),
-                                            levels = input$strata_order)
-        }
-      }
 
       strata_levels <- if (!is.null(group_var) && group_var %in% names(local_data)) {
         levels(local_data[[group_var]])

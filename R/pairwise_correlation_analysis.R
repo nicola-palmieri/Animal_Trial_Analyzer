@@ -27,13 +27,8 @@ ggpairs_server <- function(id, data_reactive) {
     ns <- session$ns
     df <- reactive(data_reactive())
 
-    output$advanced_options <- renderUI({
-      render_stratification_controls(ns, df, input)
-    })
-
-    output$strata_order_ui <- renderUI({
-      render_strata_order_input(ns, df, input$stratify_var)
-    })
+    output$advanced_options <- stratification_ui(ns("strat"))
+    strat_info <- stratification_server("strat", df)
 
     # ---- Update variable selector ----
     observe({
@@ -87,26 +82,21 @@ ggpairs_server <- function(id, data_reactive) {
         return()
       }
 
-      group_var <- input$stratify_var
-      if (is.null(group_var) || identical(group_var, "None") || identical(group_var, "")) {
-        group_var <- NULL
-      }
-
-      if (!is.null(group_var) && !guard_stratification_levels(data, group_var)) {
-        correlation_store(NULL)
-        return()
-      }
+      strat_details <- strat_info()
+      group_var <- strat_details$var
 
       strata_levels <- "Overall"
       if (!is.null(group_var) && group_var %in% names(data)) {
-        values <- data[[group_var]]
-        values <- values[!is.na(values)]
-        if (!is.null(input$strata_order) && length(input$strata_order) > 0) {
-          unique_values <- unique(as.character(values))
-          strata_levels <- input$strata_order[input$strata_order %in% unique_values]
-        } else {
+        levels <- strat_details$levels
+        if (is.null(levels) || length(levels) == 0) {
+          values <- data[[group_var]]
+          values <- values[!is.na(values)]
           strata_levels <- unique(as.character(values))
+        } else {
+          strata_levels <- levels
         }
+      } else {
+        group_var <- NULL
       }
 
       matrices <- list()
@@ -212,8 +202,14 @@ ggpairs_server <- function(id, data_reactive) {
       list(
         type = "pairwise_correlation",
         data = df,
-        group_var = reactive(input$stratify_var),
-        strata_order = reactive(input$strata_order),
+        group_var = reactive({
+          details <- strat_info()
+          details$var
+        }),
+        strata_order = reactive({
+          details <- strat_info()
+          details$levels
+        }),
         results = reactive(correlation_store())
       )
     })
