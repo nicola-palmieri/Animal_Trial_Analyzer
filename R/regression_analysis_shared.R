@@ -12,6 +12,22 @@ reg_detect_types <- function(df) {
   list(num = num_vars, fac = fac_vars)
 }
 
+#' Normalize a single-value selection coming from the UI.
+#'
+#' `selectInput()` controls sometimes return either `NULL`, `character(0)` or
+#' `""` when nothing is selected.  Using those values directly in `if`
+#' statements (e.g. `if (nzchar(x))`) triggers "missing value" warnings because
+#' `nzchar(character(0))` yields a length-0 logical vector.  This helper ensures
+#' the returned value is either a single non-empty string or `NULL`.
+reg_normalize_choice <- function(value) {
+  if (is.null(value)) return(NULL)
+  value <- value[!is.na(value)]
+  if (length(value) == 0) return(NULL)
+  value <- value[[1]]
+  if (!nzchar(value)) return(NULL)
+  value
+}
+
 reg_variable_selectors_ui <- function(ns, types, allow_random = FALSE) {
   out <- list(
     selectInput(ns("dep"), "Response variable (numeric):", choices = types$num),
@@ -50,7 +66,8 @@ reg_compose_rhs <- function(fixed, covar, interactions, random = NULL, engine = 
   if (!is.null(fixed) && length(fixed) > 0) rhs <- c(rhs, fixed)
   if (!is.null(covar) && length(covar) > 0) rhs <- c(rhs, covar)
   if (!is.null(interactions) && length(interactions) > 0) rhs <- c(rhs, interactions)
-  if (engine == "lmm" && !is.null(random) && nzchar(random)) {
+  random <- reg_normalize_choice(random)
+  if (engine == "lmm" && !is.null(random)) {
     rhs <- c(rhs, paste0("(1|", random, ")"))
   }
   rhs

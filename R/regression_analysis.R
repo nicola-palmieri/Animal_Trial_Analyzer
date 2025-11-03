@@ -37,6 +37,11 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
+    random_effect <- reactive({
+      if (engine != "lmm") return(NULL)
+      reg_normalize_choice(input$random)
+    })
+
     output$response_ui <- renderUI({
       req(data())
       if (allow_multi_response) {
@@ -64,8 +69,9 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
 
       df <- data()
       fac_vars <- input$fixed
-      if (engine == "lmm" && !is.null(input$random) && nzchar(input$random)) {
-        fac_vars <- unique(c(fac_vars, input$random))
+      rand <- random_effect()
+      if (!is.null(rand)) {
+        fac_vars <- unique(c(fac_vars, rand))
       }
 
       if (length(fac_vars) == 0) return(NULL)
@@ -166,7 +172,7 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
         input$fixed,
         input$covar,
         input$interactions,
-        if (engine == "lmm") input$random else NULL,
+        random_effect(),
         engine = engine
       )
       reg_formula_preview_ui(ns, responses[1], rhs)
@@ -188,7 +194,7 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
         input$fixed,
         input$covar,
         input$interactions,
-        if (engine == "lmm") input$random else NULL,
+        random_effect(),
         engine = engine
       )
 

@@ -9,11 +9,21 @@
 
 MAX_STRATIFICATION_LEVELS <- 10
 
+normalize_single_choice <- function(value) {
+  if (is.null(value)) return(NULL)
+  value <- value[!is.na(value)]
+  if (length(value) == 0) return(NULL)
+  value <- as.character(value[[1]])
+  if (!nzchar(value)) return(NULL)
+  value
+}
+
 guard_stratification_levels <- function(data, stratify_var,
                                         max_levels = MAX_STRATIFICATION_LEVELS,
                                         session = shiny::getDefaultReactiveDomain(),
                                         notify = TRUE) {
-  if (is.null(stratify_var) || identical(stratify_var, "None") || identical(stratify_var, "")) {
+  stratify_var <- normalize_single_choice(stratify_var)
+  if (is.null(stratify_var) || identical(stratify_var, "None")) {
     return(TRUE)
   }
 
@@ -77,6 +87,7 @@ render_advanced_options <- render_stratification_controls
 render_strata_order_input <- function(ns, data, strat_var,
                                       input_id = "strata_order",
                                       order_label = NULL) {
+  strat_var <- normalize_single_choice(strat_var)
   if (is.null(strat_var) || identical(strat_var, "None")) return(NULL)
   
   df <- .resolve_data(data)
