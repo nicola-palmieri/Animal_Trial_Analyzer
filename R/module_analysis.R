@@ -57,7 +57,7 @@ analysis_server <- function(id, filtered_data) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     df <- reactive(filtered_data())
-    
+
     # --- Submodule mapping ---
     modules <- list(
       "Descriptive Statistics" = list(id = "desc", ui = descriptive_ui, server = descriptive_server, type = "desc"),
@@ -68,61 +68,82 @@ analysis_server <- function(id, filtered_data) {
       "Pairwise Correlation"   = list(id = "pairs", ui = ggpairs_ui, server = ggpairs_server, type = "pairs"),
       "PCA"                    = list(id = "pca", ui = pca_ui, server = pca_server, type = "pca")
     )
-    
-    # --- Get current module definition ---
+
+    # --- Cache for lazily created module servers ---
+    server_cache <- reactiveValues()
+
+    # --- Current module helpers ---
     current_mod <- reactive({
-      req(input$analysis_type)
-      modules[[input$analysis_type]]
+      type <- input$analysis_type
+      if (is.null(type) || !nzchar(type)) {
+        return(NULL)
+      }
+      modules[[type]]
     })
-    
+
+    current_ui <- reactive({
+      mod <- current_mod()
+      req(mod)
+      mod$ui(ns(mod$id))
+    })
+
+    ensure_module_server <- function(mod) {
+      key <- mod$id
+      if (!is.null(server_cache[[key]])) {
+        return(server_cache[[key]])
+      }
+
+      mod_local <- mod
+      result <- tryCatch(
+        mod_local$server(mod_local$id, df),
+        error = function(e) NULL
+      )
+
+      cached <- NULL
+
+      if (is.null(result)) {
+        cached <- reactive({ list(type = mod_local$type, model = NULL) })
+      } else if (is.reactive(result)) {
+        result_reactive <- result
+        cached <- reactive({
+          val <- result_reactive()
+          if (is.list(val)) modifyList(list(type = mod_local$type), val)
+          else list(type = mod_local$type, model = val)
+        })
+      } else if (is.list(result)) {
+        result_list <- result
+        cached <- reactive({ modifyList(list(type = mod_local$type), result_list) })
+      } else {
+        result_value <- result
+        cached <- reactive({ list(type = mod_local$type, model = result_value) })
+      }
+
+      server_cache[[key]] <- cached
+      cached
+    }
+
     # --- Render submodule UI ---
     output$config_panel <- renderUI({
-      ui <- current_mod()$ui(ns(current_mod()$id))
+      ui <- current_ui()
       req(ui$config)
       ui$config
     })
-    
+
     output$results_panel <- renderUI({
-      ui <- current_mod()$ui(ns(current_mod()$id))
+      ui <- current_ui()
       req(ui$results)
       ui$results
     })
-    
-    # --- Run submodule server and normalize its output ---
-    model_out <- reactiveVal(NULL)
-    
-    observeEvent(input$analysis_type, {
-      mod <- current_mod()
-      if (is.null(mod)) return(model_out(NULL))
-      
-      result <- tryCatch(
-        mod$server(mod$id, df),
-        error = function(e) NULL
-      )
-      
-      if (is.null(result)) {
-        model_out(reactive({ list(type = mod$type, model = NULL) }))
-        return()
-      }
-      
-      if (is.reactive(result)) {
-        model_out(reactive({
-          val <- result()
-          if (is.list(val)) modifyList(list(type = mod$type), val)
-          else list(type = mod$type, model = val)
-        }))
-      } else if (is.list(result)) {
-        model_out(reactive({ modifyList(list(type = mod$type), result) }))
-      } else {
-        model_out(reactive({ list(type = mod$type, model = result) }))
-      }
-    }, ignoreNULL = FALSE)
-    
+
     # --- Expose unified model output ---
-    reactive({
-      res <- model_out()
-      req(res)
-      res()
+    model_out <- reactive({
+      mod <- current_mod()
+      req(mod)
+      cached <- ensure_module_server(mod)
+      req(cached)
+      cached()
     })
+
+    model_out
   })
 }
