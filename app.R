@@ -2,6 +2,7 @@
 # 🧪 Table Analyzer — Standalone App
 # ===============================================================
 
+
 library(bslib)
 library(dplyr)
 library(DT)
@@ -20,6 +21,8 @@ library(zoo)
 
 options(shiny.autoreload = TRUE)
 options(shiny.maxRequestSize = 200 * 1024^2)
+
+for (f in list.files("R", full.names = TRUE, pattern = "\\.R$")) source(f)
 
 # ---------------------------------------------------------------
 # UI
