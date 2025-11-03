@@ -63,12 +63,7 @@ stratification_ui <- function(id, ns = NULL) {
   shiny::renderUI({
     shiny::tags$details(
       shiny::tags$summary(shiny::strong(STRAT_SECTION_TITLE)),
-      shiny::selectInput(
-        ns_fn("stratify_var"),
-        STRAT_CHOOSE_LABEL,
-        choices = STRAT_NONE_LABEL,
-        selected = STRAT_NONE_LABEL
-      ),
+      shiny::uiOutput(ns_fn("stratify_var_ui")),
       shiny::uiOutput(ns_fn("strata_order_ui"))
     )
   })
@@ -80,29 +75,26 @@ stratification_server <- function(id, data) {
       .resolve_data(data)
     })
 
-    observe({
+    output$stratify_var_ui <- shiny::renderUI({
       df <- resolved_data()
-      if (is.null(df) || !is.data.frame(df)) {
-        shiny::updateSelectInput(
-          session,
-          "stratify_var",
-          choices = STRAT_NONE_LABEL,
-          selected = STRAT_NONE_LABEL
-        )
-        return()
-      }
 
-      cat_cols <- names(df)[vapply(df, function(x) is.character(x) || is.factor(x), logical(1))]
-      choices <- c(STRAT_NONE_LABEL, setdiff(unique(cat_cols), STRAT_NONE_LABEL))
+      choices <- STRAT_NONE_LABEL
+      if (is.data.frame(df) && ncol(df) > 0) {
+        cat_cols <- names(df)[vapply(df, function(x) is.character(x) || is.factor(x), logical(1))]
+        cat_cols <- setdiff(unique(cat_cols), STRAT_NONE_LABEL)
+        if (length(cat_cols) > 0) {
+          choices <- c(STRAT_NONE_LABEL, cat_cols)
+        }
+      }
 
       current <- isolate(input$stratify_var)
       if (is.null(current) || !(current %in% choices)) {
         current <- STRAT_NONE_LABEL
       }
 
-      shiny::updateSelectInput(
-        session,
-        "stratify_var",
+      shiny::selectInput(
+        session$ns("stratify_var"),
+        STRAT_CHOOSE_LABEL,
         choices = choices,
         selected = current
       )
