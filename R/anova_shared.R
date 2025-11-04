@@ -167,7 +167,8 @@ prepare_stratified_anova <- function(
       responses = responses,
       strata = NULL,
       factors = list(factor1 = factor1_var, factor2 = factor2_var),
-      orders = list(order1 = factor1_order, order2 = factor2_order)
+      orders = list(order1 = factor1_order, order2 = factor2_order),
+      data_used = df
     ))
   }
   
@@ -191,7 +192,8 @@ prepare_stratified_anova <- function(
     responses = responses,
     strata = list(var = stratify_var, levels = strata),
     factors = list(factor1 = factor1_var, factor2 = factor2_var),
-    orders = list(order1 = factor1_order, order2 = factor2_order)
+    orders = list(order1 = factor1_order, order2 = factor2_order),
+    data_used = df
   )
 }
 
@@ -277,6 +279,99 @@ prepare_anova_outputs <- function(model_obj, factor_names) {
     posthoc_details = posthoc_details,
     posthoc_table = posthoc_combined,
     posthoc_significant = posthoc_significant
+  )
+}
+
+# ---------------------------------------------------------------
+# Collate tidy summaries from ANOVA models
+# ---------------------------------------------------------------
+
+compile_anova_results <- function(model_info) {
+  if (is.null(model_info) || is.null(model_info$models)) return(NULL)
+
+  factor_names <- unlist(model_info$factors)
+  factor_names <- factor_names[!is.na(factor_names) & nzchar(factor_names)]
+
+  build_effects <- function(outputs) {
+    if (is.null(outputs) || is.null(outputs$anova_table)) return(NULL)
+    effects <- data.frame(
+      Effect = outputs$anova_table$Effect,
+      significant = outputs$anova_significant,
+      stringsAsFactors = FALSE
+    )
+    if ("p.value" %in% names(outputs$anova_table)) {
+      effects$p.value <- outputs$anova_table$p.value
+    }
+    effects
+  }
+
+  if (is.null(model_info$strata)) {
+    summary_list <- list()
+    posthoc_list <- list()
+    effects_list <- list()
+    errors_list <- list()
+
+    for (resp in names(model_info$models)) {
+      entry <- model_info$models[[resp]]
+      if (!is.null(entry$model)) {
+        outputs <- prepare_anova_outputs(entry$model, factor_names)
+        summary_list[[resp]] <- outputs$anova_table
+        posthoc_list[[resp]] <- outputs$posthoc_table
+        effects_list[[resp]] <- build_effects(outputs)
+      } else {
+        summary_list[[resp]] <- NULL
+        posthoc_list[[resp]] <- NULL
+        effects_list[[resp]] <- NULL
+      }
+      if (!is.null(entry$error)) {
+        errors_list[[resp]] <- entry$error
+      }
+    }
+
+    return(list(
+      summary = summary_list,
+      posthoc = posthoc_list,
+      effects = effects_list,
+      errors = errors_list
+    ))
+  }
+
+  summary_list <- list()
+  posthoc_list <- list()
+  effects_list <- list()
+  errors_list <- list()
+
+  for (stratum_name in names(model_info$models)) {
+    stratum_models <- model_info$models[[stratum_name]]
+    if (is.null(stratum_models)) next
+
+    for (resp in names(stratum_models)) {
+      entry <- stratum_models[[resp]]
+      outputs <- NULL
+      if (!is.null(entry$model)) {
+        outputs <- prepare_anova_outputs(entry$model, factor_names)
+      }
+
+      if (is.null(summary_list[[resp]])) summary_list[[resp]] <- list()
+      if (is.null(posthoc_list[[resp]])) posthoc_list[[resp]] <- list()
+      if (is.null(effects_list[[resp]])) effects_list[[resp]] <- list()
+      if (is.null(errors_list[[resp]])) errors_list[[resp]] <- list()
+
+      summary_list[[resp]][[stratum_name]] <- if (!is.null(outputs)) outputs$anova_table else NULL
+      posthoc_list[[resp]][[stratum_name]] <- if (!is.null(outputs)) outputs$posthoc_table else NULL
+      effects_list[[resp]][[stratum_name]] <- if (!is.null(outputs)) build_effects(outputs) else NULL
+
+      if (!is.null(entry$error)) {
+        errors_list[[resp]][[stratum_name]] <- entry$error
+      }
+    }
+  }
+
+  list(
+    summary = summary_list,
+    posthoc = posthoc_list,
+    effects = effects_list,
+    errors = errors_list
   )
 }
 

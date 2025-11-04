@@ -527,11 +527,73 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
       }
     )
 
-    return(reactive({
+    df_final <- reactive({
+      data()
+    })
+
+    model_fit <- reactive({
       mod <- models()
       if (is.null(mod)) return(NULL)
-      attr(mod, "engine") <- engine
-      mod
-    }))
+      mod$models
+    })
+
+    compiled_results <- reactive({
+      mod <- models()
+      if (is.null(mod)) return(NULL)
+      compile_regression_results(mod, engine)
+    })
+
+    summary_table <- reactive({
+      res <- compiled_results()
+      if (is.null(res)) return(NULL)
+      res$summary
+    })
+
+    effect_table <- reactive({
+      res <- compiled_results()
+      if (is.null(res)) return(NULL)
+      res$effects
+    })
+
+    error_table <- reactive({
+      res <- compiled_results()
+      if (is.null(res)) return(NULL)
+      res$errors
+    })
+
+    reactive({
+      mod <- models()
+      if (is.null(mod)) return(NULL)
+
+      data_used <- df_final()
+
+      list(
+        analysis_type = if (engine == "lm") "LM" else "LMM",
+        data_used = data_used,
+        model = model_fit(),
+        summary = summary_table(),
+        posthoc = NULL,
+        effects = effect_table(),
+        stats = if (!is.null(data_used)) list(n = nrow(data_used), vars = names(data_used)) else NULL,
+        metadata = list(
+          responses = mod$responses,
+          success_responses = mod$success_responses,
+          error_responses = mod$error_responses,
+          errors = mod$errors,
+          stratification = mod$stratification,
+          rhs = mod$rhs,
+          allow_multi = mod$allow_multi,
+          compiled_errors = error_table(),
+          flat_models = mod$flat_models,
+          engine = engine
+        ),
+        type = if (engine == "lm") "lm" else "lmm",
+        fits = mod$fits,
+        flat_models = mod$flat_models,
+        stratification = mod$stratification,
+        responses = mod$responses,
+        errors = mod$errors
+      )
+    })
   })
 }
