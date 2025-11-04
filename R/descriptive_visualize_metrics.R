@@ -297,18 +297,26 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
       }
     })
 
-    last_panels <- reactiveVal(NULL)
+    last_defaults <- reactiveVal(NULL)
 
     observeEvent(plot_details(), {
-      details <- isolate(plot_details())
+      details <- plot_details()
       if (is.null(details) || is.null(details$defaults)) return()
-      count <- details$panels
-      if (!identical(count, last_panels())) {
-        updateNumericInput(session, "resp_rows", value = details$defaults$rows)
-        updateNumericInput(session, "resp_cols", value = details$defaults$cols)
-        last_panels(count)
+
+      rows <- details$defaults$rows
+      cols <- details$defaults$cols
+      if (is.null(rows) || is.null(cols)) return()
+
+      panels <- details$panels
+      if (is.null(panels)) panels <- NA_integer_
+      signature <- paste(panels, rows, cols, sep = "x")
+
+      if (!identical(signature, last_defaults())) {
+        updateNumericInput(session, "resp_rows", value = rows)
+        updateNumericInput(session, "resp_cols", value = cols)
+        last_defaults(signature)
       }
-    }, ignoreNULL = TRUE)
+    }, ignoreNULL = FALSE)
 
     output$grid_warning <- renderUI({
       req(module_active())

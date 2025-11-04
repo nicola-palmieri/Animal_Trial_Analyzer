@@ -107,25 +107,45 @@ visualize_twoway_server <- function(id, filtered_data, model_fit) {
     last_counts <- reactiveValues(strata = NULL, responses = NULL)
 
     observeEvent(plot_info(), {
-      info <- isolate(plot_info())
+      info <- plot_info()
       if (is.null(info) || is.null(info$defaults) || is.null(info$layout)) {
         return()
       }
 
-      strata_panels <- info$layout$strata$panels
-      if (!is.null(info$defaults$strata) && !identical(strata_panels, last_counts$strata)) {
-        updateNumericInput(session, "strata_rows", value = info$defaults$strata$rows)
-        updateNumericInput(session, "strata_cols", value = info$defaults$strata$cols)
-        last_counts$strata <- strata_panels
+      if (!is.null(info$defaults$strata)) {
+        defaults <- info$defaults$strata
+        rows <- defaults$rows
+        cols <- defaults$cols
+        layout_info <- info$layout$strata
+        if (!is.null(rows) && !is.null(cols) && !is.null(layout_info)) {
+          panels <- layout_info$panels
+          if (is.null(panels)) panels <- NA_integer_
+          signature <- paste(panels, rows, cols, sep = "x")
+          if (!identical(signature, last_counts$strata)) {
+            updateNumericInput(session, "strata_rows", value = rows)
+            updateNumericInput(session, "strata_cols", value = cols)
+            last_counts$strata <- signature
+          }
+        }
       }
 
-      response_panels <- info$layout$responses$panels
-      if (!is.null(info$defaults$responses) && !identical(response_panels, last_counts$responses)) {
-        updateNumericInput(session, "resp_rows", value = info$defaults$responses$rows)
-        updateNumericInput(session, "resp_cols", value = info$defaults$responses$cols)
-        last_counts$responses <- response_panels
+      if (!is.null(info$defaults$responses)) {
+        defaults <- info$defaults$responses
+        rows <- defaults$rows
+        cols <- defaults$cols
+        layout_info <- info$layout$responses
+        if (!is.null(rows) && !is.null(cols) && !is.null(layout_info)) {
+          panels <- layout_info$panels
+          if (is.null(panels)) panels <- NA_integer_
+          signature <- paste(panels, rows, cols, sep = "x")
+          if (!identical(signature, last_counts$responses)) {
+            updateNumericInput(session, "resp_rows", value = rows)
+            updateNumericInput(session, "resp_cols", value = cols)
+            last_counts$responses <- signature
+          }
+        }
       }
-    }, ignoreNULL = TRUE)
+    }, ignoreNULL = FALSE)
     
     output$layout_controls <- renderUI({
       info <- model_info()

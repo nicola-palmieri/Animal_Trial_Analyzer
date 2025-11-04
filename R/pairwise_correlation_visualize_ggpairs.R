@@ -222,18 +222,26 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
       h
     })
 
-    last_panels <- reactiveVal(NULL)
+    last_defaults <- reactiveVal(NULL)
 
     observeEvent(plot_info(), {
-      info <- isolate(plot_info())
+      info <- plot_info()
       if (is.null(info) || is.null(info$defaults)) return()
-      count <- info$panels
-      if (!identical(count, last_panels())) {
-        updateNumericInput(session, "resp_rows", value = info$defaults$rows)
-        updateNumericInput(session, "resp_cols", value = info$defaults$cols)
-        last_panels(count)
+
+      rows <- info$defaults$rows
+      cols <- info$defaults$cols
+      if (is.null(rows) || is.null(cols)) return()
+
+      panels <- info$panels
+      if (is.null(panels)) panels <- NA_integer_
+      signature <- paste(panels, rows, cols, sep = "x")
+
+      if (!identical(signature, last_defaults())) {
+        updateNumericInput(session, "resp_rows", value = rows)
+        updateNumericInput(session, "resp_cols", value = cols)
+        last_defaults(signature)
       }
-    }, ignoreNULL = TRUE)
+    }, ignoreNULL = FALSE)
 
     output$download_plot <- downloadHandler(
       filename = function() paste0("pairwise_correlation_ggpairs_", Sys.Date(), ".png"),
