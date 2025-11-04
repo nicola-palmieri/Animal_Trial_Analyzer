@@ -22,6 +22,7 @@ visualize_ggpairs_ui <- function(id) {
     mainPanel(
       width = 8,
       h4("Plots"),
+      uiOutput(ns("plot_warning")),
       plotOutput(ns("plot"), height = "auto")
     )
   )
@@ -67,9 +68,22 @@ visualize_ggpairs_server <- function(id, filtered_data, model_fit) {
       active(handle)
     }, ignoreNULL = FALSE)
 
+    output$plot_warning <- renderUI({
+      h <- active()
+      if (is.null(h)) return(NULL)
+      warning_text <- h$warning()
+      if (!is.null(warning_text)) {
+        div(class = "alert alert-warning", HTML(warning_text))
+      } else {
+        NULL
+      }
+    })
+
     output$plot <- renderPlot({
       h <- active()
       req(h)
+      warning_text <- h$warning()
+      if (!is.null(warning_text)) return(NULL)
       plot_obj <- h$plot()
       validate(need(!is.null(plot_obj), "No plot available."))
       print(plot_obj)

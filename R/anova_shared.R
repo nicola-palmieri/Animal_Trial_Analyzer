@@ -15,7 +15,7 @@ build_anova_layout_controls <- function(ns, input, info) {
           numericInput(
             ns("strata_rows"),
             "Grid rows",
-            value = isolate(basic_grid_value(input$strata_rows, default = 1)),
+            value = isolate(if (is.null(input$strata_rows)) NA else input$strata_rows),
             min = 1,
             max = 10,
             step = 1
@@ -26,7 +26,7 @@ build_anova_layout_controls <- function(ns, input, info) {
           numericInput(
             ns("strata_cols"),
             "Grid columns",
-            value = isolate(basic_grid_value(input$strata_cols, default = 1)),
+            value = isolate(if (is.null(input$strata_cols)) NA else input$strata_cols),
             min = 1,
             max = 10,
             step = 1
@@ -47,7 +47,7 @@ build_anova_layout_controls <- function(ns, input, info) {
           numericInput(
             ns("resp_rows"),
             "Grid rows",
-            value = isolate(basic_grid_value(input$resp_rows, default = 1)),
+            value = isolate(if (is.null(input$resp_rows)) NA else input$resp_rows),
             min = 1,
             max = 10,
             step = 1
@@ -58,7 +58,7 @@ build_anova_layout_controls <- function(ns, input, info) {
           numericInput(
             ns("resp_cols"),
             "Grid columns",
-            value = isolate(basic_grid_value(input$resp_cols, default = 1)),
+            value = isolate(if (is.null(input$resp_cols)) NA else input$resp_cols),
             min = 1,
             max = 10,
             step = 1
@@ -712,14 +712,22 @@ build_anova_plot_info <- function(data, info, layout_values, line_colors = NULL)
   
   response_plots <- list()
 
-  fetch_grid_value <- function(name, default) {
-    basic_grid_value(layout_values[[name]], default = default)
-  }
+  layout_input <- list(
+    strata_rows = suppressWarnings(as.numeric(layout_values$strata_rows)),
+    strata_cols = suppressWarnings(as.numeric(layout_values$strata_cols)),
+    resp_rows   = suppressWarnings(as.numeric(layout_values$resp_rows)),
+    resp_cols   = suppressWarnings(as.numeric(layout_values$resp_cols))
+  )
 
-  strata_rows <- if (has_strata) fetch_grid_value("strata_rows", default = 1) else 1L
-  strata_cols <- if (has_strata) fetch_grid_value("strata_cols", default = 1) else 1L
-  resp_rows   <- fetch_grid_value("resp_rows", default = 1)
-  resp_cols   <- fetch_grid_value("resp_cols", default = 1)
+  n_expected_strata <- if (has_strata) max(1L, length(strata_levels)) else 1L
+  strata_defaults <- if (has_strata) compute_default_grid(n_expected_strata) else list(rows = 1L, cols = 1L)
+  strata_layout <- basic_grid_layout(
+    rows = layout_input$strata_rows,
+    cols = layout_input$strata_cols,
+    default_rows = strata_defaults$rows,
+    default_cols = strata_defaults$cols
+  )
+  strata_panel_count <- if (has_strata) 0L else 1L
   
   compute_stats <- function(df_subset, resp_name) {
     if (is.null(factor2)) {
@@ -820,16 +828,18 @@ build_anova_plot_info <- function(data, info, layout_values, line_colors = NULL)
       y_limits <- range(y_values, na.rm = TRUE)
       if (!all(is.finite(y_limits))) y_limits <- NULL
       
+      strata_panel_count <- max(strata_panel_count, length(stratum_plots))
+
       strata_plot_list <- lapply(names(stratum_plots), function(stratum_name) {
         build_plot(stratum_plots[[stratum_name]], stratum_name, y_limits)
       })
-      
+
       combined <- patchwork::wrap_plots(
         plotlist = strata_plot_list,
-        nrow = strata_rows,
-        ncol = strata_cols
+        nrow = strata_layout$nrow,
+        ncol = strata_layout$ncol
       )
-      
+
       title_plot <- ggplot() +
         theme_void() +
         ggtitle(resp) +
@@ -860,25 +870,70 @@ build_anova_plot_info <- function(data, info, layout_values, line_colors = NULL)
     return(NULL)
   }
 
-  final_plot <- if (length(response_plots) == 1) {
-    response_plots[[1]]
+  if (has_strata && strata_panel_count == 0L) {
+    strata_panel_count <- n_expected_strata
+  }
+
+  response_defaults <- compute_default_grid(length(response_plots))
+  response_layout <- basic_grid_layout(
+    rows = layout_input$resp_rows,
+    cols = layout_input$resp_cols,
+    default_rows = response_defaults$rows,
+    default_cols = response_defaults$cols
+  )
+
+  strata_validation <- if (has_strata) {
+    validate_grid(max(1L, strata_panel_count), strata_layout$nrow, strata_layout$ncol)
   } else {
-    patchwork::wrap_plots(
-      plotlist = response_plots,
-      nrow = resp_rows,
-      ncol = resp_cols
-    ) &
-      patchwork::plot_layout(guides = "collect")
+    list(valid = TRUE, message = NULL)
+  }
+
+  response_validation <- validate_grid(length(response_plots), response_layout$nrow, response_layout$ncol)
+
+  warnings <- c()
+  if (has_strata && !strata_validation$valid && !is.null(strata_validation$message)) {
+    warnings <- c(warnings, strata_validation$message)
+  }
+  if (!response_validation$valid && !is.null(response_validation$message)) {
+    warnings <- c(warnings, response_validation$message)
+  }
+  warning_text <- if (length(warnings) > 0) paste(warnings, collapse = "<br/>") else NULL
+
+  final_plot <- NULL
+  if (is.null(warning_text)) {
+    final_plot <- if (length(response_plots) == 1) {
+      response_plots[[1]]
+    } else {
+      patchwork::wrap_plots(
+        plotlist = response_plots,
+        nrow = response_layout$nrow,
+        ncol = response_layout$ncol
+      ) &
+        patchwork::plot_layout(guides = "collect")
+    }
   }
 
   list(
     plot = final_plot,
     layout = list(
-      strata = list(rows = strata_rows, cols = strata_cols),
-      responses = list(nrow = resp_rows, ncol = resp_cols)
+      strata = list(
+        rows = strata_layout$nrow,
+        cols = strata_layout$ncol,
+        panels = max(1L, strata_panel_count)
+      ),
+      responses = list(
+        nrow = response_layout$nrow,
+        ncol = response_layout$ncol,
+        panels = length(response_plots)
+      )
     ),
     has_strata = has_strata,
-    n_responses = length(response_plots)
+    n_responses = length(response_plots),
+    warning = warning_text,
+    defaults = list(
+      strata = strata_defaults,
+      responses = response_defaults
+    )
   )
 }
 

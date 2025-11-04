@@ -2,6 +2,40 @@
 # 🧱 Basic grid layout helpers
 # ===============================================================
 
+compute_default_grid <- function(n) {
+  n <- max(1L, as.integer(n))
+  rows <- ceiling(sqrt(n))
+  cols <- ceiling(n / rows)
+  list(rows = rows, cols = cols)
+}
+
+validate_grid <- function(n_items, rows, cols) {
+  n_items <- max(1L, as.integer(n_items))
+  rows <- max(1L, as.integer(rows))
+  cols <- max(1L, as.integer(cols))
+
+  too_small <- rows * cols < n_items
+  empty_row <- n_items <= (rows - 1L) * cols
+  empty_col <- n_items <= rows * (cols - 1L)
+  too_large <- (!too_small) && (empty_row || empty_col)
+
+  if (too_small) {
+    return(list(
+      valid = FALSE,
+      message = sprintf("⚠️ Grid %dx%d too small for %d subplots.", rows, cols, n_items)
+    ))
+  }
+
+  if (too_large) {
+    return(list(
+      valid = FALSE,
+      message = sprintf("⚠️ Grid %dx%d too large for %d subplots.", rows, cols, n_items)
+    ))
+  }
+
+  list(valid = TRUE, message = NULL)
+}
+
 basic_grid_value <- function(value,
                              default = 1L,
                              min_value = 1L,

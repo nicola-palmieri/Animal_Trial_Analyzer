@@ -16,7 +16,7 @@ visualize_categorical_barplots_ui <- function(id) {
         numericInput(
           ns("resp_rows"),
           "Grid rows",
-          value = 3,
+          value = NA,
           min = 1,
           max = 10,
           step = 1
@@ -27,7 +27,7 @@ visualize_categorical_barplots_ui <- function(id) {
         numericInput(
           ns("resp_cols"),
           "Grid columns",
-          value = 2,
+          value = NA,
           min = 1,
           max = 10,
           step = 1
@@ -44,6 +44,7 @@ visualize_categorical_barplots_plot_ui <- function(id) {
   ns <- NS(id)
   div(
     class = "ta-plot-container",
+    uiOutput(ns("grid_warning")),
     plotOutput(ns("plot"), width = "100%", height = "auto")
   )
 }
@@ -117,17 +118,14 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
       group_var     <- resolve_input_value(info$group_var)
       strata_levels <- resolve_input_value(info$strata_levels)
 
-      grid_rows <- basic_grid_value(input$resp_rows, default = 3)
-      grid_cols <- basic_grid_value(input$resp_cols, default = 2)
-
       out <- build_descriptive_categorical_plot(
         df = dat,
         selected_vars = selected_vars,
         group_var = group_var,
         strata_levels = strata_levels,
         show_proportions = isTRUE(input$show_proportions),
-        nrow_input = grid_rows,
-        ncol_input = grid_cols,
+        nrow_input = input$resp_rows,
+        ncol_input = input$resp_cols,
         fill_colors = custom_colors()
       )
       validate(need(!is.null(out), "No categorical variables available for plotting."))
@@ -147,13 +145,36 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
         )
       }
     })
-    
-    
+
+    last_panels <- reactiveVal(NULL)
+
+    observeEvent(plot_info(), {
+      info <- isolate(plot_info())
+      if (is.null(info) || is.null(info$defaults)) return()
+      count <- info$panels
+      if (!identical(count, last_panels())) {
+        updateNumericInput(session, "resp_rows", value = info$defaults$rows)
+        updateNumericInput(session, "resp_cols", value = info$defaults$cols)
+        last_panels(count)
+      }
+    }, ignoreNULL = TRUE)
+
+    output$grid_warning <- renderUI({
+      req(module_active())
+      info <- plot_info()
+      if (!is.null(info$warning)) {
+        div(class = "alert alert-warning", info$warning)
+      } else {
+        NULL
+      }
+    })
+
     output$download_plot <- downloadHandler(
       filename = function() paste0("categorical_barplots_", Sys.Date(), ".png"),
       content  = function(file) {
         req(module_active())
         info <- plot_info()
+        req(is.null(info$warning))
         req(info$plot)
         s <- plot_size()
         ggplot2::ggsave(
@@ -172,6 +193,7 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
     output$plot <- renderPlot({
       req(module_active())
       info <- plot_info()
+      if (!is.null(info$warning) || is.null(info$plot)) return(NULL)
       print(info$plot)
     },
     width = function() {
@@ -313,20 +335,32 @@ build_descriptive_categorical_plot <- function(df,
   plots <- Filter(Negate(is.null), plots)
   if (length(plots) == 0) return(NULL)
   
+  n_panels <- length(plots)
+  defaults <- compute_default_grid(n_panels)
+
   layout <- basic_grid_layout(
     rows = suppressWarnings(as.numeric(nrow_input)),
-    cols = suppressWarnings(as.numeric(ncol_input))
+    cols = suppressWarnings(as.numeric(ncol_input)),
+    default_rows = defaults$rows,
+    default_cols = defaults$cols
   )
 
-  combined <- patchwork::wrap_plots(plots, nrow = layout$nrow, ncol = layout$ncol) +
-    patchwork::plot_annotation(
-      theme = theme(plot.title = element_text(size = 16, face = "bold"))
-    )
-  
+  validation <- validate_grid(n_panels, layout$nrow, layout$ncol)
+
+  combined <- NULL
+  if (isTRUE(validation$valid)) {
+    combined <- patchwork::wrap_plots(plots, nrow = layout$nrow, ncol = layout$ncol) +
+      patchwork::plot_annotation(
+        theme = theme(plot.title = element_text(size = 16, face = "bold"))
+      )
+  }
+
   list(
     plot = combined,
     layout = list(nrow = layout$nrow, ncol = layout$ncol),
-    panels = length(plots)
+    panels = n_panels,
+    warning = validation$message,
+    defaults = defaults
   )
 }
 
