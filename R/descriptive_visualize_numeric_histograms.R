@@ -32,8 +32,6 @@ visualize_numeric_histograms_plot_ui <- function(id) {
 visualize_numeric_histograms_server <- function(id, filtered_data, summary_info, is_active = NULL) {
   moduleServer(id, function(input, output, session) {
 
-    layout_state <- initialize_layout_state(input, session)
-
     resolve_input_value <- function(x) {
       if (is.null(x)) return(NULL)
       if (is.reactive(x)) x() else x
@@ -72,39 +70,21 @@ visualize_numeric_histograms_server <- function(id, filtered_data, summary_info,
       strata_levels <- resolve_input_value(info$strata_levels)
       
       # --- Build histograms ---
+      grid_rows <- basic_grid_value(input$resp_rows, default = 2)
+      grid_cols <- basic_grid_value(input$resp_cols, default = 3)
+
       out <- build_descriptive_numeric_histogram(
         df = dat,
         selected_vars = selected_vars,
         group_var = group_var,
         strata_levels = strata_levels,
         use_density = isTRUE(input$use_density),
-        nrow_input = layout_state$effective_input("resp_rows"),
-        ncol_input = layout_state$effective_input("resp_cols")
+        nrow_input = grid_rows,
+        ncol_input = grid_cols
       )
       validate(need(!is.null(out), "No numeric variables available for plotting."))
-
-      n_panels <- if (is.null(out$panels)) 1L else max(1L, suppressWarnings(as.integer(out$panels)))
-      max_val <- 10L
-
-      layout_info <- out$layout
-      safe_rows <- if (!is.null(layout_info) && !is.null(layout_info$nrow) && is.finite(layout_info$nrow)) {
-        as.integer(layout_info$nrow)
-      } else {
-        min(max_val, max(1L, n_panels))
-      }
-
-      safe_cols <- if (!is.null(layout_info) && !is.null(layout_info$ncol) && is.finite(layout_info$ncol)) {
-        as.integer(layout_info$ncol)
-      } else {
-        min(max_val, max(1L, ceiling(n_panels / max(1L, safe_rows))))
-      }
-
-      out$layout <- list(nrow = safe_rows, ncol = safe_cols)
-      sync_grid_controls(layout_state, input, session, "resp_rows", "resp_cols", out$layout, max_value = max_val)
       out
     })
-
-    observe_layout_synchronization(plot_info, layout_state, session)
     
 
     plot_size <- reactive({
@@ -245,10 +225,9 @@ build_descriptive_numeric_histogram <- function(df,
   plots <- Filter(Negate(is.null), plots)
   if (length(plots) == 0) return(NULL)
   
-  layout <- resolve_grid_layout(
-    n_items = length(plots),
-    rows_input = suppressWarnings(as.numeric(nrow_input)),
-    cols_input = suppressWarnings(as.numeric(ncol_input))
+  layout <- basic_grid_layout(
+    rows = suppressWarnings(as.numeric(nrow_input)),
+    cols = suppressWarnings(as.numeric(ncol_input))
   )
   
   combined <- patchwork::wrap_plots(plots, nrow = layout$nrow, ncol = layout$ncol) +

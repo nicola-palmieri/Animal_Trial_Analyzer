@@ -52,8 +52,6 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
-    layout_state <- initialize_layout_state(input, session)
-
     resolve_input_value <- function(x) {
       if (is.null(x)) return(NULL)
       if (is.reactive(x)) x() else x
@@ -119,22 +117,22 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
       group_var     <- resolve_input_value(info$group_var)
       strata_levels <- resolve_input_value(info$strata_levels)
 
+      grid_rows <- basic_grid_value(input$resp_rows, default = 3)
+      grid_cols <- basic_grid_value(input$resp_cols, default = 2)
+
       out <- build_descriptive_categorical_plot(
         df = dat,
         selected_vars = selected_vars,
         group_var = group_var,
         strata_levels = strata_levels,
         show_proportions = isTRUE(input$show_proportions),
-        nrow_input = layout_state$effective_input("resp_rows"),
-        ncol_input = layout_state$effective_input("resp_cols"),
+        nrow_input = grid_rows,
+        ncol_input = grid_cols,
         fill_colors = custom_colors()
       )
       validate(need(!is.null(out), "No categorical variables available for plotting."))
-      sync_grid_controls(layout_state, input, session, "resp_rows", "resp_cols", out$layout)
       out
     })
-
-    observe_layout_synchronization(plot_info, layout_state, session)
 
     plot_size <- reactive({
       req(module_active())
@@ -315,13 +313,11 @@ build_descriptive_categorical_plot <- function(df,
   plots <- Filter(Negate(is.null), plots)
   if (length(plots) == 0) return(NULL)
   
-  # ✅ Use the common layout helper to arrange plots using the requested grid
-  layout <- resolve_grid_layout(
-    n_items   = length(plots),
-    rows_input = suppressWarnings(as.numeric(nrow_input)),
-    cols_input = suppressWarnings(as.numeric(ncol_input))
+  layout <- basic_grid_layout(
+    rows = suppressWarnings(as.numeric(nrow_input)),
+    cols = suppressWarnings(as.numeric(ncol_input))
   )
-  
+
   combined <- patchwork::wrap_plots(plots, nrow = layout$nrow, ncol = layout$ncol) +
     patchwork::plot_annotation(
       theme = theme(plot.title = element_text(size = 16, face = "bold"))

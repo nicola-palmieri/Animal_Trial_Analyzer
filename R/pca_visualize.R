@@ -116,7 +116,6 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
 
 visualize_pca_server <- function(id, filtered_data, model_fit) {
   moduleServer(id, function(input, output, session) {
-    layout_state <- initialize_layout_state(input, session)
     display_mode <- reactiveVal(NULL)
     # -- Reactives ------------------------------------------------------------
     model_info <- reactive({
@@ -193,7 +192,7 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
             numericInput(
               ns("strata_rows"),
               "Grid rows",
-              value = isolate(layout_state$default_ui_value(input$strata_rows)),
+              value = isolate(basic_grid_value(input$strata_rows, default = 1)),
               min = 1,
               max = 10,
               step = 1
@@ -204,7 +203,7 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
             numericInput(
               ns("strata_cols"),
               "Grid columns",
-              value = isolate(layout_state$default_ui_value(input$strata_cols)),
+              value = isolate(basic_grid_value(input$strata_cols, default = 1)),
               min = 1,
               max = 10,
               step = 1
@@ -382,10 +381,9 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
       plot_list <- Filter(Negate(is.null), plot_list)
       validate(need(length(plot_list) > 0, "No PCA plots available."))
 
-      layout <- resolve_grid_layout(
-        n_items = length(plot_list),
-        rows_input = layout_state$effective_input("strata_rows"),
-        cols_input = layout_state$effective_input("strata_cols")
+      layout <- basic_grid_layout(
+        rows = basic_grid_value(input$strata_rows, default = 1),
+        cols = basic_grid_value(input$strata_cols, default = 1)
       )
 
       combined <- patchwork::wrap_plots(
@@ -402,8 +400,6 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
       )
     })
 
-    observe_layout_synchronization(plot_info, layout_state, session)
-
     plot_size <- reactive({
       width <- suppressWarnings(as.numeric(input$plot_width))
       height <- suppressWarnings(as.numeric(input$plot_height))
@@ -417,42 +413,6 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
         w = subplot_w * max(1, layout$ncol),
         h = subplot_h * max(1, layout$nrow)
       )
-
-      combined <- patchwork::wrap_plots(
-        plotlist = plot_list,
-        nrow = layout$nrow,
-        ncol = layout$ncol
-      ) +
-        patchwork::plot_layout(guides = "collect")
-
-      list(
-        plot = combined,
-        layout = layout,
-        strata_names = names(plot_list)
-      )
-    })
-
-    observe_layout_synchronization(plot_info, layout_state, session)
-
-    plot_size <- reactive({
-      width <- suppressWarnings(as.numeric(input$plot_width))
-      height <- suppressWarnings(as.numeric(input$plot_height))
-      info <- plot_info()
-      layout <- info$layout
-
-      subplot_w <- ifelse(is.na(width) || width <= 0, 400, width)
-      subplot_h <- ifelse(is.na(height) || height <= 0, 300, height)
-
-      list(
-        w = subplot_w * max(1, layout$ncol),
-        h = subplot_h * max(1, layout$nrow)
-      )
-    })
-
-    plot_obj <- reactive({
-      info <- plot_info()
-      validate(need(!is.null(info$plot), "No PCA plots available."))
-      info$plot
     })
 
     plot_obj <- reactive({

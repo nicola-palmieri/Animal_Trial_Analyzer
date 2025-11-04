@@ -22,8 +22,6 @@ pairwise_correlation_visualize_ggpairs_ui <- function(id) {
 pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, correlation_info) {
   moduleServer(id, function(input, output, session) {
 
-    layout_state <- initialize_layout_state(input, session)
-
     resolve_input_value <- function(x) {
       if (is.null(x)) return(NULL)
       if (is.reactive(x)) x() else x
@@ -166,10 +164,9 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
 
         validate(need(length(plots) > 0, "No data available for the selected strata."))
 
-        layout <- resolve_grid_layout(
-          n_items = length(plots),
-          rows_input = layout_state$effective_input("resp_rows"),
-          cols_input = layout_state$effective_input("resp_cols")
+        layout <- basic_grid_layout(
+          rows = basic_grid_value(input$resp_rows, default = 1),
+          cols = basic_grid_value(input$resp_cols, default = 1)
         )
 
         combined <- patchwork::wrap_plots(
@@ -181,8 +178,6 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
         list(plot = combined, layout = layout)
       }
     })
-
-    observe_layout_synchronization(plot_info, layout_state, session)
 
     plot_width_total <- reactive({
       info <- plot_info()

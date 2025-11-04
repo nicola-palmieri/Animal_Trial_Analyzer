@@ -2,10 +2,10 @@
 # 🧠 Table Analyzer — Shared ANOVA Module Helpers
 # ===============================================================
 
-build_anova_layout_controls <- function(ns, input, info, default_ui_value) {
+build_anova_layout_controls <- function(ns, input, info) {
   has_strata <- !is.null(info$strata) && !is.null(info$strata$var)
   n_responses <- if (!is.null(info$responses)) length(info$responses) else 0
-  
+
   strata_inputs <- if (has_strata) {
     tagList(
       h5("Across strata:"),
@@ -15,7 +15,7 @@ build_anova_layout_controls <- function(ns, input, info, default_ui_value) {
           numericInput(
             ns("strata_rows"),
             "Grid rows",
-            value = isolate(default_ui_value(input$strata_rows)),
+            value = isolate(basic_grid_value(input$strata_rows, default = 1)),
             min = 1,
             max = 10,
             step = 1
@@ -26,7 +26,7 @@ build_anova_layout_controls <- function(ns, input, info, default_ui_value) {
           numericInput(
             ns("strata_cols"),
             "Grid columns",
-            value = isolate(default_ui_value(input$strata_cols)),
+            value = isolate(basic_grid_value(input$strata_cols, default = 1)),
             min = 1,
             max = 10,
             step = 1
@@ -47,7 +47,7 @@ build_anova_layout_controls <- function(ns, input, info, default_ui_value) {
           numericInput(
             ns("resp_rows"),
             "Grid rows",
-            value = isolate(default_ui_value(input$resp_rows)),
+            value = isolate(basic_grid_value(input$resp_rows, default = 1)),
             min = 1,
             max = 10,
             step = 1
@@ -58,7 +58,7 @@ build_anova_layout_controls <- function(ns, input, info, default_ui_value) {
           numericInput(
             ns("resp_cols"),
             "Grid columns",
-            value = isolate(default_ui_value(input$resp_cols)),
+            value = isolate(basic_grid_value(input$resp_cols, default = 1)),
             min = 1,
             max = 10,
             step = 1
@@ -689,7 +689,7 @@ write_anova_docx <- function(results, file) {
 # Plotting
 # ---------------------------------------------------------------
 
-build_anova_plot_info <- function(data, info, effective_input, line_colors = NULL) {
+build_anova_plot_info <- function(data, info, layout_values, line_colors = NULL) {
   factor1 <- info$factors$factor1
   factor2 <- info$factors$factor2
   order1 <- info$orders$order1
@@ -711,8 +711,15 @@ build_anova_plot_info <- function(data, info, effective_input, line_colors = NUL
   }
   
   response_plots <- list()
-  max_strata_rows <- 1
-  max_strata_cols <- 1
+
+  fetch_grid_value <- function(name, default) {
+    basic_grid_value(layout_values[[name]], default = default)
+  }
+
+  strata_rows <- if (has_strata) fetch_grid_value("strata_rows", default = 1) else 1L
+  strata_cols <- if (has_strata) fetch_grid_value("strata_cols", default = 1) else 1L
+  resp_rows   <- fetch_grid_value("resp_rows", default = 1)
+  resp_cols   <- fetch_grid_value("resp_cols", default = 1)
   
   compute_stats <- function(df_subset, resp_name) {
     if (is.null(factor2)) {
@@ -817,19 +824,10 @@ build_anova_plot_info <- function(data, info, effective_input, line_colors = NUL
         build_plot(stratum_plots[[stratum_name]], stratum_name, y_limits)
       })
       
-      layout <- resolve_grid_layout(
-        n_items = length(strata_plot_list),
-        rows_input = effective_input("strata_rows"),
-        cols_input = effective_input("strata_cols")
-      )
-      
-      max_strata_rows <- max(max_strata_rows, layout$nrow)
-      max_strata_cols <- max(max_strata_cols, layout$ncol)
-      
       combined <- patchwork::wrap_plots(
         plotlist = strata_plot_list,
-        nrow = layout$nrow,
-        ncol = layout$ncol
+        nrow = strata_rows,
+        ncol = strata_cols
       )
       
       title_plot <- ggplot() +
@@ -855,37 +853,29 @@ build_anova_plot_info <- function(data, info, effective_input, line_colors = NUL
       }
       
       response_plots[[resp]] <- build_plot(stats_df, resp, y_limits)
-      max_strata_rows <- max(max_strata_rows, 1)
-      max_strata_cols <- max(max_strata_cols, 1)
     }
   }
-  
+
   if (length(response_plots) == 0) {
     return(NULL)
   }
-  
-  resp_layout <- resolve_grid_layout(
-    n_items = length(response_plots),
-    rows_input = effective_input("resp_rows"),
-    cols_input = effective_input("resp_cols")
-  )
-  
+
   final_plot <- if (length(response_plots) == 1) {
     response_plots[[1]]
   } else {
     patchwork::wrap_plots(
       plotlist = response_plots,
-      nrow = resp_layout$nrow,
-      ncol = resp_layout$ncol
+      nrow = resp_rows,
+      ncol = resp_cols
     ) &
       patchwork::plot_layout(guides = "collect")
   }
-  
+
   list(
     plot = final_plot,
     layout = list(
-      strata = list(rows = max_strata_rows, cols = max_strata_cols),
-      responses = resp_layout
+      strata = list(rows = strata_rows, cols = strata_cols),
+      responses = list(nrow = resp_rows, ncol = resp_cols)
     ),
     has_strata = has_strata,
     n_responses = length(response_plots)
