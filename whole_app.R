@@ -118,14 +118,15 @@ one_way_anova_server <- function(id, filtered_data) {
     # -----------------------------------------------------------
     # Dynamic inputs
     # -----------------------------------------------------------
+    responses <- multi_response_server("response", df)
+
     output$inputs <- renderUI({
       req(df())
       data <- df()
-      num_cols <- names(data)[sapply(data, is.numeric)]
       cat_cols <- names(data)[sapply(data, function(x) is.character(x) || is.factor(x))]
-      
+
       tagList(
-        uiOutput(ns("response_inputs")),
+        multi_response_ui(ns("response")),
         selectInput(
           ns("group"),
           "Categorical predictor:",
@@ -133,10 +134,6 @@ one_way_anova_server <- function(id, filtered_data) {
           selected = if (length(cat_cols) > 0) cat_cols[1] else NULL
         )
       )
-    })
-    
-    output$response_inputs <- renderUI({
-      render_response_inputs(ns, df(), input)
     })
     
     strat_info <- stratification_server("strat", df)
@@ -160,11 +157,12 @@ one_way_anova_server <- function(id, filtered_data) {
     # Model fitting (via shared helper)
     # -----------------------------------------------------------
     models <- eventReactive(input$run, {
-      req(df(), input$response, input$group, input$order)
-      responses <- get_selected_responses(input)
+      req(df(), input$group, input$order)
+      resp_vals <- responses()
+      req(length(resp_vals) > 0)
       prepare_stratified_anova(
         df = df(),
-        responses = responses,
+        responses = resp_vals,
         model = "oneway_anova",
         factor1_var = input$group,
         factor1_order = input$order,
@@ -203,8 +201,78 @@ one_way_anova_server <- function(id, filtered_data) {
     # Render model summaries + download buttons (shared helper)
     # -----------------------------------------------------------
     bind_anova_outputs(ns, output, models)
-    
-    return(models)
+
+    df_final <- reactive({
+      mod <- models()
+      if (is.null(mod)) return(NULL)
+      mod$data_used
+    })
+
+    model_fit <- reactive({
+      mod <- models()
+      if (is.null(mod)) return(NULL)
+      mod$models
+    })
+
+    compiled_results <- reactive({
+      mod <- models()
+      if (is.null(mod)) return(NULL)
+      compile_anova_results(mod)
+    })
+
+    summary_table <- reactive({
+      res <- compiled_results()
+      if (is.null(res)) return(NULL)
+      res$summary
+    })
+
+    posthoc_results <- reactive({
+      res <- compiled_results()
+      if (is.null(res)) return(NULL)
+      res$posthoc
+    })
+
+    effect_table <- reactive({
+      res <- compiled_results()
+      if (is.null(res)) return(NULL)
+      res$effects
+    })
+
+    error_table <- reactive({
+      res <- compiled_results()
+      if (is.null(res)) return(NULL)
+      res$errors
+    })
+
+    reactive({
+      mod <- models()
+      if (is.null(mod)) return(NULL)
+
+      data_used <- df_final()
+
+      list(
+        analysis_type = "ANOVA",
+        data_used = data_used,
+        model = model_fit(),
+        summary = summary_table(),
+        posthoc = posthoc_results(),
+        effects = effect_table(),
+        stats = if (!is.null(data_used)) list(n = nrow(data_used), vars = names(data_used)) else NULL,
+        metadata = list(
+          responses = mod$responses,
+          strata = mod$strata,
+          factors = mod$factors,
+          orders = mod$orders,
+          errors = error_table()
+        ),
+        type = "oneway_anova",
+        models = model_fit(),
+        responses = mod$responses,
+        strata = mod$strata,
+        factors = mod$factors,
+        orders = mod$orders
+      )
+    })
   })
 }
 # ===============================================================
@@ -500,7 +568,8 @@ prepare_stratified_anova <- function(
       responses = responses,
       strata = NULL,
       factors = list(factor1 = factor1_var, factor2 = factor2_var),
-      orders = list(order1 = factor1_order, order2 = factor2_order)
+      orders = list(order1 = factor1_order, order2 = factor2_order),
+      data_used = df
     ))
   }
   
@@ -524,7 +593,8 @@ prepare_stratified_anova <- function(
     responses = responses,
     strata = list(var = stratify_var, levels = strata),
     factors = list(factor1 = factor1_var, factor2 = factor2_var),
-    orders = list(order1 = factor1_order, order2 = factor2_order)
+    orders = list(order1 = factor1_order, order2 = factor2_order),
+    data_used = df
   )
 }
 
@@ -614,6 +684,99 @@ prepare_anova_outputs <- function(model_obj, factor_names) {
 }
 
 # ---------------------------------------------------------------
+# Collate tidy summaries from ANOVA models
+# ---------------------------------------------------------------
+
+compile_anova_results <- function(model_info) {
+  if (is.null(model_info) || is.null(model_info$models)) return(NULL)
+
+  factor_names <- unlist(model_info$factors)
+  factor_names <- factor_names[!is.na(factor_names) & nzchar(factor_names)]
+
+  build_effects <- function(outputs) {
+    if (is.null(outputs) || is.null(outputs$anova_table)) return(NULL)
+    effects <- data.frame(
+      Effect = outputs$anova_table$Effect,
+      significant = outputs$anova_significant,
+      stringsAsFactors = FALSE
+    )
+    if ("p.value" %in% names(outputs$anova_table)) {
+      effects$p.value <- outputs$anova_table$p.value
+    }
+    effects
+  }
+
+  if (is.null(model_info$strata)) {
+    summary_list <- list()
+    posthoc_list <- list()
+    effects_list <- list()
+    errors_list <- list()
+
+    for (resp in names(model_info$models)) {
+      entry <- model_info$models[[resp]]
+      if (!is.null(entry$model)) {
+        outputs <- prepare_anova_outputs(entry$model, factor_names)
+        summary_list[[resp]] <- outputs$anova_table
+        posthoc_list[[resp]] <- outputs$posthoc_table
+        effects_list[[resp]] <- build_effects(outputs)
+      } else {
+        summary_list[[resp]] <- NULL
+        posthoc_list[[resp]] <- NULL
+        effects_list[[resp]] <- NULL
+      }
+      if (!is.null(entry$error)) {
+        errors_list[[resp]] <- entry$error
+      }
+    }
+
+    return(list(
+      summary = summary_list,
+      posthoc = posthoc_list,
+      effects = effects_list,
+      errors = errors_list
+    ))
+  }
+
+  summary_list <- list()
+  posthoc_list <- list()
+  effects_list <- list()
+  errors_list <- list()
+
+  for (stratum_name in names(model_info$models)) {
+    stratum_models <- model_info$models[[stratum_name]]
+    if (is.null(stratum_models)) next
+
+    for (resp in names(stratum_models)) {
+      entry <- stratum_models[[resp]]
+      outputs <- NULL
+      if (!is.null(entry$model)) {
+        outputs <- prepare_anova_outputs(entry$model, factor_names)
+      }
+
+      if (is.null(summary_list[[resp]])) summary_list[[resp]] <- list()
+      if (is.null(posthoc_list[[resp]])) posthoc_list[[resp]] <- list()
+      if (is.null(effects_list[[resp]])) effects_list[[resp]] <- list()
+      if (is.null(errors_list[[resp]])) errors_list[[resp]] <- list()
+
+      summary_list[[resp]][[stratum_name]] <- if (!is.null(outputs)) outputs$anova_table else NULL
+      posthoc_list[[resp]][[stratum_name]] <- if (!is.null(outputs)) outputs$posthoc_table else NULL
+      effects_list[[resp]][[stratum_name]] <- if (!is.null(outputs)) build_effects(outputs) else NULL
+
+      if (!is.null(entry$error)) {
+        errors_list[[resp]][[stratum_name]] <- entry$error
+      }
+    }
+  }
+
+  list(
+    summary = summary_list,
+    posthoc = posthoc_list,
+    effects = effects_list,
+    errors = errors_list
+  )
+}
+
+# ---------------------------------------------------------------
 # Output composition
 # ---------------------------------------------------------------
 print_anova_summary_and_posthoc <- function(model_entry, factors) {
@@ -670,30 +833,6 @@ bind_single_model_outputs <- function(output, summary_id, download_id,
       write_anova_docx(file, results, model_entry$model, response_name, stratum_label)
     }
   )
-}
-
-render_response_selector <- function(ns, df, input) {
-  req(df())
-  data <- df()
-  num_cols <- names(data)[sapply(data, is.numeric)]
-
-  if (isTRUE(input$multi_resp)) {
-    selectizeInput(
-      ns("response"),
-      "Response variables (numeric):",
-      choices = num_cols,
-      selected = head(num_cols, 1),
-      multiple = TRUE,
-      options = list(maxItems = 10)
-    )
-  } else {
-    selectInput(
-      ns("response"),
-      "Response variable (numeric):",
-      choices = num_cols,
-      selected = if (length(num_cols) > 0) num_cols[1] else NULL
-    )
-  }
 }
 
 render_anova_results <- function(ns, model_info, module_label = "ANOVA") {
@@ -1241,14 +1380,15 @@ two_way_anova_server <- function(id, filtered_data) {
     # -----------------------------------------------------------
     # Dynamic inputs
     # -----------------------------------------------------------
+    responses <- multi_response_server("response", df)
+
     output$inputs <- renderUI({
       req(df())
       data <- df()
       cat_cols <- names(data)[sapply(data, function(x) is.character(x) || is.factor(x))]
-      
+
       tagList(
-        checkboxInput(ns("multi_resp"), "Allow multiple response variables", value = FALSE),
-        uiOutput(ns("response_selector")),
+        multi_response_ui(ns("response")),
         selectInput(
           ns("factor1"),
           "Categorical predictor 1 (x-axis):",
@@ -1262,10 +1402,6 @@ two_way_anova_server <- function(id, filtered_data) {
           selected = if (length(cat_cols) > 1) cat_cols[2] else NULL
         )
       )
-    })
-    
-    output$response_selector <- renderUI({
-      render_response_selector(ns, df, input)
     })
     
     strat_info <- stratification_server("strat", df)
@@ -1301,11 +1437,12 @@ two_way_anova_server <- function(id, filtered_data) {
     # Model fitting (via shared helper)
     # -----------------------------------------------------------
     models <- eventReactive(input$run, {
-      req(df(), input$response, input$factor1, input$order1, input$factor2, input$order2)
-      responses <- get_selected_responses(input)
+      req(df(), input$factor1, input$order1, input$factor2, input$order2)
+      resp_vals <- responses()
+      req(length(resp_vals) > 0)
       prepare_stratified_anova(
         df = df(),
-        responses = responses,
+        responses = resp_vals,
         model = "twoway_anova",
         factor1_var = input$factor1,
         factor1_order = input$order1,
@@ -1349,8 +1486,78 @@ two_way_anova_server <- function(id, filtered_data) {
     # Render model summaries + downloads (shared helper)
     # -----------------------------------------------------------
     bind_anova_outputs(ns, output, models)
-    
-    return(models)
+
+    df_final <- reactive({
+      mod <- models()
+      if (is.null(mod)) return(NULL)
+      mod$data_used
+    })
+
+    model_fit <- reactive({
+      mod <- models()
+      if (is.null(mod)) return(NULL)
+      mod$models
+    })
+
+    compiled_results <- reactive({
+      mod <- models()
+      if (is.null(mod)) return(NULL)
+      compile_anova_results(mod)
+    })
+
+    summary_table <- reactive({
+      res <- compiled_results()
+      if (is.null(res)) return(NULL)
+      res$summary
+    })
+
+    posthoc_results <- reactive({
+      res <- compiled_results()
+      if (is.null(res)) return(NULL)
+      res$posthoc
+    })
+
+    effect_table <- reactive({
+      res <- compiled_results()
+      if (is.null(res)) return(NULL)
+      res$effects
+    })
+
+    error_table <- reactive({
+      res <- compiled_results()
+      if (is.null(res)) return(NULL)
+      res$errors
+    })
+
+    reactive({
+      mod <- models()
+      if (is.null(mod)) return(NULL)
+
+      data_used <- df_final()
+
+      list(
+        analysis_type = "ANOVA",
+        data_used = data_used,
+        model = model_fit(),
+        summary = summary_table(),
+        posthoc = posthoc_results(),
+        effects = effect_table(),
+        stats = if (!is.null(data_used)) list(n = nrow(data_used), vars = names(data_used)) else NULL,
+        metadata = list(
+          responses = mod$responses,
+          strata = mod$strata,
+          factors = mod$factors,
+          orders = mod$orders,
+          errors = error_table()
+        ),
+        type = "twoway_anova",
+        models = model_fit(),
+        responses = mod$responses,
+        strata = mod$strata,
+        factors = mod$factors,
+        orders = mod$orders
+      )
+    })
   })
 }
 # ===============================================================
@@ -1707,23 +1914,70 @@ descriptive_server <- function(id, filtered_data) {
     # ------------------------------------------------------------
     # Return full model info
     # ------------------------------------------------------------
-    return(reactive({
+    df_final <- reactive({
       details <- summary_data()
-      if (is.null(details)) {
-        return(NULL)
-      }
+      if (is.null(details)) return(NULL)
+      details$processed_data
+    })
+
+    model_fit <- reactive(NULL)
+
+    summary_table <- reactive({
+      details <- summary_data()
+      if (is.null(details)) return(NULL)
+      details$summary
+    })
+
+    posthoc_results <- reactive(NULL)
+
+    effect_table <- reactive(NULL)
+
+    selected_vars_reactive <- reactive({
+      details <- summary_data()
+      if (is.null(details)) return(NULL)
+      details$selected_vars
+    })
+
+    group_var_reactive <- reactive({
+      details <- summary_data()
+      if (is.null(details)) return(NULL)
+      details$group_var
+    })
+
+    strata_levels_reactive <- reactive({
+      details <- summary_data()
+      if (is.null(details)) return(NULL)
+      details$strata_levels
+    })
+
+    reactive({
+      details <- summary_data()
+      if (is.null(details)) return(NULL)
+
+      data_used <- df_final()
 
       list(
+        analysis_type = "DESCRIPTIVE",
+        data_used = data_used,
+        model = model_fit(),
+        summary = summary_table(),
+        posthoc = posthoc_results(),
+        effects = effect_table(),
+        stats = if (!is.null(data_used)) list(n = nrow(data_used), vars = names(data_used)) else NULL,
+        metadata = list(
+          selected_vars = details$selected_vars,
+          group_var = details$group_var,
+          strata_levels = details$strata_levels
+        ),
         type = "descriptive",
         data = df,
-        summary = reactive({ details <- summary_data(); req(details); details$summary }),
-        selected_vars = reactive({ details <- summary_data(); req(details); details$selected_vars }),
-        group_var = reactive({ details <- summary_data(); req(details); details$group_var }),
-        processed_data = reactive({ details <- summary_data(); req(details); details$processed_data }),
-        strata_levels = reactive({ details <- summary_data(); req(details); details$strata_levels })
+        processed_data = df_final,
+        selected_vars = selected_vars_reactive,
+        group_var = group_var_reactive,
+        strata_levels = strata_levels_reactive
       )
-    }))
-    
+    })
+
   })
 }
 
@@ -3348,30 +3602,68 @@ analysis_server <- function(id, filtered_data) {
     })
     
     # ---- Lazy server initialization ----
+    normalize_analysis_type <- function(mod_type) {
+      lookup <- list(
+        desc = "DESCRIPTIVE",
+        anova1 = "ANOVA",
+        anova2 = "ANOVA",
+        lm = "LM",
+        lmm = "LMM",
+        pairs = "CORR",
+        pca = "PCA"
+      )
+      if (is.null(mod_type)) return(NULL)
+      if (mod_type %in% names(lookup)) lookup[[mod_type]] else toupper(mod_type)
+    }
+
     ensure_module_server <- function(mod) {
       key <- mod$id
       if (!is.null(server_cache[[key]])) return(server_cache[[key]])
-      
+
       result <- tryCatch(mod$server(mod$id, df), error = function(e) {
         warning(sprintf("Module '%s' failed to initialize: %s", key, conditionMessage(e)))
         NULL
       })
-      
-      # Wrap result into a reactive returning a list with 'type' and 'model'
+
+      default_analysis_type <- normalize_analysis_type(mod$type)
+
       if (is.null(result)) {
-        server_cache[[key]] <- reactive(list(type = mod$type, model = NULL))
+        server_cache[[key]] <- reactive(NULL)
       } else if (is.reactive(result)) {
         server_cache[[key]] <- reactive({
           val <- result()
-          # If submodule already returns a list, just add 'type' key
-          if (is.list(val)) c(val, list(type = mod$type))
-          else list(type = mod$type, model = val)
+          if (is.null(val)) return(NULL)
+          if (!is.list(val)) {
+            return(list(
+              analysis_type = default_analysis_type,
+              data_used = NULL,
+              model = val,
+              summary = NULL,
+              posthoc = NULL,
+              effects = NULL,
+              stats = NULL,
+              metadata = list(),
+              type = mod$type
+            ))
+          }
+          if (is.null(val$type)) val$type <- mod$type
+          if (is.null(val$analysis_type)) val$analysis_type <- default_analysis_type
+          val
         })
       } else {
-        # Submodule returned a non-reactive object
-        server_cache[[key]] <- reactive(list(type = mod$type, model = result))
+        server_cache[[key]] <- reactive(list(
+          analysis_type = default_analysis_type,
+          data_used = NULL,
+          model = result,
+          summary = NULL,
+          posthoc = NULL,
+          effects = NULL,
+          stats = NULL,
+          metadata = list(),
+          type = mod$type
+        ))
       }
-      
+
       server_cache[[key]]
     }
     
@@ -4219,7 +4511,9 @@ ggpairs_server <- function(id, data_reactive) {
           matrices = list(),
           plots = list(),
           group_var = NULL,
-          selected_vars = selected_vars
+          selected_vars = selected_vars,
+          data_used = NULL,
+          strata_levels = NULL
         ))
         return()
       }
@@ -4243,6 +4537,17 @@ ggpairs_server <- function(id, data_reactive) {
 
       matrices <- list()
       plots <- list()
+      processed_data <- data[, unique(c(selected_vars, group_var)), drop = FALSE]
+
+      if (!is.null(group_var)) {
+        keep_rows <- !is.na(processed_data[[group_var]]) &
+          as.character(processed_data[[group_var]]) %in% strata_levels
+        processed_data <- processed_data[keep_rows, , drop = FALSE]
+        processed_data[[group_var]] <- factor(
+          as.character(processed_data[[group_var]]),
+          levels = strata_levels
+        )
+      }
 
       if (is.null(group_var)) {
         dat <- data[, selected_vars, drop = FALSE]
@@ -4269,7 +4574,9 @@ ggpairs_server <- function(id, data_reactive) {
         matrices = matrices,
         plots = plots,
         group_var = group_var,
-        selected_vars = selected_vars
+        selected_vars = selected_vars,
+        data_used = processed_data,
+        strata_levels = if (!is.null(group_var)) strata_levels else NULL
       ))
     })
 
@@ -4340,17 +4647,60 @@ ggpairs_server <- function(id, data_reactive) {
     )
 
     # ---- Return structured output for visualization ----
+    df_final <- reactive({
+      res <- correlation_store()
+      if (is.null(res)) return(NULL)
+      res$data_used
+    })
+
+    model_fit <- reactive({
+      res <- correlation_store()
+      if (is.null(res)) return(NULL)
+      res$matrices
+    })
+
+    summary_table <- reactive({
+      res <- correlation_store()
+      if (is.null(res)) return(NULL)
+      res$matrices
+    })
+
+    posthoc_results <- reactive(NULL)
+
+    effect_table <- reactive(NULL)
+
     reactive({
+      res <- correlation_store()
+      if (is.null(res)) return(NULL)
+
+      data_used <- df_final()
+
       list(
+        analysis_type = "CORR",
+        data_used = data_used,
+        model = model_fit(),
+        summary = summary_table(),
+        posthoc = posthoc_results(),
+        effects = effect_table(),
+        stats = if (!is.null(data_used)) list(n = nrow(data_used), vars = names(data_used)) else NULL,
+        metadata = list(
+          selected_vars = res$selected_vars,
+          group_var = res$group_var,
+          strata_levels = res$strata_levels,
+          plots = res$plots,
+          message = res$message
+        ),
         type = "pairwise_correlation",
         data = df,
         group_var = reactive({
-          details <- strat_info()
-          details$var
+          det <- correlation_store()
+          if (is.null(det)) return(NULL)
+          det$group_var
         }),
         strata_order = reactive({
-          details <- strat_info()
-          details$levels
+          det <- correlation_store()
+          if (is.null(det)) return(NULL)
+          det$strata_levels
         }),
         results = reactive(correlation_store())
       )
@@ -4806,7 +5156,8 @@ pca_server <- function(id, filtered_data) {
         group_var = stratify_var,
         strata_levels = strata_levels,
         selected_vars = selected_vars,
-        results = results
+        results = results,
+        data_used = local_data
       )
     })
 
@@ -4901,22 +5252,129 @@ pca_server <- function(id, filtered_data) {
     )
 
     # Return structured reactive for integration
-    reactive({
+    df_final <- reactive({
       details <- pca_result()
+      if (is.null(details)) return(NULL)
+      details$data_used
+    })
 
-      if (is.null(details)) {
-        return(list(
-          type = "pca",
-          model = NULL,
-          data = df(),
-          vars = input$vars
-        ))
+    model_fit <- reactive({
+      details <- pca_result()
+      if (is.null(details)) return(NULL)
+      details$results
+    })
+
+    compiled_tables <- reactive({
+      details <- pca_result()
+      if (is.null(details)) return(NULL)
+      results <- details$results
+      if (is.null(results) || length(results) == 0) return(NULL)
+
+      loadings_list <- list()
+      variance_list <- list()
+      messages_list <- list()
+
+      for (name in names(results)) {
+        entry <- results[[name]]
+        if (is.null(entry)) {
+          loadings_list[[name]] <- NULL
+          variance_list[[name]] <- NULL
+          messages_list[[name]] <- NULL
+          next
+        }
+
+        if (!is.null(entry$message)) {
+          messages_list[[name]] <- entry$message
+        }
+
+        model <- entry$model
+        if (is.null(model)) {
+          loadings_list[[name]] <- NULL
+          variance_list[[name]] <- NULL
+          next
+        }
+
+        rotation_tbl <- as.data.frame(as.table(model$rotation), stringsAsFactors = FALSE)
+        colnames(rotation_tbl) <- c("Variable", "Component", "Loading")
+        loadings_list[[name]] <- rotation_tbl
+
+        variance_vals <- 100 * model$sdev^2 / sum(model$sdev^2)
+        variance_list[[name]] <- data.frame(
+          Component = paste0("PC", seq_along(variance_vals)),
+          Variance = variance_vals,
+          stringsAsFactors = FALSE
+        )
       }
 
       list(
+        summary = loadings_list,
+        effects = variance_list,
+        messages = messages_list
+      )
+    })
+
+    summary_table <- reactive({
+      res <- compiled_tables()
+      if (is.null(res)) return(NULL)
+      res$summary
+    })
+
+    effect_table <- reactive({
+      res <- compiled_tables()
+      if (is.null(res)) return(NULL)
+      res$effects
+    })
+
+    posthoc_results <- reactive(NULL)
+
+    reactive({
+      details <- pca_result()
+      if (is.null(details)) {
+        return(list(
+          analysis_type = "PCA",
+          data_used = df(),
+          model = NULL,
+          summary = NULL,
+          posthoc = NULL,
+          effects = NULL,
+          stats = if (!is.null(df())) list(n = nrow(df()), vars = names(df())) else NULL,
+          metadata = list(
+            selected_vars = input$vars,
+            group_var = NULL,
+            strata_levels = NULL,
+            messages = NULL
+          ),
+          type = "pca",
+          data = df,
+          vars = input$vars,
+          selected_vars = input$vars,
+          group_var = NULL,
+          strata_levels = NULL
+        ))
+      }
+
+      data_used <- df_final()
+
+      compiled <- compiled_tables()
+      messages <- if (!is.null(compiled)) compiled$messages else NULL
+
+      list(
+        analysis_type = "PCA",
+        data_used = data_used,
+        model = model_fit(),
+        summary = summary_table(),
+        posthoc = posthoc_results(),
+        effects = effect_table(),
+        stats = if (!is.null(data_used)) list(n = nrow(data_used), vars = names(data_used)) else NULL,
+        metadata = list(
+          selected_vars = details$selected_vars,
+          group_var = details$group_var,
+          strata_levels = details$strata_levels,
+          complete_cases = lapply(details$results, `[[`, "data"),
+          messages = messages
+        ),
         type = "pca",
-        model = details$results,
-        data = df(),
+        data = df,
         vars = details$selected_vars,
         selected_vars = details$selected_vars,
         group_var = details$group_var,
@@ -5559,7 +6017,7 @@ regression_ui <- function(id, engine = c("lm", "lmm"), allow_multi_response = FA
 
   list(
     config = tagList(
-      uiOutput(ns("response_ui")),
+      if (allow_multi_response) multi_response_ui(ns("response")) else uiOutput(ns("response_ui")),
       uiOutput(ns("fixed_selector")),
       uiOutput(ns("level_order")),
       uiOutput(ns("covar_selector")),
@@ -5592,15 +6050,20 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
     ns <- session$ns
     strat_info <- stratification_server("strat", data)
 
-    output$response_ui <- renderUI({
-      req(data())
-      if (allow_multi_response) {
-        render_response_inputs(ns, data, input)
-      } else {
+    if (allow_multi_response) {
+      selected_responses <- multi_response_server("response", data)
+    } else {
+      output$response_ui <- renderUI({
+        req(data())
         types <- reg_detect_types(data())
         selectInput(ns("dep"), "Response variable (numeric):", choices = types$num)
-      }
-    })
+      })
+
+      selected_responses <- reactive({
+        req(input$dep)
+        input$dep
+      })
+    }
 
     output$fixed_selector <- renderUI({
       req(data())
@@ -5672,15 +6135,6 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
       req(data())
       types <- reg_detect_types(data())
       reg_interactions_ui(ns, input$fixed, types$fac)
-    })
-
-    selected_responses <- reactive({
-      if (allow_multi_response) {
-        get_selected_responses(input)
-      } else {
-        req(input$dep)
-        input$dep
-      }
     })
 
     output$formula_preview <- renderUI({
@@ -6081,12 +6535,74 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
       }
     )
 
-    return(reactive({
+    df_final <- reactive({
+      data()
+    })
+
+    model_fit <- reactive({
       mod <- models()
       if (is.null(mod)) return(NULL)
-      attr(mod, "engine") <- engine
-      mod
-    }))
+      mod$models
+    })
+
+    compiled_results <- reactive({
+      mod <- models()
+      if (is.null(mod)) return(NULL)
+      compile_regression_results(mod, engine)
+    })
+
+    summary_table <- reactive({
+      res <- compiled_results()
+      if (is.null(res)) return(NULL)
+      res$summary
+    })
+
+    effect_table <- reactive({
+      res <- compiled_results()
+      if (is.null(res)) return(NULL)
+      res$effects
+    })
+
+    error_table <- reactive({
+      res <- compiled_results()
+      if (is.null(res)) return(NULL)
+      res$errors
+    })
+
+    reactive({
+      mod <- models()
+      if (is.null(mod)) return(NULL)
+
+      data_used <- df_final()
+
+      list(
+        analysis_type = if (engine == "lm") "LM" else "LMM",
+        data_used = data_used,
+        model = model_fit(),
+        summary = summary_table(),
+        posthoc = NULL,
+        effects = effect_table(),
+        stats = if (!is.null(data_used)) list(n = nrow(data_used), vars = names(data_used)) else NULL,
+        metadata = list(
+          responses = mod$responses,
+          success_responses = mod$success_responses,
+          error_responses = mod$error_responses,
+          errors = mod$errors,
+          stratification = mod$stratification,
+          rhs = mod$rhs,
+          allow_multi = mod$allow_multi,
+          compiled_errors = error_table(),
+          flat_models = mod$flat_models,
+          engine = engine
+        ),
+        type = if (engine == "lm") "lm" else "lmm",
+        fits = mod$fits,
+        flat_models = mod$flat_models,
+        stratification = mod$stratification,
+        responses = mod$responses,
+        errors = mod$errors
+      )
+    })
   })
 }
 # ===============================================================
@@ -6197,7 +6713,7 @@ reg_display_lm_summary <- function(m) {
 reg_display_lmm_summary <- function(m) {
   aout <- capture.output(anova(m, type = 3))
   cat(paste(aout, collapse = "\n"), "\n\n")
-  
+
   sout <- capture.output(summary(m))
   start <- grep("^Scaled residuals:", sout)[1]
   stop  <- grep("^Correlation of Fixed Effects:", sout)[1]
@@ -6214,6 +6730,128 @@ reg_display_lmm_summary <- function(m) {
     else sout <- c(sout, icc_line)
   }
   cat(paste(sout, collapse = "\n"))
+}
+
+# ---------------------------------------------------------------
+# Summaries for standardized regression outputs
+# ---------------------------------------------------------------
+
+clean_regression_coef_names <- function(nms) {
+  vapply(nms, function(name) {
+    name_trim <- trimws(name)
+    if (identical(name_trim, "Estimate")) return("estimate")
+    if (name_trim %in% c("Std. Error", "Std Error", "Std. error")) return("std_error")
+    if (tolower(name_trim) %in% c("t value", "z value", "f value")) return("statistic")
+    if (tolower(name_trim) %in% c("df", "dendf", "numdf")) return(tolower(name_trim))
+    if (grepl("^Pr\\(>", name_trim)) return("p_value")
+    cleaned <- tolower(name_trim)
+    cleaned <- gsub("[^[:alnum:]]+", "_", cleaned)
+    cleaned <- gsub("^_+|_+$", "", cleaned)
+    cleaned <- gsub("_+", "_", cleaned)
+    cleaned
+  }, character(1), USE.NAMES = FALSE)
+}
+
+tidy_regression_model <- function(model, engine) {
+  if (is.null(model)) {
+    return(list(summary = NULL, effects = NULL))
+  }
+
+  coef_mat <- tryCatch(summary(model)$coefficients, error = function(e) NULL)
+  coef_df <- NULL
+  if (!is.null(coef_mat)) {
+    coef_df <- data.frame(
+      term = rownames(coef_mat),
+      coef_mat,
+      row.names = NULL,
+      check.names = FALSE,
+      stringsAsFactors = FALSE
+    )
+    original_names <- names(coef_df)
+    names(coef_df) <- c("term", clean_regression_coef_names(original_names[-1]))
+  }
+
+  metrics <- NULL
+  if (inherits(model, "lm")) {
+    sm <- summary(model)
+    metrics <- data.frame(
+      metric = c("sigma", "r_squared", "adj_r_squared", "nobs"),
+      value = c(sm$sigma, sm$r.squared, sm$adj.r.squared, stats::nobs(model)),
+      stringsAsFactors = FALSE
+    )
+  } else {
+    metrics <- data.frame(
+      metric = c("sigma", "logLik", "AIC", "BIC", "nobs"),
+      value = c(
+        stats::sigma(model),
+        as.numeric(stats::logLik(model)),
+        stats::AIC(model),
+        stats::BIC(model),
+        stats::nobs(model)
+      ),
+      stringsAsFactors = FALSE
+    )
+  }
+
+  anova_tbl <- tryCatch({
+    if (engine == "lm") {
+      car::Anova(model, type = 3)
+    } else {
+      anova(model, type = 3)
+    }
+  }, error = function(e) NULL)
+
+  if (!is.null(anova_tbl)) {
+    anova_tbl <- as.data.frame(anova_tbl)
+    anova_tbl$Effect <- rownames(anova_tbl)
+    rownames(anova_tbl) <- NULL
+    anova_tbl <- anova_tbl[, c("Effect", setdiff(names(anova_tbl), "Effect"))]
+  }
+
+  effects <- list(metrics = metrics, anova = anova_tbl)
+  if (all(vapply(effects, is.null, logical(1)))) effects <- NULL
+
+  list(summary = coef_df, effects = effects)
+}
+
+compile_regression_results <- function(model_info, engine) {
+  if (is.null(model_info) || is.null(model_info$fits)) return(NULL)
+
+  summary_list <- list()
+  effects_list <- list()
+  errors_list <- list()
+
+  for (resp in names(model_info$fits)) {
+    fit_entry <- model_info$fits[[resp]]
+    if (is.null(fit_entry)) next
+
+    if (isTRUE(fit_entry$stratified)) {
+      strata_entries <- fit_entry$strata
+      for (stratum in strata_entries) {
+        label <- if (!is.null(stratum$display)) stratum$display else stratum$label
+        if (is.null(label) || !nzchar(label)) label <- "Stratum"
+        tidy <- tidy_regression_model(stratum$model, engine)
+        if (is.null(summary_list[[resp]])) summary_list[[resp]] <- list()
+        if (is.null(effects_list[[resp]])) effects_list[[resp]] <- list()
+        summary_list[[resp]][[label]] <- tidy$summary
+        effects_list[[resp]][[label]] <- tidy$effects
+        if (!is.null(stratum$error)) {
+          if (is.null(errors_list[[resp]])) errors_list[[resp]] <- list()
+          errors_list[[resp]][[label]] <- stratum$error
+        }
+      }
+    } else {
+      stratum <- fit_entry$strata[[1]]
+      tidy <- tidy_regression_model(stratum$model, engine)
+      summary_list[[resp]] <- tidy$summary
+      effects_list[[resp]] <- tidy$effects
+      if (!is.null(stratum$error)) {
+        errors_list[[resp]] <- stratum$error
+      }
+    }
+  }
+
+  list(summary = summary_list, effects = effects_list, errors = errors_list)
 }
 
 # ===============================================================
@@ -6414,6 +7052,62 @@ format_regression_table <- function(df, bold_p = TRUE) {
   ft <- padding(ft, padding.top = 2, padding.bottom = 2, padding.left = 2, padding.right = 2)
   ft
 }# ===============================================================
+# 🔁 Multi-Response Selector Module
+# ===============================================================
+
+multi_response_ui <- function(id) {
+  ns <- NS(id)
+  tagList(
+    checkboxInput(
+      ns("multi_resp"),
+      "Allow multiple response variables",
+      value = FALSE
+    ),
+    uiOutput(ns("response_ui"))
+  )
+}
+
+multi_response_server <- function(id, data) {
+  moduleServer(id, function(input, output, session) {
+
+    df <- reactive({
+      if (is.function(data)) data() else data
+    })
+
+    # --- Render selectInput dynamically
+    output$response_ui <- renderUI({
+      d <- df()
+      req(d)
+      num_vars <- names(d)[sapply(d, is.numeric)]
+
+      # fallback selection
+      current_selection <- input$response
+      if (is.null(current_selection) || !all(current_selection %in% num_vars)) {
+        current_selection <- if (length(num_vars) > 0) num_vars[1] else NULL
+      }
+
+      selectInput(
+        session$ns("response"),
+        if (isTRUE(input$multi_resp))
+          "Response variables (numeric):"
+        else
+          "Response variable (numeric):",
+        choices = num_vars,
+        selected = current_selection,
+        multiple = isTRUE(input$multi_resp)
+      )
+    })
+
+    # --- Return standardized reactive vector
+    reactive({
+      req(input$response)
+      res <- input$response
+      if (!isTRUE(input$multi_resp)) res <- res[1]
+      unique(res)
+    })
+  })
+}
+# ===============================================================
 # 🧭 Stratification helpers (shared across analysis modules)
 # ===============================================================
 
@@ -6561,42 +7255,4 @@ stratification_server <- function(id, data) {
       list(var = details$var, levels = details$levels)
     })
   })
-}
-# ===============================================================
-# 🔁 Shared utilities for multiple-response models
-# ===============================================================
-
-# --- UI builder for the checkbox and response selector
-render_response_inputs <- function(ns, data, input) {
-  df <- if (is.function(data)) data() else data
-  req(df)
-  num_vars <- names(df)[sapply(df, is.numeric)]
-  
-  current_selection <- input$response
-  if (is.null(current_selection) || !all(current_selection %in% num_vars)) {
-    current_selection <- if (length(num_vars) > 0) num_vars[1] else NULL
-  }
-  
-  tagList(
-    checkboxInput(
-      ns("multi_resp"),
-      "Allow multiple response variables",
-      value = isTRUE(input$multi_resp)
-    ),
-    selectInput(
-      ns("response"),
-      if (isTRUE(input$multi_resp)) "Response variables (numeric):" else "Response variable (numeric):",
-      choices = num_vars,
-      selected = current_selection,
-      multiple = isTRUE(input$multi_resp)
-    )
-  )
-}
-
-# --- Server-side helper to retrieve a standardized list of responses
-get_selected_responses <- function(input) {
-  req(input$response)
-  responses <- input$response
-  if (!isTRUE(input$multi_resp)) responses <- responses[1]
-  unique(responses)
 }

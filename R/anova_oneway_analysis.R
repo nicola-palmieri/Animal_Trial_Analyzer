@@ -78,7 +78,10 @@ one_way_anova_server <- function(id, filtered_data) {
     models <- eventReactive(input$run, {
       req(df(), input$group, input$order)
       resp_vals <- responses()
-      req(length(resp_vals) > 0)
+      validate(
+        need(length(resp_vals) > 0, "Please select at least one response variable."),
+        need(all(input$order %in% unique(df()[[input$group]])), "Invalid level order.")
+      )
       prepare_stratified_anova(
         df = df(),
         responses = resp_vals,
@@ -104,7 +107,7 @@ one_way_anova_server <- function(id, filtered_data) {
       },
       content = function(file) {
         model_info <- models()
-        if (is.null(model_info)) stop("Please run the ANOVA first.")
+        req(model_info)
         download_all_anova_results(model_info, file)
       }
     )
@@ -123,49 +126,49 @@ one_way_anova_server <- function(id, filtered_data) {
 
     df_final <- reactive({
       mod <- models()
-      if (is.null(mod)) return(NULL)
+      req(mod)
       mod$data_used
     })
 
     model_fit <- reactive({
       mod <- models()
-      if (is.null(mod)) return(NULL)
+      req(mod)
       mod$models
     })
 
     compiled_results <- reactive({
       mod <- models()
-      if (is.null(mod)) return(NULL)
+      req(mod)
       compile_anova_results(mod)
     })
 
     summary_table <- reactive({
       res <- compiled_results()
-      if (is.null(res)) return(NULL)
+      req(res)
       res$summary
     })
 
     posthoc_results <- reactive({
       res <- compiled_results()
-      if (is.null(res)) return(NULL)
+      req(res)
       res$posthoc
     })
 
     effect_table <- reactive({
       res <- compiled_results()
-      if (is.null(res)) return(NULL)
+      req(res)
       res$effects
     })
 
     error_table <- reactive({
       res <- compiled_results()
-      if (is.null(res)) return(NULL)
+      req(res)
       res$errors
     })
 
     reactive({
       mod <- models()
-      if (is.null(mod)) return(NULL)
+      req(mod)
 
       data_used <- df_final()
 
