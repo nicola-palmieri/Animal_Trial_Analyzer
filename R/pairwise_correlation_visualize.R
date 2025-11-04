@@ -34,7 +34,7 @@ visualize_ggpairs_server <- function(id, filtered_data, model_fit) {
 
     correlation_info <- reactive({
       info <- model_fit()
-      if (is.null(info) || is.null(info$type) || info$type != "pairwise_correlation") {
+      if (is.null(info) || is.null(info$type) || info$type != "pairs") {
         return(NULL)
       }
       info

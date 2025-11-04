@@ -259,7 +259,7 @@ ggpairs_server <- function(id, data_reactive) {
           plots = res$plots,
           message = res$message
         ),
-        type = "pairwise_correlation",
+        type = "pairs",
         data = df,
         group_var = reactive({
           det <- correlation_store()
