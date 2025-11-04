@@ -15,10 +15,11 @@ color_dropdown_input <- function(ns, id = "color_choice", palette = basic_color_
                                  ncol = 4, selected = NULL) {
   selected_color <- if (is.null(selected)) palette[1] else selected
 
-  cell_size <- 32
-  gap_size <- 6
-  padding_size <- 6
-  button_height <- cell_size + (2 * padding_size)
+  cell_size <- 26
+  gap_size <- 4
+  padding_size <- 3
+  button_size <- cell_size + (2 * padding_size)
+  button_height <- button_size
   dropdown_width <- cell_size * ncol + gap_size * (ncol - 1) + 2 * padding_size
   dropdown_top <- button_height + 4
 
@@ -36,10 +37,9 @@ color_dropdown_input <- function(ns, id = "color_choice", palette = basic_color_
           border-radius: 6px;
           padding: %dpx;
           background-color: #fff;
-          display: flex;
+          display: inline-flex;
           align-items: center;
-          justify-content: space-between;
-          gap: %dpx;
+          justify-content: center;
           cursor: pointer;
           box-shadow: 0 1px 2px rgba(0,0,0,0.05);
         }
@@ -50,10 +50,6 @@ color_dropdown_input <- function(ns, id = "color_choice", palette = basic_color_
           border-radius: 4px;
           border: 1px solid #ccc;
           box-sizing: border-box;
-        }
-        .color-dropdown-icon {
-          font-size: 10px;
-          color: #666;
         }
         .color-dropdown-grid {
           display: none;
@@ -87,7 +83,7 @@ color_dropdown_input <- function(ns, id = "color_choice", palette = basic_color_
           transform: scale(1.05);
         }
       ",
-      dropdown_width, padding_size, gap_size, cell_size, cell_size, cell_size,
+      button_size, padding_size, cell_size, cell_size, cell_size,
       dropdown_top, padding_size, dropdown_width, ncol, cell_size, gap_size,
       cell_size, cell_size
     ))),
@@ -99,10 +95,6 @@ color_dropdown_input <- function(ns, id = "color_choice", palette = basic_color_
         tags$span(
           class = "color-dropdown-swatch",
           style = sprintf("background-color:%s;", selected_color)
-        ),
-        tags$span(
-          class = "color-dropdown-icon",
-          HTML("&#9662;")
         )
       ),
       tags$div(
