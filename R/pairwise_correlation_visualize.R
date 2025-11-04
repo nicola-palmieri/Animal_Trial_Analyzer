@@ -31,6 +31,7 @@ visualize_ggpairs_ui <- function(id) {
 visualize_ggpairs_server <- function(id, filtered_data, model_fit) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
+    layout_state <- initialize_layout_state(input, session)
 
     correlation_info <- reactive({
       info <- model_fit()

@@ -12,8 +12,8 @@ visualize_numeric_histograms_ui <- function(id) {
     ),
     hr(),
     fluidRow(
-      column(6, numericInput(ns("n_rows"), "Grid rows",    value = 2, min = 1, max = 10, step = 1)),
-      column(6, numericInput(ns("n_cols"), "Grid columns", value = 3, min = 1, max = 10, step = 1))
+      column(6, numericInput(ns("resp_rows"), "Grid rows",    value = 2, min = 1, max = 10, step = 1)),
+      column(6, numericInput(ns("resp_cols"), "Grid columns", value = 3, min = 1, max = 10, step = 1))
     ),
     hr(),
     downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;")
@@ -32,6 +32,8 @@ visualize_numeric_histograms_plot_ui <- function(id) {
 
 visualize_numeric_histograms_server <- function(id, filtered_data, summary_info, is_active = NULL) {
   moduleServer(id, function(input, output, session) {
+
+    layout_state <- initialize_layout_state(input, session)
 
     resolve_input_value <- function(x) {
       if (is.null(x)) return(NULL)
@@ -77,33 +79,33 @@ visualize_numeric_histograms_server <- function(id, filtered_data, summary_info,
         group_var = group_var,
         strata_levels = strata_levels,
         use_density = isTRUE(input$use_density),
-        nrow_input = input$n_rows,
-        ncol_input = input$n_cols
+        nrow_input = layout_state$effective_input("resp_rows"),
+        ncol_input = layout_state$effective_input("resp_cols")
       )
       validate(need(!is.null(out), "No numeric variables available for plotting."))
-      
-      # --- Safe layout correction ---
-      n_panels <- out$panels %||% 1L
-      layout_info <- out$layout %||% list(nrow = NULL, ncol = NULL)
+
+      n_panels <- if (is.null(out$panels)) 1L else max(1L, suppressWarnings(as.integer(out$panels)))
       max_val <- 10L
-      
-      safe_rows <- layout_info$nrow
-      safe_cols <- layout_info$ncol
-      
-      if (is.null(safe_rows) || !is.finite(safe_rows))
-        safe_rows <- min(max_val, max(1L, as.integer(n_panels)))
-      
-      if (is.null(safe_cols) || !is.finite(safe_cols))
-        safe_cols <- min(max_val, max(1L, ceiling(n_panels / max(1L, safe_rows))))
-      
-      # --- Apply layout updates safely (isolated to avoid reactivity loops) ---
-      isolate({
-        updateNumericInput(session, "n_rows", value = safe_rows, min = 1, max = max_val)
-        updateNumericInput(session, "n_cols", value = safe_cols, min = 1, max = max_val)
-      })
-      
+
+      layout_info <- out$layout
+      safe_rows <- if (!is.null(layout_info) && !is.null(layout_info$nrow) && is.finite(layout_info$nrow)) {
+        as.integer(layout_info$nrow)
+      } else {
+        min(max_val, max(1L, n_panels))
+      }
+
+      safe_cols <- if (!is.null(layout_info) && !is.null(layout_info$ncol) && is.finite(layout_info$ncol)) {
+        as.integer(layout_info$ncol)
+      } else {
+        min(max_val, max(1L, ceiling(n_panels / max(1L, safe_rows))))
+      }
+
+      out$layout <- list(nrow = safe_rows, ncol = safe_cols)
+      sync_grid_controls(layout_state, input, session, "resp_rows", "resp_cols", out$layout, max_value = max_val)
       out
     })
+
+    observe_layout_synchronization(plot_info, layout_state, session)
     
 
     plot_size <- reactive({
