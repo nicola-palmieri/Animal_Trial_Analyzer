@@ -3,11 +3,7 @@
 # ===============================================================
 
 add_color_customization_ui <- function(ns, multi_group = TRUE) {
-  tags$details(
-    tags$summary(strong("Advanced options")),
-    br(),
-    uiOutput(ns("color_custom_ui"))
-  )
+  uiOutput(ns("color_custom_ui"))
 }
 
 # ---- SERVER ----
@@ -24,7 +20,7 @@ add_color_customization_server <- function(ns, input, output, data, color_var_re
     if (!isTRUE(multi_group) || color_var %in% c("", "None")) {
       tagList(
         br(),
-        h5("Line color"),
+        h5("Color"),
         color_dropdown_input(ns, "single_color", basic_color_palette, ncol = 4)
       )
     } else {

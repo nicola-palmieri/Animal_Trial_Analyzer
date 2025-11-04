@@ -2183,6 +2183,7 @@ visualize_descriptive_ui <- function(id) {
 visualize_descriptive_server <- function(id, filtered_data, descriptive_summary) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
+    layout_state <- initialize_layout_state(input, session)
 
     active_type <- reactive({
       type <- input$plot_type
@@ -2281,7 +2282,7 @@ visualize_categorical_barplots_ui <- function(id) {
       column(
         6,
         numericInput(
-          ns("n_rows"),
+          ns("resp_rows"),
           "Grid rows",
           value = 3,
           min = 1,
@@ -2292,7 +2293,7 @@ visualize_categorical_barplots_ui <- function(id) {
       column(
         6,
         numericInput(
-          ns("n_cols"),
+          ns("resp_cols"),
           "Grid columns",
           value = 2,
           min = 1,
@@ -2319,6 +2320,8 @@ visualize_categorical_barplots_plot_ui <- function(id) {
 visualize_categorical_barplots_server <- function(id, filtered_data, summary_info, is_active = NULL) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
+
+    layout_state <- initialize_layout_state(input, session)
 
     resolve_input_value <- function(x) {
       if (is.null(x)) return(NULL)
@@ -2391,13 +2394,15 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
         group_var = group_var,
         strata_levels = strata_levels,
         show_proportions = isTRUE(input$show_proportions),
-        nrow_input = input$n_rows,
-        ncol_input = input$n_cols,
+        nrow_input = layout_state$effective_input("resp_rows"),
+        ncol_input = layout_state$effective_input("resp_cols"),
         fill_colors = custom_colors()
       )
       validate(need(!is.null(out), "No categorical variables available for plotting."))
       out
     })
+
+    observe_layout_synchronization(plot_info, layout_state, session)
 
     plot_size <- reactive({
       req(module_active())
@@ -2612,8 +2617,8 @@ metric_panel_ui <- function(id, default_width = 400, default_height = 300,
     ),
     hr(),
     fluidRow(
-      column(6, numericInput(ns("n_rows"), "Grid rows",    value = default_rows, min = 1, max = 10, step = 1)),
-      column(6, numericInput(ns("n_cols"), "Grid columns", value = default_cols, min = 1, max = 10, step = 1))
+      column(6, numericInput(ns("resp_rows"), "Grid rows",    value = default_rows, min = 1, max = 10, step = 1)),
+      column(6, numericInput(ns("resp_cols"), "Grid columns", value = default_cols, min = 1, max = 10, step = 1))
     ),
     hr(),
     downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;")
@@ -2658,14 +2663,6 @@ visualize_missing_plot_ui <- function(id) {
 resolve_metric_input <- function(x) {
   if (is.null(x)) return(NULL)
   if (is.reactive(x)) x() else x
-}
-
-safe_numeric_input <- function(value, default = 1L) {
-  val <- suppressWarnings(as.integer(value))
-  if (length(val) == 0 || is.na(val) || val <= 0) {
-    return(default)
-  }
-  max(1L, min(10L, val))
 }
 
 safe_cv <- function(x) {
@@ -2815,6 +2812,8 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
                                  y_label, title, filename_prefix, is_active = NULL) {
   moduleServer(id, function(input, output, session) {
 
+    layout_state <- initialize_layout_state(input, session)
+
     plot_width <- reactive({
       w <- input$plot_width
       if (is.null(w) || !is.numeric(w) || is.na(w)) 400 else w
@@ -2869,8 +2868,14 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
         metric_info$group_label <- group_label
       }
 
-      n_rows <- safe_numeric_input(input$n_rows, default = 1L)
-      n_cols <- safe_numeric_input(input$n_cols, default = 1L)
+      layout <- resolve_grid_layout(
+        n_items = 1L,
+        rows_input = layout_state$effective_input("resp_rows"),
+        cols_input = layout_state$effective_input("resp_cols")
+      )
+
+      n_rows <- layout$nrow
+      n_cols <- layout$ncol
 
       plot <- build_metric_plot(metric_info, y_label, title, n_rows, n_cols)
 
@@ -2879,6 +2884,8 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
         layout = list(nrow = n_rows, ncol = n_cols)
       )
     })
+
+    observe_layout_synchronization(plot_details, layout_state, session)
 
     plot_size <- reactive({
       req(module_active())
@@ -2987,7 +2994,7 @@ visualize_numeric_boxplots_ui <- function(id) {
       column(
         6,
         numericInput(
-          ns("n_rows"),
+          ns("resp_rows"),
           "Grid rows",
           value = 1,
           min = 1,
@@ -2998,7 +3005,7 @@ visualize_numeric_boxplots_ui <- function(id) {
       column(
         6,
         numericInput(
-          ns("n_cols"),
+          ns("resp_cols"),
           "Grid columns",
           value = 6,
           min = 1,
@@ -3024,6 +3031,8 @@ visualize_numeric_boxplots_plot_ui <- function(id) {
 
 visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, is_active = NULL) {
   moduleServer(id, function(input, output, session) {
+
+    layout_state <- initialize_layout_state(input, session)
 
     resolve_input_value <- function(x) {
       if (is.null(x)) return(NULL)
@@ -3068,13 +3077,15 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
         selected_vars = selected_vars,
         group_var = group_var,
         show_points = isTRUE(input$show_points),
-        nrow_input = input$n_rows,
-        ncol_input = input$n_cols
+        nrow_input = layout_state$effective_input("resp_rows"),
+        ncol_input = layout_state$effective_input("resp_cols")
       )
 
       validate(need(!is.null(out), "No numeric variables available for plotting."))
       out
     })
+
+    observe_layout_synchronization(plot_info, layout_state, session)
 
     plot_size <- reactive({
       req(module_active())
@@ -3218,8 +3229,8 @@ visualize_numeric_histograms_ui <- function(id) {
     ),
     hr(),
     fluidRow(
-      column(6, numericInput(ns("n_rows"), "Grid rows",    value = 2, min = 1, max = 10, step = 1)),
-      column(6, numericInput(ns("n_cols"), "Grid columns", value = 3, min = 1, max = 10, step = 1))
+      column(6, numericInput(ns("resp_rows"), "Grid rows",    value = 2, min = 1, max = 10, step = 1)),
+      column(6, numericInput(ns("resp_cols"), "Grid columns", value = 3, min = 1, max = 10, step = 1))
     ),
     hr(),
     downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;")
@@ -3238,6 +3249,8 @@ visualize_numeric_histograms_plot_ui <- function(id) {
 
 visualize_numeric_histograms_server <- function(id, filtered_data, summary_info, is_active = NULL) {
   moduleServer(id, function(input, output, session) {
+
+    layout_state <- initialize_layout_state(input, session)
 
     resolve_input_value <- function(x) {
       if (is.null(x)) return(NULL)
@@ -3283,11 +3296,11 @@ visualize_numeric_histograms_server <- function(id, filtered_data, summary_info,
         group_var = group_var,
         strata_levels = strata_levels,
         use_density = isTRUE(input$use_density),
-        nrow_input = input$n_rows,
-        ncol_input = input$n_cols
+        nrow_input = layout_state$effective_input("resp_rows"),
+        ncol_input = layout_state$effective_input("resp_cols")
       )
       validate(need(!is.null(out), "No numeric variables available for plotting."))
-      
+
       # --- Safe layout correction ---
       n_panels <- out$panels %||% 1L
       layout_info <- out$layout %||% list(nrow = NULL, ncol = NULL)
@@ -3304,12 +3317,14 @@ visualize_numeric_histograms_server <- function(id, filtered_data, summary_info,
       
       # --- Apply layout updates safely (isolated to avoid reactivity loops) ---
       isolate({
-        updateNumericInput(session, "n_rows", value = safe_rows, min = 1, max = max_val)
-        updateNumericInput(session, "n_cols", value = safe_cols, min = 1, max = max_val)
+        updateNumericInput(session, "resp_rows", value = safe_rows, min = 1, max = max_val)
+        updateNumericInput(session, "resp_cols", value = safe_cols, min = 1, max = max_val)
       })
-      
+
       out
     })
+
+    observe_layout_synchronization(plot_info, layout_state, session)
     
 
     plot_size <- reactive({
@@ -4381,22 +4396,24 @@ observe_layout_synchronization <- function(plot_info_reactive, layout_state, ses
 }
 
 resolve_grid_layout <- function(n_items, rows_input = NULL, cols_input = NULL) {
+  # --- Validate number of items ---
   n_items <- suppressWarnings(as.integer(n_items[1]))
-  if (is.na(n_items) || n_items <= 0) {
-    n_items <- 1L
-  }
+  if (is.na(n_items) || n_items <= 0) n_items <- 1L
   
+  # --- Extract numeric inputs ---
   rows_raw <- resolve_grid_value(rows_input)
   cols_raw <- resolve_grid_value(cols_input)
   
   rows <- rows_raw
   cols <- cols_raw
   
+  # --- Compute sensible defaults ---
   if (is.na(rows) && is.na(cols)) {
+    # automatic roughly-square layout
     rows <- ceiling(sqrt(n_items))
     cols <- ceiling(n_items / rows)
   } else if (is.na(rows)) {
-    cols <- cols_raw
+    # rows missing, infer from columns
     if (is.na(cols) || cols <= 0) {
       rows <- ceiling(sqrt(n_items))
       cols <- ceiling(n_items / rows)
@@ -4404,7 +4421,7 @@ resolve_grid_layout <- function(n_items, rows_input = NULL, cols_input = NULL) {
       rows <- ceiling(n_items / cols)
     }
   } else if (is.na(cols)) {
-    rows <- rows_raw
+    # cols missing, infer from rows
     if (is.na(rows) || rows <= 0) {
       rows <- ceiling(sqrt(n_items))
       cols <- ceiling(n_items / rows)
@@ -4413,18 +4430,27 @@ resolve_grid_layout <- function(n_items, rows_input = NULL, cols_input = NULL) {
     }
   }
   
-  if ((is.na(rows_raw) || is.na(cols_raw)) && !is.na(rows) && !is.na(cols)) {
+  # --- Clamp minimum values ---
+  rows <- max(1L, rows)
+  cols <- max(1L, cols)
+  
+  # --- Handle too-small grids safely ---
+  if (rows * cols < n_items) {
+    shiny::showNotification(
+      sprintf("⚠️ Grid %dx%d too small for %d subplots — auto-adjusting layout.",
+              rows, cols, n_items),
+      type = "warning",
+      duration = 6
+    )
+    # Expand automatically until it fits all subplots
     while (rows * cols < n_items) {
-      if (cols <= rows) {
-        cols <- cols + 1L
-      } else {
-        rows <- rows + 1L
-      }
+      if (cols <= rows) cols <- cols + 1L else rows <- rows + 1L
     }
   }
   
   list(nrow = rows, ncol = cols)
 }
+
 
 resolve_grid_value <- function(value) {
   if (is.null(value) || length(value) == 0) return(NA_integer_)
@@ -4745,6 +4771,7 @@ visualize_ggpairs_ui <- function(id) {
 visualize_ggpairs_server <- function(id, filtered_data, model_fit) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
+    layout_state <- initialize_layout_state(input, session)
 
     correlation_info <- reactive({
       info <- model_fit()
@@ -4812,8 +4839,8 @@ pairwise_correlation_visualize_ggpairs_ui <- function(id) {
       column(6, numericInput(ns("plot_height"), "Subplot height (px)", 600, 200, 2000, 50))
     ),
     fluidRow(
-      column(6, numericInput(ns("grid_rows"),    "Grid rows",    1, 1, 10, 1)),
-      column(6, numericInput(ns("grid_cols"),    "Grid columns", 1, 1, 10, 1))
+      column(6, numericInput(ns("resp_rows"),    "Grid rows",    1, 1, 10, 1)),
+      column(6, numericInput(ns("resp_cols"),    "Grid columns", 1, 1, 10, 1))
     ),
     hr(),
     downloadButton(ns("download_plot"), "Download Plot", style = "width: 100%;")
@@ -4823,6 +4850,8 @@ pairwise_correlation_visualize_ggpairs_ui <- function(id) {
 
 pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, correlation_info) {
   moduleServer(id, function(input, output, session) {
+
+    layout_state <- initialize_layout_state(input, session)
 
     resolve_input_value <- function(x) {
       if (is.null(x)) return(NULL)
@@ -4842,14 +4871,6 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
 
     plot_height <- reactive({
       sanitize_numeric(input$plot_height, 600, 200, 2000)
-    })
-
-    grid_rows <- reactive({
-      as.integer(sanitize_numeric(input$grid_rows, 1, 1, 10))
-    })
-
-    grid_cols <- reactive({
-      as.integer(sanitize_numeric(input$grid_cols, 1, 1, 10))
     })
 
     build_ggpairs_plot <- function(data, color_value, title = NULL) {
@@ -4974,11 +4995,23 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
 
         validate(need(length(plots) > 0, "No data available for the selected strata."))
 
-        combined <- patchwork::wrap_plots(plotlist = plots, nrow = grid_rows(), ncol = grid_cols())
-        layout <- list(nrow = grid_rows(), ncol = grid_cols())
+        layout <- resolve_grid_layout(
+          n_items = length(plots),
+          rows_input = layout_state$effective_input("resp_rows"),
+          cols_input = layout_state$effective_input("resp_cols")
+        )
+
+        combined <- patchwork::wrap_plots(
+          plotlist = plots,
+          nrow = layout$nrow,
+          ncol = layout$ncol
+        )
+
         list(plot = combined, layout = layout)
       }
     })
+
+    observe_layout_synchronization(plot_info, layout_state, session)
 
     plot_width_total <- reactive({
       info <- plot_info()

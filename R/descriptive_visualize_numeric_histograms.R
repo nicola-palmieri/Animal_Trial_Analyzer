@@ -10,7 +10,6 @@ visualize_numeric_histograms_ui <- function(id) {
       column(6, numericInput(ns("plot_width"),  "Subplot width (px)",  400, 200, 2000, 50)),
       column(6, numericInput(ns("plot_height"), "Subplot height (px)", 300, 200, 2000, 50))
     ),
-    hr(),
     fluidRow(
       column(6, numericInput(ns("resp_rows"), "Grid rows",    value = 2, min = 1, max = 10, step = 1)),
       column(6, numericInput(ns("resp_cols"), "Grid columns", value = 3, min = 1, max = 10, step = 1))

@@ -11,7 +11,6 @@ metric_panel_ui <- function(id, default_width = 400, default_height = 300,
       column(6, numericInput(ns("plot_width"),  "Subplot width (px)",  default_width, 200, 2000, 50)),
       column(6, numericInput(ns("plot_height"), "Subplot height (px)", default_height, 200, 2000, 50))
     ),
-    hr(),
     fluidRow(
       column(6, numericInput(ns("resp_rows"), "Grid rows",    value = default_rows, min = 1, max = 10, step = 1)),
       column(6, numericInput(ns("resp_cols"), "Grid columns", value = default_cols, min = 1, max = 10, step = 1))

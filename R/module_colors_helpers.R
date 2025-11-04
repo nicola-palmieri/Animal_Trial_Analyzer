@@ -13,7 +13,7 @@ render_color_inputs <- function(ns, data, color_var) {
 
   tagList(
     br(),
-    h5(paste("Line colors for", color_var)),
+    h5(paste("Colors for", color_var)),
     lapply(seq_along(lvls), function(i) {
       selected <- default_palette[i]
       tags$div(

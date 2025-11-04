@@ -10,7 +10,6 @@ visualize_numeric_boxplots_ui <- function(id) {
       column(6, numericInput(ns("plot_width"),  "Subplot width (px)",  200, 200, 2000, 50)),
       column(6, numericInput(ns("plot_height"), "Subplot height (px)", 800, 200, 2000, 50))
     ),
-    hr(),
     fluidRow(
       column(
         6,
