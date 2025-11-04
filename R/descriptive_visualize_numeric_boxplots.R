@@ -118,8 +118,6 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
       }
     })
 
-    last_defaults <- reactiveVal(NULL)
-
     observeEvent(plot_info(), {
       info <- plot_info()
       if (is.null(info) || is.null(info$defaults)) return()
@@ -128,15 +126,8 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
       cols <- info$defaults$cols
       if (is.null(rows) || is.null(cols)) return()
 
-      panels <- info$panels
-      if (is.null(panels)) panels <- NA_integer_
-      signature <- paste(panels, rows, cols, sep = "x")
-
-      if (!identical(signature, last_defaults())) {
-        updateNumericInput(session, "resp_rows", value = rows)
-        updateNumericInput(session, "resp_cols", value = cols)
-        last_defaults(signature)
-      }
+      sync_numeric_input(session, "resp_rows", input$resp_rows, rows)
+      sync_numeric_input(session, "resp_cols", input$resp_cols, cols)
     }, ignoreNULL = FALSE)
 
     output$grid_warning <- renderUI({

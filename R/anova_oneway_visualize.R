@@ -93,8 +93,6 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
       )
     })
 
-    last_counts <- reactiveValues(strata = NULL, responses = NULL)
-
     observeEvent(plot_info(), {
       info <- plot_info()
       if (is.null(info) || is.null(info$defaults) || is.null(info$layout)) {
@@ -105,16 +103,9 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
         defaults <- info$defaults$strata
         rows <- defaults$rows
         cols <- defaults$cols
-        layout_info <- info$layout$strata
-        if (!is.null(rows) && !is.null(cols) && !is.null(layout_info)) {
-          panels <- layout_info$panels
-          if (is.null(panels)) panels <- NA_integer_
-          signature <- paste(panels, rows, cols, sep = "x")
-          if (!identical(signature, last_counts$strata)) {
-            updateNumericInput(session, "strata_rows", value = rows)
-            updateNumericInput(session, "strata_cols", value = cols)
-            last_counts$strata <- signature
-          }
+        if (!is.null(rows) && !is.null(cols)) {
+          sync_numeric_input(session, "strata_rows", input$strata_rows, rows)
+          sync_numeric_input(session, "strata_cols", input$strata_cols, cols)
         }
       }
 
@@ -122,16 +113,9 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
         defaults <- info$defaults$responses
         rows <- defaults$rows
         cols <- defaults$cols
-        layout_info <- info$layout$responses
-        if (!is.null(rows) && !is.null(cols) && !is.null(layout_info)) {
-          panels <- layout_info$panels
-          if (is.null(panels)) panels <- NA_integer_
-          signature <- paste(panels, rows, cols, sep = "x")
-          if (!identical(signature, last_counts$responses)) {
-            updateNumericInput(session, "resp_rows", value = rows)
-            updateNumericInput(session, "resp_cols", value = cols)
-            last_counts$responses <- signature
-          }
+        if (!is.null(rows) && !is.null(cols)) {
+          sync_numeric_input(session, "resp_rows", input$resp_rows, rows)
+          sync_numeric_input(session, "resp_cols", input$resp_cols, cols)
         }
       }
     }, ignoreNULL = FALSE)

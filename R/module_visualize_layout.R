@@ -80,3 +80,39 @@ basic_grid_layout <- function(rows = NULL,
     )
   )
 }
+
+needs_numeric_update <- function(current_value, target_value) {
+  if (is.null(target_value) || length(target_value) == 0) {
+    return(FALSE)
+  }
+
+  target_int <- suppressWarnings(as.integer(target_value[1]))
+  if (is.na(target_int)) {
+    return(FALSE)
+  }
+
+  if (is.null(current_value) || length(current_value) == 0) {
+    return(TRUE)
+  }
+
+  current_int <- suppressWarnings(as.integer(current_value[1]))
+  if (is.na(current_int)) {
+    return(TRUE)
+  }
+
+  !identical(current_int, target_int)
+}
+
+sync_numeric_input <- function(session, input_id, current_value, target_value) {
+  if (!needs_numeric_update(current_value, target_value)) {
+    return(invisible(FALSE))
+  }
+
+  target_int <- as.integer(target_value[1])
+
+  session$onFlushed(function() {
+    updateNumericInput(session, input_id, value = target_int)
+  }, once = TRUE)
+
+  invisible(TRUE)
+}
