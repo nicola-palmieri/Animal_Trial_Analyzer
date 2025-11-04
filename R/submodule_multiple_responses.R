@@ -1,5 +1,5 @@
 # ===============================================================
-# 🔁 Multi-Response Selector Module
+# 🔁 Multi-Response Selector Module (final simple version)
 # ===============================================================
 
 multi_response_ui <- function(id) {
@@ -18,23 +18,17 @@ multi_response_server <- function(id, data) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
-    # --- Reactive data wrapper (clean + guarded)
     df <- reactive({
       d <- if (is.function(data)) data() else data
-      req(d)
+      req(is.data.frame(d))
       d
     })
     
-    # --- Render selectInput dynamically
+    # --- Re-render only when multi-select mode changes
     output$response_ui <- renderUI({
       d <- req(df())
       num_vars <- names(d)[sapply(d, is.numeric)]
       validate(need(length(num_vars) > 0, "No numeric variables available."))
-      
-      current_selection <- input$response
-      if (is.null(current_selection) || !all(current_selection %in% num_vars)) {
-        current_selection <- if (length(num_vars) > 0) num_vars[1] else NULL
-      }
       
       selectInput(
         ns("response"),
@@ -43,18 +37,16 @@ multi_response_server <- function(id, data) {
         else
           "Response variable (numeric):",
         choices = num_vars,
-        selected = current_selection,
+        selected = num_vars[1],
         multiple = isTRUE(input$multi_resp)
       )
     })
     
-    # --- Standardized reactive vector output
-    selected_responses <- reactive({
+    # --- Reactive standardized vector
+    reactive({
       res <- req(input$response)
       if (!isTRUE(input$multi_resp)) res <- res[1]
       unique(res)
     })
-    
-    return(selected_responses)
   })
 }
