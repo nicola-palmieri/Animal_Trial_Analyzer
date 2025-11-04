@@ -73,22 +73,24 @@ observe_layout_synchronization <- function(plot_info_reactive, layout_state, ses
 }
 
 resolve_grid_layout <- function(n_items, rows_input = NULL, cols_input = NULL) {
+  # --- Validate number of items ---
   n_items <- suppressWarnings(as.integer(n_items[1]))
-  if (is.na(n_items) || n_items <= 0) {
-    n_items <- 1L
-  }
+  if (is.na(n_items) || n_items <= 0) n_items <- 1L
   
+  # --- Extract numeric inputs ---
   rows_raw <- resolve_grid_value(rows_input)
   cols_raw <- resolve_grid_value(cols_input)
   
   rows <- rows_raw
   cols <- cols_raw
   
+  # --- Compute sensible defaults ---
   if (is.na(rows) && is.na(cols)) {
+    # automatic roughly-square layout
     rows <- ceiling(sqrt(n_items))
     cols <- ceiling(n_items / rows)
   } else if (is.na(rows)) {
-    cols <- cols_raw
+    # rows missing, infer from columns
     if (is.na(cols) || cols <= 0) {
       rows <- ceiling(sqrt(n_items))
       cols <- ceiling(n_items / rows)
@@ -96,7 +98,7 @@ resolve_grid_layout <- function(n_items, rows_input = NULL, cols_input = NULL) {
       rows <- ceiling(n_items / cols)
     }
   } else if (is.na(cols)) {
-    rows <- rows_raw
+    # cols missing, infer from rows
     if (is.na(rows) || rows <= 0) {
       rows <- ceiling(sqrt(n_items))
       cols <- ceiling(n_items / rows)
@@ -105,18 +107,27 @@ resolve_grid_layout <- function(n_items, rows_input = NULL, cols_input = NULL) {
     }
   }
   
-  if ((is.na(rows_raw) || is.na(cols_raw)) && !is.na(rows) && !is.na(cols)) {
+  # --- Clamp minimum values ---
+  rows <- max(1L, rows)
+  cols <- max(1L, cols)
+  
+  # --- Handle too-small grids safely ---
+  if (rows * cols < n_items) {
+    shiny::showNotification(
+      sprintf("⚠️ Grid %dx%d too small for %d subplots — auto-adjusting layout.",
+              rows, cols, n_items),
+      type = "warning",
+      duration = 6
+    )
+    # Expand automatically until it fits all subplots
     while (rows * cols < n_items) {
-      if (cols <= rows) {
-        cols <- cols + 1L
-      } else {
-        rows <- rows + 1L
-      }
+      if (cols <= rows) cols <- cols + 1L else rows <- rows + 1L
     }
   }
   
   list(nrow = rows, ncol = cols)
 }
+
 
 resolve_grid_value <- function(value) {
   if (is.null(value) || length(value) == 0) return(NA_integer_)

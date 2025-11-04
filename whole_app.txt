@@ -4217,7 +4217,7 @@ convert_wide_to_long <- function(path, sheet = 1, replicate_col = "Replicate") {
   as_tibble(data_long)
 }
 # ===============================================================
-# 🧩 Visualization Coordinator (Refactored & Consistent)
+# 🧩 Visualization Coordinator (Lazy + Reactive)
 # ===============================================================
 
 visualize_ui <- function(id) {
@@ -4247,7 +4247,20 @@ visualize_server <- function(id, filtered_data, model_fit) {
     })
     
     # -----------------------------------------------------------
-    # 3️⃣ Dynamic UI loading
+    # 3️⃣ Visualization cache (like analysis_server)
+    # -----------------------------------------------------------
+    vis_cache <- reactiveValues()
+    
+    ensure_vis_server <- function(key, create_fn) {
+      if (!is.null(vis_cache[[key]])) {
+        return(vis_cache[[key]])
+      }
+      vis_cache[[key]] <- create_fn()
+      vis_cache[[key]]
+    }
+    
+    # -----------------------------------------------------------
+    # 4️⃣ Dynamic UI loading (lazy initialization)
     # -----------------------------------------------------------
     output$dynamic_ui <- renderUI({
       type <- analysis_type()
@@ -4263,23 +4276,34 @@ visualize_server <- function(id, filtered_data, model_fit) {
     })
     
     # -----------------------------------------------------------
-    # 4️⃣ Attach the correct visualization server
+    # 5️⃣ Attach or reuse visualization servers lazily
     # -----------------------------------------------------------
     observeEvent(analysis_type(), {
       type <- analysis_type()
       
       if (type == "oneway_anova") {
-        visualize_oneway_server("oneway", filtered_data, model_info)
+        ensure_vis_server("oneway", function() {
+          visualize_oneway_server("oneway", filtered_data, model_info)
+        })
       } else if (type == "twoway_anova") {
-        visualize_twoway_server("twoway", filtered_data, model_info)
+        ensure_vis_server("twoway", function() {
+          visualize_twoway_server("twoway", filtered_data, model_info)
+        })
       } else if (type == "pairs") {
-        visualize_ggpairs_server("ggpairs", filtered_data, model_info)
+        ensure_vis_server("ggpairs", function() {
+          visualize_ggpairs_server("ggpairs", filtered_data, model_info)
+        })
       } else if (type == "pca") {
-        visualize_pca_server("pca", filtered_data, model_info)
+        ensure_vis_server("pca", function() {
+          visualize_pca_server("pca", filtered_data, model_info)
+        })
       } else if (type == "descriptive") {
-        visualize_descriptive_server("descriptive", filtered_data, model_info)
+        ensure_vis_server("descriptive", function() {
+          visualize_descriptive_server("descriptive", filtered_data, model_info)
+        })
       }
     }, ignoreInit = FALSE)
+    
   })
 }
 # ===============================================================
