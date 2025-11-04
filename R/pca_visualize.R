@@ -389,8 +389,6 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
         cols_input = layout_state$effective_input("strata_cols")
       )
 
-      sync_grid_controls(layout_state, input, session, "strata_rows", "strata_cols", layout)
-
       if (!isTRUE(layout$valid)) {
         return(list(
           plot = NULL,

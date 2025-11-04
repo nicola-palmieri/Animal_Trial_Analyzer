@@ -100,7 +100,6 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
       )
 
       validate(need(!is.null(out), "No numeric variables available for plotting."))
-      sync_grid_controls(layout_state, input, session, "resp_rows", "resp_cols", out$layout)
       out
     })
 
