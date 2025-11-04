@@ -75,19 +75,19 @@ analysis_server <- function(id, filtered_data) {
     # ---- Current module getter ----
     current_mod <- reactive({
       type <- input$analysis_type
-      if (is.null(type) || !nzchar(type)) return(NULL)
+      req(type)
       modules[[type]]
     })
     
     current_ui <- reactive({
       mod <- current_mod()
-      if (is.null(mod)) return(NULL)
+      req(mod)
       mod$ui(ns(mod$id))
     })
     
     # ---- Lazy server initialization ----
     normalize_analysis_type <- function(mod_type) {
-      lookup <- list(
+      lookup <- c(
         desc = "DESCRIPTIVE",
         anova1 = "ANOVA",
         anova2 = "ANOVA",
@@ -96,85 +96,66 @@ analysis_server <- function(id, filtered_data) {
         pairs = "CORR",
         pca = "PCA"
       )
-      if (is.null(mod_type)) return(NULL)
-      if (mod_type %in% names(lookup)) lookup[[mod_type]] else toupper(mod_type)
+      lookup[[mod_type]] %||% toupper(mod_type)
     }
+    
 
     ensure_module_server <- function(mod) {
       key <- mod$id
       if (!is.null(server_cache[[key]])) return(server_cache[[key]])
-
+      
       result <- tryCatch(mod$server(mod$id, df), error = function(e) {
         warning(sprintf("Module '%s' failed to initialize: %s", key, conditionMessage(e)))
         NULL
       })
-
-      default_analysis_type <- normalize_analysis_type(mod$type)
-
-      if (is.null(result)) {
-        server_cache[[key]] <- reactive(NULL)
-      } else if (is.reactive(result)) {
-        server_cache[[key]] <- reactive({
-          val <- result()
-          if (is.null(val)) return(NULL)
-          if (!is.list(val)) {
-            return(list(
-              analysis_type = default_analysis_type,
-              data_used = NULL,
-              model = val,
-              summary = NULL,
-              posthoc = NULL,
-              effects = NULL,
-              stats = NULL,
-              metadata = list(),
-              type = mod$type
-            ))
-          }
-          if (is.null(val$type)) val$type <- mod$type
-          if (is.null(val$analysis_type)) val$analysis_type <- default_analysis_type
-          val
-        })
-      } else {
-        server_cache[[key]] <- reactive(list(
-          analysis_type = default_analysis_type,
-          data_used = NULL,
-          model = result,
-          summary = NULL,
-          posthoc = NULL,
-          effects = NULL,
-          stats = NULL,
-          metadata = list(),
-          type = mod$type
-        ))
-      }
-
-      server_cache[[key]]
+      
+      default_type <- normalize_analysis_type(mod$type)
+      
+      # --- Standardize all outputs to a reactive returning a list ---
+      standardized <- reactive({
+        val <- if (is.reactive(result)) result() else result
+        req(val)
+        
+        val$analysis_type <- val$analysis_type %||% default_type
+        val$type <- val$type %||% mod$type
+        val$data_used <- val$data_used %||% NULL
+        val$summary <- val$summary %||% NULL
+        val$posthoc <- val$posthoc %||% NULL
+        val$effects <- val$effects %||% NULL
+        val$stats <- val$stats %||% NULL
+        val$metadata <- val$metadata %||% list()
+        val
+      })
+      
+      server_cache[[key]] <- standardized
+      standardized
     }
+    
     
     # ---- Render active submodule UI ----
     output$config_panel <- renderUI({
       ui <- current_ui()
-      if (is.null(ui)) return(NULL)
+      req(ui)
       ui$config
     })
     
     output$results_panel <- renderUI({
       ui <- current_ui()
-      if (is.null(ui)) return(NULL)
+      req(ui)
       ui$results
     })
     
     # ---- Connect the current selected module's server ----
     current_server <- reactive({
       mod <- current_mod()
-      if (is.null(mod)) return(NULL)
+      req(mod)
       ensure_module_server(mod)
     })
     
     # ---- Unified model output ----
     model_out <- reactive({
       srv <- current_server()
-      if (is.null(srv)) return(NULL)
+      req(srv)
       srv()
     })
     
