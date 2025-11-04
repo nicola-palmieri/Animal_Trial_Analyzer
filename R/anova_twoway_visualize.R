@@ -63,7 +63,10 @@ visualize_twoway_server <- function(id, filtered_data, model_fit) {
 
     plot_info <- reactive({
       info <- model_info()
-      if (is.null(info) || info$type != "twoway_anova") return(NULL)
+      req(info)
+      validate(
+        need(info$type == "twoway_anova", "Loaded analysis is not a two-way ANOVA result.")
+      )
       data <- df()
       line_colors <- custom_colors()
       if (is.null(line_colors) || length(line_colors) == 0) {
@@ -87,7 +90,7 @@ visualize_twoway_server <- function(id, filtered_data, model_fit) {
     
     plot_size <- reactive({
       info <- plot_info()
-      if (is.null(info)) return(list(w = input$plot_width, h = input$plot_height))
+      req(info)
       s <- info$layout
       list(
         w = input$plot_width  * s$strata$cols   * s$responses$ncol,
@@ -97,7 +100,7 @@ visualize_twoway_server <- function(id, filtered_data, model_fit) {
     
     output$layout_controls <- renderUI({
       info <- model_info()
-      if (is.null(info) || info$type != "twoway_anova") return(NULL)
+      req(info)
       build_anova_layout_controls(ns, input, info, layout_state$default_ui_value)
     })
     
