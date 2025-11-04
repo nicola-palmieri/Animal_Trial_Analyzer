@@ -32,6 +32,7 @@ visualize_server <- function(id, filtered_data, model_fit) {
     # 3️⃣ Visualization cache (like analysis_server)
     # -----------------------------------------------------------
     vis_cache <- reactiveValues()
+    vis_state <- reactiveValues(plot_type = list())
     
     ensure_vis_server <- function(key, create_fn) {
       if (!is.null(vis_cache[[key]])) {
@@ -46,13 +47,14 @@ visualize_server <- function(id, filtered_data, model_fit) {
     # -----------------------------------------------------------
     output$dynamic_ui <- renderUI({
       type <- analysis_type()
+      selected <- isolate(vis_state$plot_type[[type]])
       switch(
         type,
-        "oneway_anova"   = visualize_oneway_ui(ns("oneway")),
-        "twoway_anova"   = visualize_twoway_ui(ns("twoway")),
-        "pairs"          = visualize_ggpairs_ui(ns("ggpairs")),
-        "pca"            = visualize_pca_ui(ns("pca"), filtered_data()),
-        "descriptive"    = visualize_descriptive_ui(ns("descriptive")),
+        "oneway_anova"   = visualize_oneway_ui(ns("oneway"), selected_plot_type = selected),
+        "twoway_anova"   = visualize_twoway_ui(ns("twoway"), selected_plot_type = selected),
+        "pairs"          = visualize_ggpairs_ui(ns("ggpairs"), selected_plot_type = selected),
+        "pca"            = visualize_pca_ui(ns("pca"), filtered_data(), selected_plot_type = selected),
+        "descriptive"    = visualize_descriptive_ui(ns("descriptive"), selected_plot_type = selected),
         div("Visualization not yet implemented for this analysis type.")
       )
     })
@@ -62,7 +64,7 @@ visualize_server <- function(id, filtered_data, model_fit) {
     # -----------------------------------------------------------
     observeEvent(analysis_type(), {
       type <- analysis_type()
-      
+
       if (type == "oneway_anova") {
         ensure_vis_server("oneway", function() {
           visualize_oneway_server("oneway", filtered_data, model_info)
@@ -85,6 +87,23 @@ visualize_server <- function(id, filtered_data, model_fit) {
         })
       }
     }, ignoreInit = FALSE)
-    
+
+    track_plot_type <- function(analysis_key, input_id) {
+      observeEvent(input[[ns(input_id)]], {
+        value <- input[[ns(input_id)]]
+        if (is.null(value) || !nzchar(value[1])) {
+          vis_state$plot_type[[analysis_key]] <- NULL
+        } else {
+          vis_state$plot_type[[analysis_key]] <- value[1]
+        }
+      }, ignoreNULL = FALSE)
+    }
+
+    track_plot_type("oneway_anova", "oneway-plot_type")
+    track_plot_type("twoway_anova", "twoway-plot_type")
+    track_plot_type("pairs", "ggpairs-plot_type")
+    track_plot_type("pca", "pca-plot_type")
+    track_plot_type("descriptive", "descriptive-plot_type")
+
   })
 }

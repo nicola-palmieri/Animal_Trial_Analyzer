@@ -22,9 +22,14 @@
   c("None" = "None", stats::setNames(cat_cols, cat_cols))
 }
 
-visualize_pca_ui <- function(id, filtered_data = NULL) {
+visualize_pca_ui <- function(id, filtered_data = NULL, selected_plot_type = NULL) {
   ns <- NS(id)
   choices <- .pca_aesthetic_choices(filtered_data)
+  plot_choices <- c("PCA biplot" = "biplot")
+  selected_value <- selected_plot_type
+  if (is.null(selected_value) || !(selected_value %in% plot_choices)) {
+    selected_value <- plot_choices[[1]]
+  }
 
   sidebarLayout(
     sidebarPanel(
@@ -35,8 +40,8 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
       selectInput(
         ns("plot_type"),
         label = "Select visualization type:",
-        choices = c("PCA biplot" = "biplot"),
-        selected = "biplot"
+        choices = plot_choices,
+        selected = selected_value
       ),
       hr(),
       uiOutput(ns("layout_controls")),

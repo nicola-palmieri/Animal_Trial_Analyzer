@@ -2,8 +2,20 @@
 # Visualization Module — Descriptive Statistics (Dispatcher)
 # ===============================================================
 
-visualize_descriptive_ui <- function(id) {
+visualize_descriptive_ui <- function(id, selected_plot_type = NULL) {
   ns <- NS(id)
+  plot_choices <- c(
+    "Categorical distributions" = "categorical",
+    "Numeric boxplots"          = "boxplots",
+    "Numeric histograms"        = "histograms",
+    "CV (%)"                    = "cv",
+    "Outlier counts"            = "outliers",
+    "Missingness (%)"           = "missing"
+  )
+  selected_value <- selected_plot_type
+  if (is.null(selected_value) || !(selected_value %in% plot_choices)) {
+    selected_value <- plot_choices[[1]]
+  }
   sidebarLayout(
     sidebarPanel(
       width = 4,
@@ -13,15 +25,8 @@ visualize_descriptive_ui <- function(id) {
       selectInput(
         ns("plot_type"),
         label = "Select visualization type:",
-        choices = c(
-          "Categorical distributions" = "categorical",
-          "Numeric boxplots"          = "boxplots",
-          "Numeric histograms"        = "histograms",
-          "CV (%)"                    = "cv",
-          "Outlier counts"            = "outliers",
-          "Missingness (%)"           = "missing"
-        ),
-        selected = "categorical"
+        choices = plot_choices,
+        selected = selected_value
       ),
       hr(),
       uiOutput(ns("sub_controls"))  # controls from active submodule

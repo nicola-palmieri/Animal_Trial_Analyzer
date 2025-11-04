@@ -2,8 +2,13 @@
 # 🧪 Visualization Module — One-way ANOVA
 # ===============================================================
 
-visualize_oneway_ui <- function(id) {
+visualize_oneway_ui <- function(id, selected_plot_type = NULL) {
   ns <- NS(id)
+  plot_choices <- c("Mean ± SE" = "mean_se")
+  selected_value <- selected_plot_type
+  if (is.null(selected_value) || !(selected_value %in% plot_choices)) {
+    selected_value <- plot_choices[[1]]
+  }
   sidebarLayout(
     sidebarPanel(
       width = 4,
@@ -13,8 +18,8 @@ visualize_oneway_ui <- function(id) {
       selectInput(
         ns("plot_type"),
         label = "Select visualization type:",
-        choices = c("Mean ± SE" = "mean_se"),
-        selected = "mean_se"
+        choices = plot_choices,
+        selected = selected_value
       ),
       hr(),
       uiOutput(ns("layout_controls")),

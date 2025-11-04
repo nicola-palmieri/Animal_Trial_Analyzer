@@ -2,8 +2,13 @@
 # 🧪 Visualization Module — Pairwise Correlation (Dispatcher)
 # ===============================================================
 
-visualize_ggpairs_ui <- function(id) {
+visualize_ggpairs_ui <- function(id, selected_plot_type = NULL) {
   ns <- NS(id)
+  plot_choices <- c("Pairwise scatterplot matrix" = "GGPairs")
+  selected_value <- selected_plot_type
+  if (is.null(selected_value) || !(selected_value %in% plot_choices)) {
+    selected_value <- plot_choices[[1]]
+  }
   sidebarLayout(
     sidebarPanel(
       width = 4,
@@ -13,8 +18,8 @@ visualize_ggpairs_ui <- function(id) {
       selectInput(
         ns("plot_type"),
         label = "Select visualization type:",
-        choices = c("Pairwise scatterplot matrix" = "GGPairs"),
-        selected = "GGPairs"
+        choices = plot_choices,
+        selected = selected_value
       ),
       hr(),
       uiOutput(ns("sub_controls"))
