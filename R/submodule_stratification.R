@@ -25,6 +25,7 @@ stratification_ui <- function(id, ns = NULL) {
 stratification_server <- function(id, data) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
+    last_strat_var <- reactiveVal(NULL)
     
     # ---- Resolve data ----
     df <- reactive({
@@ -62,9 +63,10 @@ stratification_server <- function(id, data) {
           identical(strat_var, STRAT_NONE_LABEL) ||
           !nzchar(strat_var) ||
           !(strat_var %in% names(d))) {
+        last_strat_var(NULL)
         return(list(var = NULL, levels = NULL, available_levels = NULL))
       }
-      
+
       values <- d[[strat_var]]
       values <- values[!is.na(values)]
       available_levels <- if (is.factor(values)) levels(values) else unique(as.character(values))
@@ -76,14 +78,20 @@ stratification_server <- function(id, data) {
                             strat_var, n_levels, MAX_STRATIFICATION_LEVELS)
       ))
       
+      prev_var <- isolate(last_strat_var())
       selected_levels <- input$strata_order
       if (!is.null(selected_levels)) {
         selected_levels <- selected_levels[selected_levels %in% available_levels]
       }
-      if (is.null(selected_levels) || length(selected_levels) == 0) {
-        selected_levels <- available_levels
+      if (is.null(selected_levels)) {
+        if (!identical(prev_var, strat_var)) {
+          selected_levels <- available_levels
+        } else {
+          selected_levels <- character(0)
+        }
       }
-      
+      last_strat_var(strat_var)
+
       list(
         var = strat_var,
         levels = selected_levels,
