@@ -16,7 +16,7 @@ visualize_numeric_boxplots_ui <- function(id) {
         numericInput(
           ns("resp_rows"),
           "Grid rows",
-          value = 1,
+          value = NA,
           min = 1,
           max = 10,
           step = 1
@@ -27,7 +27,7 @@ visualize_numeric_boxplots_ui <- function(id) {
         numericInput(
           ns("resp_cols"),
           "Grid columns",
-          value = 6,
+          value = NA,
           min = 1,
           max = 10,
           step = 1
@@ -44,6 +44,7 @@ visualize_numeric_boxplots_plot_ui <- function(id) {
   ns <- NS(id)
   div(
     class = "ta-plot-container",
+    uiOutput(ns("grid_warning")),
     plotOutput(ns("plot"), width = "100%", height = "auto")
   )
 }
@@ -90,16 +91,13 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
       selected_vars <- resolve_input_value(info$selected_vars)
       group_var     <- resolve_input_value(info$group_var)
       
-      grid_rows <- basic_grid_value(input$resp_rows, default = 1)
-      grid_cols <- basic_grid_value(input$resp_cols, default = 6)
-
       out <- build_descriptive_numeric_boxplot(
         df = dat,
         selected_vars = selected_vars,
         group_var = group_var,
         show_points = isTRUE(input$show_points),
-        nrow_input = grid_rows,
-        ncol_input = grid_cols
+        nrow_input = input$resp_rows,
+        ncol_input = input$resp_cols
       )
 
       validate(need(!is.null(out), "No numeric variables available for plotting."))
@@ -119,13 +117,35 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
         )
       }
     })
-    
-    
+
+    observeEvent(plot_info(), {
+      info <- plot_info()
+      if (is.null(info) || is.null(info$defaults)) return()
+
+      rows <- info$defaults$rows
+      cols <- info$defaults$cols
+      if (is.null(rows) || is.null(cols)) return()
+
+      sync_numeric_input(session, "resp_rows", input$resp_rows, rows)
+      sync_numeric_input(session, "resp_cols", input$resp_cols, cols)
+    }, ignoreNULL = FALSE)
+
+    output$grid_warning <- renderUI({
+      req(module_active())
+      info <- plot_info()
+      if (!is.null(info$warning)) {
+        div(class = "alert alert-warning", info$warning)
+      } else {
+        NULL
+      }
+    })
+
     output$download_plot <- downloadHandler(
       filename = function() paste0("numeric_boxplots_", Sys.Date(), ".png"),
       content  = function(file) {
         req(module_active())
         info <- plot_info()
+        req(is.null(info$warning))
         req(info$plot)
         s <- plot_size()
         ggplot2::ggsave(
@@ -144,6 +164,7 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
     output$plot <- renderPlot({
       req(module_active())
       info <- plot_info()
+      if (!is.null(info$warning) || is.null(info$plot)) return(NULL)
       print(info$plot)
     },
     width = function() {
@@ -218,19 +239,31 @@ build_descriptive_numeric_boxplot <- function(df,
   plots <- Filter(Negate(is.null), plots)
   if (length(plots) == 0) return(NULL)
   
+  n_panels <- length(plots)
+  defaults <- compute_default_grid(n_panels)
+
   layout <- basic_grid_layout(
     rows = suppressWarnings(as.numeric(nrow_input)),
-    cols = suppressWarnings(as.numeric(ncol_input))
+    cols = suppressWarnings(as.numeric(ncol_input)),
+    default_rows = defaults$rows,
+    default_cols = defaults$cols
   )
-  
-  combined <- patchwork::wrap_plots(plots, nrow = layout$nrow, ncol = layout$ncol) +
-    patchwork::plot_annotation(
-      theme = theme(plot.title = element_text(size = 16, face = "bold"))
-    )
-  
+
+  validation <- validate_grid(n_panels, layout$nrow, layout$ncol)
+
+  combined <- NULL
+  if (isTRUE(validation$valid)) {
+    combined <- patchwork::wrap_plots(plots, nrow = layout$nrow, ncol = layout$ncol) +
+      patchwork::plot_annotation(
+        theme = theme(plot.title = element_text(size = 16, face = "bold"))
+      )
+  }
+
   list(
     plot = combined,
     layout = list(nrow = layout$nrow, ncol = layout$ncol),
-    panels = length(plots)
+    panels = n_panels,
+    warning = validation$message,
+    defaults = defaults
   )
 }

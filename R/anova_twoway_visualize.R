@@ -29,6 +29,7 @@ visualize_twoway_ui <- function(id) {
     mainPanel(
       width = 8,
       h4("Plots"),
+      uiOutput(ns("plot_warning")),
       plotOutput(ns("plot"), height = "auto")   # ✅ same as one-way
     )
   )
@@ -87,6 +88,9 @@ visualize_twoway_server <- function(id, filtered_data, model_fit) {
     plot_obj <- reactive({
       info <- plot_info()
       if (is.null(info)) return(NULL)
+      if (!is.null(info$warning) || is.null(info$plot)) {
+        return(NULL)
+      }
       info$plot
     })
     
@@ -99,11 +103,47 @@ visualize_twoway_server <- function(id, filtered_data, model_fit) {
         h = input$plot_height * s$strata$rows   * s$responses$nrow
       )
     })
+
+    observeEvent(plot_info(), {
+      info <- plot_info()
+      if (is.null(info) || is.null(info$defaults) || is.null(info$layout)) {
+        return()
+      }
+
+      if (!is.null(info$defaults$strata)) {
+        defaults <- info$defaults$strata
+        rows <- defaults$rows
+        cols <- defaults$cols
+        if (!is.null(rows) && !is.null(cols)) {
+          sync_numeric_input(session, "strata_rows", input$strata_rows, rows)
+          sync_numeric_input(session, "strata_cols", input$strata_cols, cols)
+        }
+      }
+
+      if (!is.null(info$defaults$responses)) {
+        defaults <- info$defaults$responses
+        rows <- defaults$rows
+        cols <- defaults$cols
+        if (!is.null(rows) && !is.null(cols)) {
+          sync_numeric_input(session, "resp_rows", input$resp_rows, rows)
+          sync_numeric_input(session, "resp_cols", input$resp_cols, cols)
+        }
+      }
+    }, ignoreNULL = FALSE)
     
     output$layout_controls <- renderUI({
       info <- model_info()
       req(info)
       build_anova_layout_controls(ns, input, info)
+    })
+
+    output$plot_warning <- renderUI({
+      info <- plot_info()
+      if (!is.null(info$warning)) {
+        div(class = "alert alert-warning", HTML(info$warning))
+      } else {
+        NULL
+      }
     })
     
     # ✅ simpler, consistent naming and structure
@@ -112,8 +152,9 @@ visualize_twoway_server <- function(id, filtered_data, model_fit) {
       req(info, input$plot_type)
 
       if (input$plot_type == "mean_se") {
-        req(plot_obj())
-        plot_obj()
+        plot <- plot_obj()
+        if (is.null(plot)) return(NULL)
+        plot
       }
     },
     width = function() plot_size()$w,
@@ -123,11 +164,14 @@ visualize_twoway_server <- function(id, filtered_data, model_fit) {
     output$download_plot <- downloadHandler(
       filename = function() paste0(input$plot_type, "_twoway_anova_plot_", Sys.Date(), ".png"),
       content = function(file) {
-        req(plot_obj())
+        info <- plot_info()
+        req(is.null(info$warning))
+        plot <- plot_obj()
+        req(plot)
         s <- plot_size()
         ggsave(
           filename = file,
-          plot = plot_obj(),
+          plot = plot,
           device = "png",
           dpi = 300,
           width  = s$w / 96,

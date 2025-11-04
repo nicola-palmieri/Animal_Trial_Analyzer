@@ -10,8 +10,8 @@ pairwise_correlation_visualize_ggpairs_ui <- function(id) {
       column(6, numericInput(ns("plot_height"), "Subplot height (px)", 600, 200, 2000, 50))
     ),
     fluidRow(
-      column(6, numericInput(ns("resp_rows"),    "Grid rows",    1, 1, 10, 1)),
-      column(6, numericInput(ns("resp_cols"),    "Grid columns", 1, 1, 10, 1))
+      column(6, numericInput(ns("resp_rows"),    "Grid rows",    NA, 1, 10, 1)),
+      column(6, numericInput(ns("resp_cols"),    "Grid columns", NA, 1, 10, 1))
     ),
     hr(),
     downloadButton(ns("download_plot"), "Download Plot", style = "width: 100%;")
@@ -127,8 +127,15 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
       if (is.null(group_var)) {
         plot_data <- data[, selected_vars, drop = FALSE]
         plot_obj <- build_ggpairs_plot(plot_data, basic_color_palette[1])
-        layout <- list(nrow = 1L, ncol = 1L)
-        list(plot = plot_obj, layout = layout)
+        defaults <- compute_default_grid(1L)
+        layout <- list(nrow = defaults$rows, ncol = defaults$cols)
+        list(
+          plot = plot_obj,
+          layout = layout,
+          panels = 1L,
+          warning = NULL,
+          defaults = defaults
+        )
       } else {
         available_levels <- NULL
         if (!is.null(results$matrices)) {
@@ -164,18 +171,34 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
 
         validate(need(length(plots) > 0, "No data available for the selected strata."))
 
+        panel_count <- length(plots)
+        defaults <- compute_default_grid(panel_count)
+
         layout <- basic_grid_layout(
-          rows = basic_grid_value(input$resp_rows, default = 1),
-          cols = basic_grid_value(input$resp_cols, default = 1)
+          rows = suppressWarnings(as.numeric(input$resp_rows)),
+          cols = suppressWarnings(as.numeric(input$resp_cols)),
+          default_rows = defaults$rows,
+          default_cols = defaults$cols
         )
 
-        combined <- patchwork::wrap_plots(
-          plotlist = plots,
-          nrow = layout$nrow,
-          ncol = layout$ncol
-        )
+        validation <- validate_grid(panel_count, layout$nrow, layout$ncol)
 
-        list(plot = combined, layout = layout)
+        combined <- NULL
+        if (isTRUE(validation$valid)) {
+          combined <- patchwork::wrap_plots(
+            plotlist = plots,
+            nrow = layout$nrow,
+            ncol = layout$ncol
+          )
+        }
+
+        list(
+          plot = combined,
+          layout = layout,
+          panels = panel_count,
+          warning = validation$message,
+          defaults = defaults
+        )
       }
     })
 
@@ -199,10 +222,23 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
       h
     })
 
+    observeEvent(plot_info(), {
+      info <- plot_info()
+      if (is.null(info) || is.null(info$defaults)) return()
+
+      rows <- info$defaults$rows
+      cols <- info$defaults$cols
+      if (is.null(rows) || is.null(cols)) return()
+
+      sync_numeric_input(session, "resp_rows", input$resp_rows, rows)
+      sync_numeric_input(session, "resp_cols", input$resp_cols, cols)
+    }, ignoreNULL = FALSE)
+
     output$download_plot <- downloadHandler(
       filename = function() paste0("pairwise_correlation_ggpairs_", Sys.Date(), ".png"),
       content = function(file) {
         info <- plot_info()
+        req(is.null(info$warning))
         plot_obj <- info$plot
         req(plot_obj)
         ggplot2::ggsave(
@@ -221,7 +257,8 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
     list(
       plot = reactive({ plot_info()$plot }),
       width = reactive(plot_width_total()),
-      height = reactive(plot_height_total())
+      height = reactive(plot_height_total()),
+      warning = reactive(plot_info()$warning)
     )
   })
 }

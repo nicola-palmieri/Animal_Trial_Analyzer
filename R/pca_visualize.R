@@ -109,6 +109,7 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
     mainPanel(
       width = 8,
       h4("Plots"),
+      uiOutput(ns("plot_warning")),
       plotOutput(ns("plot"))
     )
   )
@@ -192,7 +193,7 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
             numericInput(
               ns("strata_rows"),
               "Grid rows",
-              value = isolate(basic_grid_value(input$strata_rows, default = 1)),
+              value = isolate(if (is.null(input$strata_rows)) NA else input$strata_rows),
               min = 1,
               max = 10,
               step = 1
@@ -203,7 +204,7 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
             numericInput(
               ns("strata_cols"),
               "Grid columns",
-              value = isolate(basic_grid_value(input$strata_cols, default = 1)),
+              value = isolate(if (is.null(input$strata_cols)) NA else input$strata_cols),
               min = 1,
               max = 10,
               step = 1
@@ -381,22 +382,35 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
       plot_list <- Filter(Negate(is.null), plot_list)
       validate(need(length(plot_list) > 0, "No PCA plots available."))
 
+      panel_count <- length(plot_list)
+      defaults <- compute_default_grid(panel_count)
+
       layout <- basic_grid_layout(
-        rows = basic_grid_value(input$strata_rows, default = 1),
-        cols = basic_grid_value(input$strata_cols, default = 1)
+        rows = suppressWarnings(as.numeric(input$strata_rows)),
+        cols = suppressWarnings(as.numeric(input$strata_cols)),
+        default_rows = defaults$rows,
+        default_cols = defaults$cols
       )
 
-      combined <- patchwork::wrap_plots(
-        plotlist = plot_list,
-        nrow = layout$nrow,
-        ncol = layout$ncol
-      ) +
-        patchwork::plot_layout(guides = "collect")
+      validation <- validate_grid(panel_count, layout$nrow, layout$ncol)
+
+      combined <- NULL
+      if (isTRUE(validation$valid)) {
+        combined <- patchwork::wrap_plots(
+          plotlist = plot_list,
+          nrow = layout$nrow,
+          ncol = layout$ncol
+        ) +
+          patchwork::plot_layout(guides = "collect")
+      }
 
       list(
         plot = combined,
         layout = layout,
-        strata_names = names(plot_list)
+        strata_names = names(plot_list),
+        panels = panel_count,
+        warning = validation$message,
+        defaults = defaults
       )
     })
 
@@ -415,15 +429,39 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
       )
     })
 
+    observeEvent(plot_info(), {
+      info <- plot_info()
+      if (is.null(info) || is.null(info$defaults)) return()
+
+      rows <- info$defaults$rows
+      cols <- info$defaults$cols
+      if (is.null(rows) || is.null(cols)) return()
+
+      sync_numeric_input(session, "strata_rows", input$strata_rows, rows)
+      sync_numeric_input(session, "strata_cols", input$strata_cols, cols)
+    }, ignoreNULL = FALSE)
+
+    output$plot_warning <- renderUI({
+      info <- plot_info()
+      if (!is.null(info$warning)) {
+        div(class = "alert alert-warning", info$warning)
+      } else {
+        NULL
+      }
+    })
+
     plot_obj <- reactive({
       info <- plot_info()
-      validate(need(!is.null(info$plot), "No PCA plots available."))
+      if (!is.null(info$warning) || is.null(info$plot)) {
+        return(NULL)
+      }
       info$plot
     })
 
     output$plot <- renderPlot({
-      req(plot_obj())
-      plot_obj()
+      info <- plot_info()
+      if (!is.null(info$warning) || is.null(info$plot)) return(NULL)
+      info$plot
     },
     width = function() plot_size()$w,
     height = function() plot_size()$h,
@@ -442,6 +480,7 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
       },
       content = function(file) {
         info <- plot_info()
+        req(is.null(info$warning))
         size <- plot_size()
 
         ggsave(
