@@ -109,44 +109,45 @@ resolve_grid_layout <- function(n_items, rows_input = NULL, cols_input = NULL) {
   # --- Validate number of items ---
   n_items <- suppressWarnings(as.integer(n_items[1]))
   if (is.na(n_items) || n_items <= 0) n_items <- 1L
-
+  
   # --- Extract numeric inputs ---
   rows_raw <- resolve_grid_value(rows_input)
   cols_raw <- resolve_grid_value(cols_input)
-
+  
   rows <- rows_raw
   cols <- cols_raw
-
-  # --- Compute sensible defaults ---
+  
+  # --- Compute sensible defaults when missing ---
   if (is.na(rows) && is.na(cols)) {
-    # automatic roughly-square layout
     rows <- ceiling(sqrt(n_items))
     cols <- ceiling(n_items / rows)
   } else if (is.na(rows)) {
-    # rows missing, infer from columns
     if (is.na(cols) || cols <= 0) {
-      rows <- ceiling(sqrt(n_items))
-      cols <- ceiling(n_items / rows)
+      rows <- ceiling(sqrt(n_items)); cols <- ceiling(n_items / rows)
     } else {
       rows <- ceiling(n_items / cols)
     }
   } else if (is.na(cols)) {
-    # cols missing, infer from rows
     if (is.na(rows) || rows <= 0) {
-      rows <- ceiling(sqrt(n_items))
-      cols <- ceiling(n_items / rows)
+      rows <- ceiling(sqrt(n_items)); cols <- ceiling(n_items / rows)
     } else {
       cols <- ceiling(n_items / rows)
     }
   }
-
+  
   # --- Clamp minimum values ---
   rows <- max(1L, rows)
   cols <- max(1L, cols)
-
-  capacity <- rows * cols
-
-  if (capacity < n_items) {
+  
+  # --- Evaluate grid validity ---
+  capacity  <- rows * cols
+  too_small <- capacity < n_items
+  # "Too large" means at least one entire row OR one entire column is empty
+  empty_row <- n_items <= (rows - 1L) * cols
+  empty_col <- n_items <= rows * (cols - 1L)
+  too_large <- (!too_small) && (empty_row || empty_col)
+  
+  if (too_small) {
     return(list(
       nrow = rows,
       ncol = cols,
@@ -154,8 +155,8 @@ resolve_grid_layout <- function(n_items, rows_input = NULL, cols_input = NULL) {
       message = sprintf("⚠️ Grid %dx%d too small for %d subplots.", rows, cols, n_items)
     ))
   }
-
-  if (capacity > n_items) {
+  
+  if (too_large) {
     return(list(
       nrow = rows,
       ncol = cols,
@@ -163,8 +164,14 @@ resolve_grid_layout <- function(n_items, rows_input = NULL, cols_input = NULL) {
       message = sprintf("⚠️ Grid %dx%d too large for %d subplots.", rows, cols, n_items)
     ))
   }
-
-  list(nrow = rows, ncol = cols, valid = TRUE, message = NULL)
+  
+  # --- Valid grid ---
+  list(
+    nrow = rows,
+    ncol = cols,
+    valid = TRUE,
+    message = NULL
+  )
 }
 
 

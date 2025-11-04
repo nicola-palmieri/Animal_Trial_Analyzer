@@ -303,7 +303,6 @@ visualize_oneway_ui <- function(id) {
         column(6, numericInput(ns("plot_width"), "Subplot width (px)", value = 400, min = 200, max = 1200, step = 50)),
         column(6, numericInput(ns("plot_height"), "Subplot height (px)", value = 300, min = 200, max = 1200, step = 50))
       ),
-      hr(),
       add_color_customization_ui(ns, multi_group = FALSE),
       hr(),
       downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;")
@@ -311,7 +310,7 @@ visualize_oneway_ui <- function(id) {
     mainPanel(
       width = 8,
       h4("Plots"),
-      plotOutput(ns("plot"), height = "auto")
+      uiOutput(ns("plot_ui"))
     )
   )
 }
@@ -355,19 +354,47 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
     plot_obj <- reactive({
       info <- plot_info()
       req(info)
+      layout <- info$layout
+      strata_valid <- isTRUE(layout$strata$valid %||% TRUE)
+      resp_valid <- isTRUE(layout$responses$valid %||% TRUE)
+      if (!strata_valid || !resp_valid) return(NULL)
       info$plot
     })
-    
+
     plot_size <- reactive({
       info <- plot_info()
       req(info)
-      s <- plot_info()$layout
-      list(
-        w = input$plot_width * s$strata$cols * s$responses$ncol,
-        h = input$plot_height * s$strata$rows * s$responses$nrow
-      )
+      layout <- info$layout
+      strata_cols <- layout$strata$cols %||% 1
+      strata_rows <- layout$strata$rows %||% 1
+      strata_valid <- isTRUE(layout$strata$valid %||% TRUE)
+      resp_valid <- isTRUE(layout$responses$valid %||% TRUE)
+      if (!strata_valid || !resp_valid) {
+        list(w = input$plot_width, h = input$plot_height)
+      } else {
+        list(
+          w = input$plot_width * strata_cols * layout$responses$ncol,
+          h = input$plot_height * strata_rows * layout$responses$nrow
+        )
+      }
     })
-    
+
+    output$plot_ui <- renderUI({
+      info <- plot_info()
+      req(info)
+      layout <- info$layout
+      container <- function(content) {
+        div(class = "ta-plot-container", content)
+      }
+      if (!isTRUE(layout$strata$valid %||% TRUE)) {
+        return(container(div(class = "alert alert-warning", layout$strata$message)))
+      }
+      if (!isTRUE(layout$responses$valid %||% TRUE)) {
+        return(container(div(class = "alert alert-warning", layout$responses$message)))
+      }
+      container(plotOutput(ns("plot"), height = "auto"))
+    })
+
     output$layout_controls <- renderUI({
       info <- model_info()
       req(info)
@@ -379,8 +406,9 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
       info <- model_info()
       req(info, input$plot_type)
       if (input$plot_type == "mean_se") {
-        req(plot_obj())
-        plot_obj()
+        plot_to_draw <- plot_obj()
+        req(plot_to_draw)
+        plot_to_draw
       }
     },
     width = function() plot_size()$w,
@@ -392,6 +420,9 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
       filename = function() paste0("anova_plot_", Sys.Date(), ".png"),
       content = function(file) {
         req(plot_obj())
+        layout <- plot_info()$layout
+        req(isTRUE(layout$strata$valid %||% TRUE))
+        req(isTRUE(layout$responses$valid %||% TRUE))
         ggsave(
           filename = file,
           plot = plot_obj(),
@@ -1230,10 +1261,22 @@ build_anova_plot_info <- function(data, info, effective_input, line_colors = NUL
         rows_input = effective_input("strata_rows"),
         cols_input = effective_input("strata_cols")
       )
-      
+
+      if (!isTRUE(layout$valid)) {
+        return(list(
+          plot = NULL,
+          layout = list(
+            strata = list(rows = layout$nrow, cols = layout$ncol, valid = layout$valid, message = layout$message),
+            responses = list(nrow = 1L, ncol = 1L, valid = TRUE, message = NULL)
+          ),
+          has_strata = has_strata,
+          n_responses = 0L
+        ))
+      }
+
       max_strata_rows <- max(max_strata_rows, layout$nrow)
       max_strata_cols <- max(max_strata_cols, layout$ncol)
-      
+
       combined <- patchwork::wrap_plots(
         plotlist = strata_plot_list,
         nrow = layout$nrow,
@@ -1277,7 +1320,19 @@ build_anova_plot_info <- function(data, info, effective_input, line_colors = NUL
     rows_input = effective_input("resp_rows"),
     cols_input = effective_input("resp_cols")
   )
-  
+
+  if (!isTRUE(resp_layout$valid)) {
+    return(list(
+      plot = NULL,
+      layout = list(
+        strata = list(rows = max_strata_rows, cols = max_strata_cols, valid = TRUE, message = NULL),
+        responses = resp_layout
+      ),
+      has_strata = has_strata,
+      n_responses = length(response_plots)
+    ))
+  }
+
   final_plot <- if (length(response_plots) == 1) {
     response_plots[[1]]
   } else {
@@ -1292,7 +1347,7 @@ build_anova_plot_info <- function(data, info, effective_input, line_colors = NUL
   list(
     plot = final_plot,
     layout = list(
-      strata = list(rows = max_strata_rows, cols = max_strata_cols),
+      strata = list(rows = max_strata_rows, cols = max_strata_cols, valid = TRUE, message = NULL),
       responses = resp_layout
     ),
     has_strata = has_strata,
@@ -1595,7 +1650,6 @@ visualize_twoway_ui <- function(id) {
         column(6, numericInput(ns("plot_width"), "Subplot width (px)",  value = 400, min = 200, max = 1200, step = 50)),
         column(6, numericInput(ns("plot_height"), "Subplot height (px)", value = 300, min = 200, max = 1200, step = 50))
       ),
-      hr(),
       add_color_customization_ui(ns, multi_group = TRUE),
       hr(),
       downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;")
@@ -1603,7 +1657,7 @@ visualize_twoway_ui <- function(id) {
     mainPanel(
       width = 8,
       h4("Plots"),
-      plotOutput(ns("plot"), height = "auto")   # ✅ same as one-way
+      uiOutput(ns("plot_ui"))   # ✅ same as one-way
     )
   )
 }
@@ -1658,17 +1712,47 @@ visualize_twoway_server <- function(id, filtered_data, model_fit) {
     plot_obj <- reactive({
       info <- plot_info()
       if (is.null(info)) return(NULL)
+      layout <- info$layout
+      strata_valid <- isTRUE(layout$strata$valid %||% TRUE)
+      resp_valid <- isTRUE(layout$responses$valid %||% TRUE)
+      if (!strata_valid || !resp_valid) return(NULL)
       info$plot
     })
-    
+
     plot_size <- reactive({
       info <- plot_info()
       req(info)
-      s <- info$layout
-      list(
-        w = input$plot_width  * s$strata$cols   * s$responses$ncol,
-        h = input$plot_height * s$strata$rows   * s$responses$nrow
-      )
+      layout <- info$layout
+      strata_cols <- layout$strata$cols %||% 1
+      strata_rows <- layout$strata$rows %||% 1
+      strata_valid <- isTRUE(layout$strata$valid %||% TRUE)
+      resp_valid <- isTRUE(layout$responses$valid %||% TRUE)
+      if (!strata_valid || !resp_valid) {
+        list(w = input$plot_width, h = input$plot_height)
+      } else {
+        list(
+          w = input$plot_width  * strata_cols * layout$responses$ncol,
+          h = input$plot_height * strata_rows * layout$responses$nrow
+        )
+      }
+    })
+
+    output$plot_ui <- renderUI({
+      info <- plot_info()
+      if (is.null(info)) {
+        return(div(class = "ta-plot-container", div("No plot available.")))
+      }
+      layout <- info$layout
+      container <- function(content) {
+        div(class = "ta-plot-container", content)
+      }
+      if (!isTRUE(layout$strata$valid %||% TRUE)) {
+        return(container(div(class = "alert alert-warning", layout$strata$message)))
+      }
+      if (!isTRUE(layout$responses$valid %||% TRUE)) {
+        return(container(div(class = "alert alert-warning", layout$responses$message)))
+      }
+      container(plotOutput(ns("plot"), height = "auto"))
     })
     
     output$layout_controls <- renderUI({
@@ -1683,8 +1767,9 @@ visualize_twoway_server <- function(id, filtered_data, model_fit) {
       req(info, input$plot_type)
 
       if (input$plot_type == "mean_se") {
-        req(plot_obj())
-        plot_obj()
+        plot_to_draw <- plot_obj()
+        req(plot_to_draw)
+        plot_to_draw
       }
     },
     width = function() plot_size()$w,
@@ -1695,6 +1780,9 @@ visualize_twoway_server <- function(id, filtered_data, model_fit) {
       filename = function() paste0(input$plot_type, "_twoway_anova_plot_", Sys.Date(), ".png"),
       content = function(file) {
         req(plot_obj())
+        layout <- plot_info()$layout
+        req(isTRUE(layout$strata$valid %||% TRUE))
+        req(isTRUE(layout$responses$valid %||% TRUE))
         s <- plot_size()
         ggsave(
           filename = file,
@@ -2277,7 +2365,6 @@ visualize_categorical_barplots_ui <- function(id) {
       column(6, numericInput(ns("plot_width"),  "Subplot width (px)",  400, 200, 2000, 50)),
       column(6, numericInput(ns("plot_height"), "Subplot height (px)", 300, 200, 2000, 50))
     ),
-    hr(),
     fluidRow(
       column(
         6,
@@ -2302,7 +2389,6 @@ visualize_categorical_barplots_ui <- function(id) {
         )
       )
     ),
-    hr(),
     add_color_customization_ui(ns, multi_group = TRUE),
     hr(),
     downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;")
@@ -2311,10 +2397,7 @@ visualize_categorical_barplots_ui <- function(id) {
 
 visualize_categorical_barplots_plot_ui <- function(id) {
   ns <- NS(id)
-  div(
-    class = "ta-plot-container",
-    plotOutput(ns("plot"), width = "100%", height = "auto")
-  )
+  uiOutput(ns("plot_container"))
 }
 
 visualize_categorical_barplots_server <- function(id, filtered_data, summary_info, is_active = NULL) {
@@ -2399,6 +2482,7 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
         fill_colors = custom_colors()
       )
       validate(need(!is.null(out), "No categorical variables available for plotting."))
+      sync_grid_controls(layout_state, input, session, "resp_rows", "resp_cols", out$layout)
       out
     })
 
@@ -2408,7 +2492,7 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
       req(module_active())
       info <- plot_info()
       layout <- info$layout
-      if (is.null(layout)) {
+      if (is.null(layout) || !isTRUE(layout$valid)) {
         list(w = plot_width(), h = plot_height())
       } else {
         list(
@@ -2417,6 +2501,19 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
         )
       }
     })
+
+    output$plot_container <- renderUI({
+      req(module_active())
+      info <- plot_info()
+      layout <- info$layout
+      container <- function(content) {
+        div(class = "ta-plot-container", content)
+      }
+      if (!is.null(layout) && !isTRUE(layout$valid)) {
+        return(container(div(class = "alert alert-warning", layout$message)))
+      }
+      container(plotOutput(ns("plot"), width = "100%", height = "auto"))
+    })
     
     
     output$download_plot <- downloadHandler(
@@ -2424,6 +2521,8 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
       content  = function(file) {
         req(module_active())
         info <- plot_info()
+        layout <- info$layout
+        req(is.null(layout) || isTRUE(layout$valid))
         req(info$plot)
         s <- plot_size()
         ggplot2::ggsave(
@@ -2442,6 +2541,8 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
     output$plot <- renderPlot({
       req(module_active())
       info <- plot_info()
+      layout <- info$layout
+      if (is.null(layout) || !isTRUE(layout$valid)) return(NULL)
       print(info$plot)
     },
     width = function() {
@@ -2589,15 +2690,23 @@ build_descriptive_categorical_plot <- function(df,
     rows_input = suppressWarnings(as.numeric(nrow_input)),
     cols_input = suppressWarnings(as.numeric(ncol_input))
   )
-  
+
+  if (!isTRUE(layout$valid)) {
+    return(list(
+      plot = NULL,
+      layout = layout,
+      panels = length(plots)
+    ))
+  }
+
   combined <- patchwork::wrap_plots(plots, nrow = layout$nrow, ncol = layout$ncol) +
     patchwork::plot_annotation(
       theme = theme(plot.title = element_text(size = 16, face = "bold"))
     )
-  
+
   list(
     plot = combined,
-    layout = list(nrow = layout$nrow, ncol = layout$ncol),
+    layout = layout,
     panels = length(plots)
   )
 }
@@ -2615,7 +2724,6 @@ metric_panel_ui <- function(id, default_width = 400, default_height = 300,
       column(6, numericInput(ns("plot_width"),  "Subplot width (px)",  default_width, 200, 2000, 50)),
       column(6, numericInput(ns("plot_height"), "Subplot height (px)", default_height, 200, 2000, 50))
     ),
-    hr(),
     fluidRow(
       column(6, numericInput(ns("resp_rows"), "Grid rows",    value = default_rows, min = 1, max = 10, step = 1)),
       column(6, numericInput(ns("resp_cols"), "Grid columns", value = default_cols, min = 1, max = 10, step = 1))
@@ -2640,10 +2748,7 @@ visualize_missing_ui <- function(id) {
 
 metric_plot_ui <- function(id) {
   ns <- NS(id)
-  div(
-    class = "ta-plot-container",
-    plotOutput(ns("plot"), width = "100%", height = "auto")
-  )
+  uiOutput(ns("plot_container"))
 }
 
 visualize_cv_plot_ui <- function(id) {
@@ -2812,6 +2917,8 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
                                  y_label, title, filename_prefix, is_active = NULL) {
   moduleServer(id, function(input, output, session) {
 
+    ns <- session$ns
+
     layout_state <- initialize_layout_state(input, session)
 
     plot_width <- reactive({
@@ -2874,14 +2981,17 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
         cols_input = layout_state$effective_input("resp_cols")
       )
 
-      n_rows <- layout$nrow
-      n_cols <- layout$ncol
+      if (!isTRUE(layout$valid)) {
+        sync_grid_controls(layout_state, input, session, "resp_rows", "resp_cols", layout)
+        return(list(plot = NULL, layout = layout))
+      }
 
-      plot <- build_metric_plot(metric_info, y_label, title, n_rows, n_cols)
+      plot <- build_metric_plot(metric_info, y_label, title, layout$nrow, layout$ncol)
+      sync_grid_controls(layout_state, input, session, "resp_rows", "resp_cols", layout)
 
       list(
         plot = plot,
-        layout = list(nrow = n_rows, ncol = n_cols)
+        layout = layout
       )
     })
 
@@ -2890,14 +3000,28 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
     plot_size <- reactive({
       req(module_active())
       details <- plot_details()
-      if (is.null(details$layout)) {
+      layout <- details$layout
+      if (is.null(layout) || !isTRUE(layout$valid)) {
         list(w = plot_width(), h = plot_height())
       } else {
         list(
-          w = plot_width()  * details$layout$ncol,
-          h = plot_height() * details$layout$nrow
+          w = plot_width()  * layout$ncol,
+          h = plot_height() * layout$nrow
         )
       }
+    })
+
+    output$plot_container <- renderUI({
+      req(module_active())
+      details <- plot_details()
+      layout <- details$layout
+      container <- function(content) {
+        div(class = "ta-plot-container", content)
+      }
+      if (!is.null(layout) && !isTRUE(layout$valid)) {
+        return(container(div(class = "alert alert-warning", layout$message)))
+      }
+      container(plotOutput(ns("plot"), width = "100%", height = "auto"))
     })
 
     output$download_plot <- downloadHandler(
@@ -2905,6 +3029,8 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
       content = function(file) {
         req(module_active())
         details <- plot_details()
+        layout <- details$layout
+        req(is.null(layout) || isTRUE(layout$valid))
         req(details$plot)
         size <- plot_size()
         ggplot2::ggsave(
@@ -2923,6 +3049,8 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
     output$plot <- renderPlot({
       req(module_active())
       details <- plot_details()
+      layout <- details$layout
+      if (is.null(layout) || !isTRUE(layout$valid)) return(NULL)
       validate(need(!is.null(details$plot), "No plot available."))
       print(details$plot)
     },
@@ -2989,7 +3117,6 @@ visualize_numeric_boxplots_ui <- function(id) {
       column(6, numericInput(ns("plot_width"),  "Subplot width (px)",  200, 200, 2000, 50)),
       column(6, numericInput(ns("plot_height"), "Subplot height (px)", 800, 200, 2000, 50))
     ),
-    hr(),
     fluidRow(
       column(
         6,
@@ -3022,16 +3149,14 @@ visualize_numeric_boxplots_ui <- function(id) {
 
 visualize_numeric_boxplots_plot_ui <- function(id) {
   ns <- NS(id)
-  div(
-    class = "ta-plot-container",
-    plotOutput(ns("plot"), width = "100%", height = "auto")
-  )
+  uiOutput(ns("plot_container"))
 }
 
 
 visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, is_active = NULL) {
   moduleServer(id, function(input, output, session) {
 
+    ns <- session$ns
     layout_state <- initialize_layout_state(input, session)
 
     resolve_input_value <- function(x) {
@@ -3082,6 +3207,7 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
       )
 
       validate(need(!is.null(out), "No numeric variables available for plotting."))
+      sync_grid_controls(layout_state, input, session, "resp_rows", "resp_cols", out$layout)
       out
     })
 
@@ -3091,7 +3217,7 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
       req(module_active())
       info <- plot_info()
       layout <- info$layout
-      if (is.null(layout)) {
+      if (is.null(layout) || !isTRUE(layout$valid)) {
         list(w = plot_width(), h = plot_height())
       } else {
         list(
@@ -3100,6 +3226,19 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
         )
       }
     })
+
+    output$plot_container <- renderUI({
+      req(module_active())
+      info <- plot_info()
+      layout <- info$layout
+      container <- function(content) {
+        div(class = "ta-plot-container", content)
+      }
+      if (!is.null(layout) && !isTRUE(layout$valid)) {
+        return(container(div(class = "alert alert-warning", layout$message)))
+      }
+      container(plotOutput(ns("plot"), width = "100%", height = "auto"))
+    })
     
     
     output$download_plot <- downloadHandler(
@@ -3107,6 +3246,8 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
       content  = function(file) {
         req(module_active())
         info <- plot_info()
+        layout <- info$layout
+        req(is.null(layout) || isTRUE(layout$valid))
         req(info$plot)
         s <- plot_size()
         ggplot2::ggsave(
@@ -3125,6 +3266,8 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
     output$plot <- renderPlot({
       req(module_active())
       info <- plot_info()
+      layout <- info$layout
+      if (is.null(layout) || !isTRUE(layout$valid)) return(NULL)
       print(info$plot)
     },
     width = function() {
@@ -3204,15 +3347,23 @@ build_descriptive_numeric_boxplot <- function(df,
     rows_input = suppressWarnings(as.numeric(nrow_input)),
     cols_input = suppressWarnings(as.numeric(ncol_input))
   )
-  
+
+  if (!isTRUE(layout$valid)) {
+    return(list(
+      plot = NULL,
+      layout = layout,
+      panels = length(plots)
+    ))
+  }
+
   combined <- patchwork::wrap_plots(plots, nrow = layout$nrow, ncol = layout$ncol) +
     patchwork::plot_annotation(
       theme = theme(plot.title = element_text(size = 16, face = "bold"))
     )
-  
+
   list(
     plot = combined,
-    layout = list(nrow = layout$nrow, ncol = layout$ncol),
+    layout = layout,
     panels = length(plots)
   )
 }# ===============================================================
@@ -3227,7 +3378,6 @@ visualize_numeric_histograms_ui <- function(id) {
       column(6, numericInput(ns("plot_width"),  "Subplot width (px)",  400, 200, 2000, 50)),
       column(6, numericInput(ns("plot_height"), "Subplot height (px)", 300, 200, 2000, 50))
     ),
-    hr(),
     fluidRow(
       column(6, numericInput(ns("resp_rows"), "Grid rows",    value = 2, min = 1, max = 10, step = 1)),
       column(6, numericInput(ns("resp_cols"), "Grid columns", value = 3, min = 1, max = 10, step = 1))
@@ -3240,16 +3390,14 @@ visualize_numeric_histograms_ui <- function(id) {
 
 visualize_numeric_histograms_plot_ui <- function(id) {
   ns <- NS(id)
-  div(
-    class = "ta-plot-container",
-    plotOutput(ns("plot"), width = "100%", height = "auto")
-  )
+  uiOutput(ns("plot_container"))
 }
 
 
 visualize_numeric_histograms_server <- function(id, filtered_data, summary_info, is_active = NULL) {
   moduleServer(id, function(input, output, session) {
 
+    ns <- session$ns
     layout_state <- initialize_layout_state(input, session)
 
     resolve_input_value <- function(x) {
@@ -3301,26 +3449,10 @@ visualize_numeric_histograms_server <- function(id, filtered_data, summary_info,
       )
       validate(need(!is.null(out), "No numeric variables available for plotting."))
 
-      # --- Safe layout correction ---
-      n_panels <- out$panels %||% 1L
-      layout_info <- out$layout %||% list(nrow = NULL, ncol = NULL)
+      n_panels <- if (is.null(out$panels)) 1L else max(1L, suppressWarnings(as.integer(out$panels)))
       max_val <- 10L
-      
-      safe_rows <- layout_info$nrow
-      safe_cols <- layout_info$ncol
-      
-      if (is.null(safe_rows) || !is.finite(safe_rows))
-        safe_rows <- min(max_val, max(1L, as.integer(n_panels)))
-      
-      if (is.null(safe_cols) || !is.finite(safe_cols))
-        safe_cols <- min(max_val, max(1L, ceiling(n_panels / max(1L, safe_rows))))
-      
-      # --- Apply layout updates safely (isolated to avoid reactivity loops) ---
-      isolate({
-        updateNumericInput(session, "resp_rows", value = safe_rows, min = 1, max = max_val)
-        updateNumericInput(session, "resp_cols", value = safe_cols, min = 1, max = max_val)
-      })
 
+      sync_grid_controls(layout_state, input, session, "resp_rows", "resp_cols", out$layout, max_value = max_val)
       out
     })
 
@@ -3330,14 +3462,28 @@ visualize_numeric_histograms_server <- function(id, filtered_data, summary_info,
     plot_size <- reactive({
       req(module_active())
       info <- plot_info()
-      if (is.null(info$layout)) {
+      layout <- info$layout
+      if (is.null(layout) || !isTRUE(layout$valid)) {
         list(w = plot_width(), h = plot_height())
       } else {
         list(
-          w = plot_width()  * info$layout$ncol,
-          h = plot_height() * info$layout$nrow
+          w = plot_width()  * layout$ncol,
+          h = plot_height() * layout$nrow
         )
       }
+    })
+
+    output$plot_container <- renderUI({
+      req(module_active())
+      info <- plot_info()
+      layout <- info$layout
+      container <- function(content) {
+        div(class = "ta-plot-container", content)
+      }
+      if (!is.null(layout) && !isTRUE(layout$valid)) {
+        return(container(div(class = "alert alert-warning", layout$message)))
+      }
+      container(plotOutput(ns("plot"), width = "100%", height = "auto"))
     })
 
     output$download_plot <- downloadHandler(
@@ -3346,6 +3492,8 @@ visualize_numeric_histograms_server <- function(id, filtered_data, summary_info,
         req(module_active())
         info <- plot_info()
         req(info$plot)
+        layout <- info$layout
+        req(is.null(layout) || isTRUE(layout$valid))
         s <- plot_size()
         ggplot2::ggsave(
           filename = file,
@@ -3363,6 +3511,9 @@ visualize_numeric_histograms_server <- function(id, filtered_data, summary_info,
     output$plot <- renderPlot({
       req(module_active())
       info <- plot_info()
+      layout <- info$layout
+      if (is.null(layout) || !isTRUE(layout$valid)) return(NULL)
+      if (is.null(info$plot)) return(NULL)
       print(info$plot)
     },
     width = function() {
@@ -3470,15 +3621,23 @@ build_descriptive_numeric_histogram <- function(df,
     rows_input = suppressWarnings(as.numeric(nrow_input)),
     cols_input = suppressWarnings(as.numeric(ncol_input))
   )
-  
+
+  if (!isTRUE(layout$valid)) {
+    return(list(
+      plot = NULL,
+      layout = layout,
+      panels = length(plots)
+    ))
+  }
+
   combined <- patchwork::wrap_plots(plots, nrow = layout$nrow, ncol = layout$ncol) +
     patchwork::plot_annotation(
       theme = theme(plot.title = element_text(size = 16, face = "bold"))
     )
-  
+
   list(
     plot = combined,
-    layout = list(nrow = layout$nrow, ncol = layout$ncol),
+    layout = layout,
     panels = length(plots)
   )
 }
@@ -3694,11 +3853,7 @@ analysis_server <- function(id, filtered_data) {
 # ===============================================================
 
 add_color_customization_ui <- function(ns, multi_group = TRUE) {
-  tags$details(
-    tags$summary(strong("Advanced options")),
-    br(),
-    uiOutput(ns("color_custom_ui"))
-  )
+  uiOutput(ns("color_custom_ui"))
 }
 
 # ---- SERVER ----
@@ -3715,7 +3870,7 @@ add_color_customization_server <- function(ns, input, output, data, color_var_re
     if (!isTRUE(multi_group) || color_var %in% c("", "None")) {
       tagList(
         br(),
-        h5("Line color"),
+        h5("Color"),
         color_dropdown_input(ns, "single_color", basic_color_palette, ncol = 4)
       )
     } else {
@@ -3768,7 +3923,7 @@ render_color_inputs <- function(ns, data, color_var) {
 
   tagList(
     br(),
-    h5(paste("Line colors for", color_var)),
+    h5(paste("Colors for", color_var)),
     lapply(seq_along(lvls), function(i) {
       selected <- default_palette[i]
       tags$div(
@@ -4385,6 +4540,39 @@ initialize_layout_state <- function(input, session) {
   )
 }
 
+sync_grid_controls <- function(layout_state,
+                               input,
+                               session,
+                               rows_name,
+                               cols_name,
+                               layout,
+                               max_value = 10L) {
+  if (is.null(layout)) {
+    return(invisible(NULL))
+  }
+
+  update_control <- function(name, target) {
+    if (is.null(name) || is.null(target) || !is.finite(target)) return()
+
+    target <- as.integer(max(1L, min(max_value, round(target))))
+
+    if (isTRUE(shiny::isolate(layout_state$manual[[name]]))) {
+      return()
+    }
+
+    current <- shiny::isolate(input[[name]])
+    if (isTRUE(!identical(as.integer(current), target))) {
+      layout_state$suppress[[name]] <- TRUE
+      updateNumericInput(session, name, value = target, min = 1, max = max_value)
+    }
+  }
+
+  update_control(rows_name, layout$nrow)
+  update_control(cols_name, layout$ncol)
+
+  invisible(NULL)
+}
+
 observe_layout_synchronization <- function(plot_info_reactive, layout_state, session) {
   observeEvent(plot_info_reactive(), {
     plot_info_reactive()
@@ -4407,24 +4595,19 @@ resolve_grid_layout <- function(n_items, rows_input = NULL, cols_input = NULL) {
   rows <- rows_raw
   cols <- cols_raw
   
-  # --- Compute sensible defaults ---
+  # --- Compute sensible defaults when missing ---
   if (is.na(rows) && is.na(cols)) {
-    # automatic roughly-square layout
     rows <- ceiling(sqrt(n_items))
     cols <- ceiling(n_items / rows)
   } else if (is.na(rows)) {
-    # rows missing, infer from columns
     if (is.na(cols) || cols <= 0) {
-      rows <- ceiling(sqrt(n_items))
-      cols <- ceiling(n_items / rows)
+      rows <- ceiling(sqrt(n_items)); cols <- ceiling(n_items / rows)
     } else {
       rows <- ceiling(n_items / cols)
     }
   } else if (is.na(cols)) {
-    # cols missing, infer from rows
     if (is.na(rows) || rows <= 0) {
-      rows <- ceiling(sqrt(n_items))
-      cols <- ceiling(n_items / rows)
+      rows <- ceiling(sqrt(n_items)); cols <- ceiling(n_items / rows)
     } else {
       cols <- ceiling(n_items / rows)
     }
@@ -4434,21 +4617,39 @@ resolve_grid_layout <- function(n_items, rows_input = NULL, cols_input = NULL) {
   rows <- max(1L, rows)
   cols <- max(1L, cols)
   
-  # --- Handle too-small grids safely ---
-  if (rows * cols < n_items) {
-    shiny::showNotification(
-      sprintf("⚠️ Grid %dx%d too small for %d subplots — auto-adjusting layout.",
-              rows, cols, n_items),
-      type = "warning",
-      duration = 6
-    )
-    # Expand automatically until it fits all subplots
-    while (rows * cols < n_items) {
-      if (cols <= rows) cols <- cols + 1L else rows <- rows + 1L
-    }
+  # --- Evaluate grid validity ---
+  capacity  <- rows * cols
+  too_small <- capacity < n_items
+  # "Too large" means at least one entire row OR one entire column is empty
+  empty_row <- n_items <= (rows - 1L) * cols
+  empty_col <- n_items <= rows * (cols - 1L)
+  too_large <- (!too_small) && (empty_row || empty_col)
+  
+  if (too_small) {
+    return(list(
+      nrow = rows,
+      ncol = cols,
+      valid = FALSE,
+      message = sprintf("⚠️ Grid %dx%d too small for %d subplots.", rows, cols, n_items)
+    ))
   }
   
-  list(nrow = rows, ncol = cols)
+  if (too_large) {
+    return(list(
+      nrow = rows,
+      ncol = cols,
+      valid = FALSE,
+      message = sprintf("⚠️ Grid %dx%d too large for %d subplots.", rows, cols, n_items)
+    ))
+  }
+  
+  # --- Valid grid ---
+  list(
+    nrow = rows,
+    ncol = cols,
+    valid = TRUE,
+    message = NULL
+  )
 }
 
 
@@ -4762,7 +4963,7 @@ visualize_ggpairs_ui <- function(id) {
     mainPanel(
       width = 8,
       h4("Plots"),
-      plotOutput(ns("plot"), height = "auto")
+      uiOutput(ns("plot_ui"))
     )
   )
 }
@@ -4809,9 +5010,26 @@ visualize_ggpairs_server <- function(id, filtered_data, model_fit) {
       active(handle)
     }, ignoreNULL = FALSE)
 
+    output$plot_ui <- renderUI({
+      h <- active()
+      container <- function(content) {
+        div(class = "ta-plot-container", content)
+      }
+      if (is.null(h)) {
+        return(container(div("Run the pairwise correlation analysis to generate plots.")))
+      }
+      layout <- h$layout()
+      if (!is.null(layout) && !isTRUE(layout$valid)) {
+        return(container(div(class = "alert alert-warning", layout$message)))
+      }
+      container(plotOutput(ns("plot"), height = "auto"))
+    })
+
     output$plot <- renderPlot({
       h <- active()
       req(h)
+      layout <- h$layout()
+      if (!is.null(layout) && !isTRUE(layout$valid)) return(NULL)
       plot_obj <- h$plot()
       validate(need(!is.null(plot_obj), "No plot available."))
       print(plot_obj)
@@ -4850,6 +5068,8 @@ pairwise_correlation_visualize_ggpairs_ui <- function(id) {
 
 pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, correlation_info) {
   moduleServer(id, function(input, output, session) {
+
+    ns <- session$ns
 
     layout_state <- initialize_layout_state(input, session)
 
@@ -4955,11 +5175,11 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
 
       strata_order <- resolve_input_value(info$strata_order)
 
+      plots <- list()
+
       if (is.null(group_var)) {
         plot_data <- data[, selected_vars, drop = FALSE]
-        plot_obj <- build_ggpairs_plot(plot_data, basic_color_palette[1])
-        layout <- list(nrow = 1L, ncol = 1L)
-        list(plot = plot_obj, layout = layout)
+        plots[[1]] <- convert_ggmatrix_to_plot(build_ggpairs_plot(plot_data, basic_color_palette[1]))
       } else {
         available_levels <- NULL
         if (!is.null(results$matrices)) {
@@ -4981,7 +5201,6 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
         }
         names(colors) <- available_levels
 
-        plots <- list()
         for (level in available_levels) {
           subset_rows <- !is.na(data[[group_var]]) & as.character(data[[group_var]]) == level
           subset_data <- data[subset_rows, selected_vars, drop = FALSE]
@@ -4994,21 +5213,31 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
         }
 
         validate(need(length(plots) > 0, "No data available for the selected strata."))
-
-        layout <- resolve_grid_layout(
-          n_items = length(plots),
-          rows_input = layout_state$effective_input("resp_rows"),
-          cols_input = layout_state$effective_input("resp_cols")
-        )
-
-        combined <- patchwork::wrap_plots(
-          plotlist = plots,
-          nrow = layout$nrow,
-          ncol = layout$ncol
-        )
-
-        list(plot = combined, layout = layout)
       }
+
+      layout <- resolve_grid_layout(
+        n_items = length(plots),
+        rows_input = layout_state$effective_input("resp_rows"),
+        cols_input = layout_state$effective_input("resp_cols")
+      )
+
+      sync_grid_controls(layout_state, input, session, "resp_rows", "resp_cols", layout)
+
+      if (!isTRUE(layout$valid)) {
+        return(list(plot = NULL, layout = layout))
+      }
+
+      if (length(plots) == 1) {
+        return(list(plot = plots[[1]], layout = layout))
+      }
+
+      combined <- patchwork::wrap_plots(
+        plotlist = plots,
+        nrow = layout$nrow,
+        ncol = layout$ncol
+      )
+
+      list(plot = combined, layout = layout)
     })
 
     observe_layout_synchronization(plot_info, layout_state, session)
@@ -5017,7 +5246,7 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
       info <- plot_info()
       layout <- info$layout
       w <- plot_width()
-      if (!is.null(layout$ncol)) {
+      if (!is.null(layout) && isTRUE(layout$valid) && !is.null(layout$ncol)) {
         w <- w * max(1L, as.integer(layout$ncol))
       }
       w
@@ -5027,7 +5256,7 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
       info <- plot_info()
       layout <- info$layout
       h <- plot_height()
-      if (!is.null(layout$nrow)) {
+      if (!is.null(layout) && isTRUE(layout$valid) && !is.null(layout$nrow)) {
         h <- h * max(1L, as.integer(layout$nrow))
       }
       h
@@ -5037,6 +5266,8 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
       filename = function() paste0("pairwise_correlation_ggpairs_", Sys.Date(), ".png"),
       content = function(file) {
         info <- plot_info()
+        layout <- info$layout
+        req(is.null(layout) || isTRUE(layout$valid))
         plot_obj <- info$plot
         req(plot_obj)
         ggplot2::ggsave(
@@ -5054,6 +5285,7 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
 
     list(
       plot = reactive({ plot_info()$plot }),
+      layout = reactive(plot_info()$layout),
       width = reactive(plot_width_total()),
       height = reactive(plot_height_total())
     )
@@ -5539,6 +5771,7 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
 
 visualize_pca_server <- function(id, filtered_data, model_fit) {
   moduleServer(id, function(input, output, session) {
+    ns <- session$ns
     layout_state <- initialize_layout_state(input, session)
     display_mode <- reactiveVal(NULL)
     # -- Reactives ------------------------------------------------------------
@@ -5811,35 +6044,15 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
         cols_input = layout_state$effective_input("strata_cols")
       )
 
-      combined <- patchwork::wrap_plots(
-        plotlist = plot_list,
-        nrow = layout$nrow,
-        ncol = layout$ncol
-      ) +
-        patchwork::plot_layout(guides = "collect")
+      sync_grid_controls(layout_state, input, session, "strata_rows", "strata_cols", layout)
 
-      list(
-        plot = combined,
-        layout = layout,
-        strata_names = names(plot_list)
-      )
-    })
-
-    observe_layout_synchronization(plot_info, layout_state, session)
-
-    plot_size <- reactive({
-      width <- suppressWarnings(as.numeric(input$plot_width))
-      height <- suppressWarnings(as.numeric(input$plot_height))
-      info <- plot_info()
-      layout <- info$layout
-
-      subplot_w <- ifelse(is.na(width) || width <= 0, 400, width)
-      subplot_h <- ifelse(is.na(height) || height <= 0, 300, height)
-
-      list(
-        w = subplot_w * max(1, layout$ncol),
-        h = subplot_h * max(1, layout$nrow)
-      )
+      if (!isTRUE(layout$valid)) {
+        return(list(
+          plot = NULL,
+          layout = layout,
+          strata_names = names(plot_list)
+        ))
+      }
 
       combined <- patchwork::wrap_plots(
         plotlist = plot_list,
@@ -5870,23 +6083,74 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
         w = subplot_w * max(1, layout$ncol),
         h = subplot_h * max(1, layout$nrow)
       )
+
+      combined <- patchwork::wrap_plots(
+        plotlist = plot_list,
+        nrow = layout$nrow,
+        ncol = layout$ncol
+      ) +
+        patchwork::plot_layout(guides = "collect")
+
+      list(
+        plot = combined,
+        layout = layout,
+        strata_names = names(plot_list)
+      )
+    })
+
+    observe_layout_synchronization(plot_info, layout_state, session)
+
+    plot_size <- reactive({
+      width <- suppressWarnings(as.numeric(input$plot_width))
+      height <- suppressWarnings(as.numeric(input$plot_height))
+      info <- plot_info()
+      layout <- info$layout
+
+      subplot_w <- ifelse(is.na(width) || width <= 0, 400, width)
+      subplot_h <- ifelse(is.na(height) || height <= 0, 300, height)
+
+      if (is.null(layout) || !isTRUE(layout$valid)) {
+        list(w = subplot_w, h = subplot_h)
+      } else {
+        list(
+          w = subplot_w * max(1, layout$ncol),
+          h = subplot_h * max(1, layout$nrow)
+        )
+      }
+    })
+
+    output$plot_ui <- renderUI({
+      info <- plot_info()
+      layout <- info$layout
+      container <- function(content) {
+        div(class = "ta-plot-container", content)
+      }
+      if (!is.null(layout) && !isTRUE(layout$valid)) {
+        return(container(div(class = "alert alert-warning", layout$message)))
+      }
+      container(plotOutput(ns("plot"), height = "auto"))
     })
 
     plot_obj <- reactive({
       info <- plot_info()
-      validate(need(!is.null(info$plot), "No PCA plots available."))
+      layout <- info$layout
+      if (!is.null(layout) && !isTRUE(layout$valid)) return(NULL)
+      if (is.null(info$plot)) return(NULL)
       info$plot
     })
 
     plot_obj <- reactive({
       info <- plot_info()
-      validate(need(!is.null(info$plot), "No PCA plots available."))
+      layout <- info$layout
+      if (!is.null(layout) && !isTRUE(layout$valid)) return(NULL)
+      if (is.null(info$plot)) return(NULL)
       info$plot
     })
 
     output$plot <- renderPlot({
-      req(plot_obj())
-      plot_obj()
+      obj <- plot_obj()
+      if (is.null(obj)) return(NULL)
+      obj
     },
     width = function() plot_size()$w,
     height = function() plot_size()$h,
@@ -5905,11 +6169,15 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
       },
       content = function(file) {
         info <- plot_info()
+        layout <- info$layout
+        req(is.null(layout) || isTRUE(layout$valid))
+        plot_item <- plot_obj()
+        req(plot_item)
         size <- plot_size()
 
         ggsave(
           filename = file,
-          plot = info$plot,
+          plot = plot_item,
           device = "png",
           dpi = 300,
           width = size$w / 96,
