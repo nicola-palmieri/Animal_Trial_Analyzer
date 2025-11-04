@@ -53,17 +53,20 @@ descriptive_server <- function(id, filtered_data) {
     # ------------------------------------------------------------
     summary_data <- eventReactive(input$run, {
       req(df())
-      raw_data <- df()
-      local_data <- raw_data  # create a copy to avoid modifying shared reactive
+      
+      local_data <- df()
       selected_vars <- unique(c(input$cat_vars, input$num_vars))
-      validate(need(length(selected_vars) > 0, "Please select at least one variable."))
-
+      
+      validate(
+        need(length(selected_vars) > 0, "Please select at least one variable.")
+      )
+      
       strat_details <- strat_info()
       group_var <- strat_details$var
       data_columns <- selected_vars
-
+      
+      # --- Handle stratification if present ---
       if (!is.null(group_var)) {
-        # keep ONLY selected levels, in the exact order; drop NA and unused levels
         sel <- strat_details$levels
         if (!is.null(sel) && length(sel) > 0) {
           local_data <- dplyr::filter(local_data, .data[[group_var]] %in% sel)
@@ -72,20 +75,22 @@ descriptive_server <- function(id, filtered_data) {
           local_data[[group_var]] <- factor(as.character(local_data[[group_var]]))
         }
         local_data <- droplevels(local_data)
-
         data_columns <- unique(c(data_columns, group_var))
       }
-
+      
+      # --- Keep only selected valid columns ---
       data_columns <- data_columns[!is.na(data_columns) & nzchar(data_columns)]
       data_columns <- intersect(data_columns, names(local_data))
       local_data <- local_data[, data_columns, drop = FALSE]
-
+      
+      # --- Identify strata levels (if any) ---
       strata_levels <- if (!is.null(group_var) && group_var %in% names(local_data)) {
         levels(local_data[[group_var]])
       } else {
         NULL
       }
-
+      
+      # --- Compute summary ---
       list(
         summary = compute_descriptive_summary(local_data, group_var),
         selected_vars = selected_vars,
@@ -94,6 +99,7 @@ descriptive_server <- function(id, filtered_data) {
         strata_levels = strata_levels
       )
     })
+    
     
     
     
@@ -124,7 +130,7 @@ descriptive_server <- function(id, filtered_data) {
     # ------------------------------------------------------------
     df_final <- reactive({
       details <- summary_data()
-      if (is.null(details)) return(NULL)
+      req(details)
       details$processed_data
     })
 
@@ -132,7 +138,7 @@ descriptive_server <- function(id, filtered_data) {
 
     summary_table <- reactive({
       details <- summary_data()
-      if (is.null(details)) return(NULL)
+      req(details)
       details$summary
     })
 
@@ -142,25 +148,25 @@ descriptive_server <- function(id, filtered_data) {
 
     selected_vars_reactive <- reactive({
       details <- summary_data()
-      if (is.null(details)) return(NULL)
+      req(details)
       details$selected_vars
     })
 
     group_var_reactive <- reactive({
       details <- summary_data()
-      if (is.null(details)) return(NULL)
+      req(details)
       details$group_var
     })
 
     strata_levels_reactive <- reactive({
       details <- summary_data()
-      if (is.null(details)) return(NULL)
+      req(details)
       details$strata_levels
     })
 
     reactive({
       details <- summary_data()
-      if (is.null(details)) return(NULL)
+      req(details)
 
       data_used <- df_final()
 

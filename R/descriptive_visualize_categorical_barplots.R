@@ -135,17 +135,18 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
 
     plot_size <- reactive({
       req(module_active())
-
       info <- plot_info()
-      if (is.null(info$layout)) {
+      layout <- info$layout
+      if (is.null(layout)) {
         list(w = plot_width(), h = plot_height())
       } else {
         list(
-          w = plot_width()  * info$layout$ncol,
-          h = plot_height() * info$layout$nrow
+          w = plot_width()  * layout$ncol,
+          h = plot_height() * layout$nrow
         )
       }
     })
+    
     
     output$download_plot <- downloadHandler(
       filename = function() paste0("categorical_barplots_", Sys.Date(), ".png"),
@@ -170,7 +171,6 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
     output$plot <- renderPlot({
       req(module_active())
       info <- plot_info()
-      validate(need(!is.null(info$plot), "No plot available."))
       print(info$plot)
     },
     width = function() {

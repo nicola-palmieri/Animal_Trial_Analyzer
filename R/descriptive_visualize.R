@@ -41,12 +41,9 @@ visualize_descriptive_server <- function(id, filtered_data, descriptive_summary)
 
     active_type <- reactive({
       type <- input$plot_type
-      if (is.null(type) || !length(type) || !nzchar(type[[1]])) {
-        "categorical"
-      } else {
-        type[[1]]
-      }
+      if (is.null(type) || !nzchar(type[1])) "categorical" else type[1]
     })
+    
 
     # ==========================================================
     # 🔹 Inject the correct UI for each submodule
