@@ -15,95 +15,71 @@ stratification_ui <- function(id, ns = NULL) {
   } else {
     NS(id)
   }
-
-  shiny::tagList(
-    shiny::uiOutput(ns_fn("stratify_var_ui")),
-    shiny::uiOutput(ns_fn("strata_order_ui"))
+  
+  tagList(
+    uiOutput(ns_fn("stratify_var_ui")),
+    uiOutput(ns_fn("strata_order_ui"))
   )
 }
 
-
 stratification_server <- function(id, data) {
   moduleServer(id, function(input, output, session) {
+    ns <- session$ns
     
-    # ---- Resolve reactive or static data frame ----
-    resolved_data <- reactive({
-      if (is.function(data)) data() else data
+    # ---- Resolve data ----
+    df <- reactive({
+      d <- if (is.function(data)) data() else data
+      req(is.data.frame(d))
+      validate(need(nrow(d) > 0, "No data available for stratification."))
+      d
     })
     
-    # ---- UI for selecting stratification variable ----
-    output$stratify_var_ui <- shiny::renderUI({
-      df <- resolved_data()
-      
-      choices <- STRAT_NONE_LABEL
-      if (is.data.frame(df) && ncol(df) > 0) {
-        cat_cols <- names(df)[vapply(df, function(x) is.character(x) || is.factor(x), logical(1))]
-        cat_cols <- setdiff(unique(cat_cols), STRAT_NONE_LABEL)
-        if (length(cat_cols) > 0) {
-          choices <- c(STRAT_NONE_LABEL, cat_cols)
-        }
-      }
+    # ---- UI: choose stratification variable ----
+    output$stratify_var_ui <- renderUI({
+      d <- req(df())
+      cat_cols <- names(d)[vapply(d, function(x) is.factor(x) || is.character(x), logical(1))]
+      choices <- c(STRAT_NONE_LABEL, cat_cols)
       
       current <- isolate(input$stratify_var)
       if (is.null(current) || !(current %in% choices)) {
         current <- STRAT_NONE_LABEL
       }
       
-      shiny::selectInput(
-        session$ns("stratify_var"),
+      selectInput(
+        ns("stratify_var"),
         STRAT_CHOOSE_LABEL,
         choices = choices,
         selected = current
       )
     })
     
-    
-    # ---- Reactive containing selected variable + levels ----
+    # ---- Reactive: details about selected variable and levels ----
     strat_details <- reactive({
-      df <- resolved_data()
-      if (is.null(df) || !is.data.frame(df) || nrow(df) == 0) {
-        return(list(var = NULL, levels = NULL, available_levels = NULL))
-      }
+      d <- req(df())
       
       strat_var <- input$stratify_var
-      if (is.null(strat_var) || identical(strat_var, STRAT_NONE_LABEL) ||
-          !nzchar(strat_var) || !(strat_var %in% names(df))) {
+      if (is.null(strat_var) ||
+          identical(strat_var, STRAT_NONE_LABEL) ||
+          !nzchar(strat_var) ||
+          !(strat_var %in% names(d))) {
         return(list(var = NULL, levels = NULL, available_levels = NULL))
       }
       
-      # ---- Inline guard_stratification_levels ----
-      values <- df[[strat_var]]
+      values <- d[[strat_var]]
       values <- values[!is.na(values)]
-      n_levels <- length(unique(as.character(values)))
+      available_levels <- if (is.factor(values)) levels(values) else unique(as.character(values))
+      available_levels <- available_levels[nzchar(available_levels)]
       
-      if (n_levels > MAX_STRATIFICATION_LEVELS) {
-        msg <- sprintf(
-          "❌ Stratification variable '%s' has %d levels — please select one with at most %d.",
-          strat_var, n_levels, MAX_STRATIFICATION_LEVELS
-        )
-        shiny::showNotification(msg, type = "error", duration = 8)
-        shiny::updateSelectInput(session, "stratify_var", selected = STRAT_NONE_LABEL)
-        return(list(var = NULL, levels = NULL, available_levels = NULL))
-      }
-      
-      # ---- Extract available levels ----
-      if (is.factor(values)) {
-        available_levels <- levels(values)
-      } else {
-        available_levels <- unique(as.character(values))
-      }
-      
-      available_levels <- available_levels[!is.na(available_levels)]
-      
-      if (length(available_levels) == 0) {
-        return(list(var = strat_var, levels = character(0), available_levels = character(0)))
-      }
+      n_levels <- length(available_levels)
+      validate(need(n_levels <= MAX_STRATIFICATION_LEVELS,
+                    sprintf("Stratification variable '%s' has too many levels (%d > %d).",
+                            strat_var, n_levels, MAX_STRATIFICATION_LEVELS)
+      ))
       
       selected_levels <- input$strata_order
-      if (!is.null(selected_levels) && length(selected_levels) > 0) {
+      if (!is.null(selected_levels)) {
         selected_levels <- selected_levels[selected_levels %in% available_levels]
       }
-      
       if (is.null(selected_levels) || length(selected_levels) == 0) {
         selected_levels <- available_levels
       }
@@ -115,35 +91,32 @@ stratification_server <- function(id, data) {
       )
     })
     
-    
-    # ---- UI for level ordering ----
-    output$strata_order_ui <- shiny::renderUI({
+    # ---- UI: order of levels ----
+    output$strata_order_ui <- renderUI({
       details <- strat_details()
       strat_var <- details$var
+      # hide the widget silently if stratification is None
       if (is.null(strat_var)) return(NULL)
       
       available_levels <- details$available_levels
       if (is.null(available_levels) || length(available_levels) == 0) return(NULL)
       
-      selected_levels <- details$levels
-      if (is.null(selected_levels) || length(selected_levels) == 0) {
-        selected_levels <- available_levels
-      }
-      
-      shiny::selectInput(
-        session$ns("strata_order"),
+      selectInput(
+        ns("strata_order"),
         STRAT_ORDER_LABEL,
         choices = available_levels,
-        selected = selected_levels,
+        selected = details$levels,
         multiple = TRUE
       )
     })
     
-    
-    # ---- Output unified reactive for all modules ----
+    # ---- Unified reactive output ----
     reactive({
       details <- strat_details()
-      list(var = details$var, levels = details$levels)
+      list(
+        var = details$var,
+        levels = details$levels
+      )
     })
   })
 }

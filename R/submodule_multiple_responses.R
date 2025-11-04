@@ -16,26 +16,29 @@ multi_response_ui <- function(id) {
 
 multi_response_server <- function(id, data) {
   moduleServer(id, function(input, output, session) {
-
+    ns <- session$ns
+    
+    # --- Reactive data wrapper (clean + guarded)
     df <- reactive({
-      if (is.function(data)) data() else data
+      d <- if (is.function(data)) data() else data
+      req(d)
+      d
     })
-
+    
     # --- Render selectInput dynamically
     output$response_ui <- renderUI({
-      d <- df()
-      req(d)
+      d <- req(df())
       num_vars <- names(d)[sapply(d, is.numeric)]
-
-      # fallback selection
+      validate(need(length(num_vars) > 0, "No numeric variables available."))
+      
       current_selection <- input$response
       if (is.null(current_selection) || !all(current_selection %in% num_vars)) {
         current_selection <- if (length(num_vars) > 0) num_vars[1] else NULL
       }
-
+      
       selectInput(
-        session$ns("response"),
-        if (isTRUE(input$multi_resp))
+        ns("response"),
+        label = if (isTRUE(input$multi_resp))
           "Response variables (numeric):"
         else
           "Response variable (numeric):",
@@ -44,13 +47,14 @@ multi_response_server <- function(id, data) {
         multiple = isTRUE(input$multi_resp)
       )
     })
-
-    # --- Return standardized reactive vector
-    reactive({
-      req(input$response)
-      res <- input$response
+    
+    # --- Standardized reactive vector output
+    selected_responses <- reactive({
+      res <- req(input$response)
       if (!isTRUE(input$multi_resp)) res <- res[1]
       unique(res)
     })
+    
+    return(selected_responses)
   })
 }

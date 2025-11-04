@@ -336,7 +336,7 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
 
     output$results_ui <- renderUI({
       mod <- models()
-      if (is.null(mod)) return(NULL)
+      req(mod)
 
       success_resps <- mod$success_responses
       error_resps <- mod$error_responses
@@ -386,11 +386,11 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
 
     observeEvent(models(), {
       mod <- models()
-      if (is.null(mod)) return()
+      req(mod)
 
       success_resps <- mod$success_responses
       fits <- mod$fits
-      if (is.null(success_resps) || length(success_resps) == 0) return()
+      req(success_resps)
 
       for (idx in seq_along(success_resps)) {
         local({
@@ -533,37 +533,37 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
 
     model_fit <- reactive({
       mod <- models()
-      if (is.null(mod)) return(NULL)
+      req(mod)
       mod$models
     })
 
     compiled_results <- reactive({
       mod <- models()
-      if (is.null(mod)) return(NULL)
+      req(mod)
       compile_regression_results(mod, engine)
     })
 
     summary_table <- reactive({
       res <- compiled_results()
-      if (is.null(res)) return(NULL)
+      req(res)
       res$summary
     })
 
     effect_table <- reactive({
       res <- compiled_results()
-      if (is.null(res)) return(NULL)
+      req(res)
       res$effects
     })
 
     error_table <- reactive({
       res <- compiled_results()
-      if (is.null(res)) return(NULL)
+      req(res)
       res$errors
     })
 
     reactive({
       mod <- models()
-      if (is.null(mod)) return(NULL)
+      req(mod)
 
       data_used <- df_final()
 
