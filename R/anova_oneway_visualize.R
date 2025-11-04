@@ -89,7 +89,7 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
     
     output$layout_controls <- renderUI({
       info <- model_info()
-      if (is.null(info) || info$type != "oneway_anova") return(NULL)
+      req(info)
       build_anova_layout_controls(ns, input, info, layout_state$default_ui_value)
     })
     

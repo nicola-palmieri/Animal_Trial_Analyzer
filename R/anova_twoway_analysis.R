@@ -97,7 +97,11 @@ two_way_anova_server <- function(id, filtered_data) {
     models <- eventReactive(input$run, {
       req(df(), input$factor1, input$order1, input$factor2, input$order2)
       resp_vals <- responses()
-      req(length(resp_vals) > 0)
+      validate(
+        need(length(resp_vals) > 0, "Please select at least one response variable."),
+        need(all(input$order1 %in% unique(df()[[input$factor1]])), "Invalid level order for first factor."),
+        need(all(input$order2 %in% unique(df()[[input$factor2]])), "Invalid level order for second factor.")
+      )
       prepare_stratified_anova(
         df = df(),
         responses = resp_vals,
@@ -118,7 +122,7 @@ two_way_anova_server <- function(id, filtered_data) {
     output$download_all <- downloadHandler(
       filename = function() {
         model_info <- models()
-        if (is.null(model_info)) return("anova_results.docx")
+        req(model_info)
         
         n_resp <- length(model_info$responses)
         n_strata <- if (is.null(model_info$strata)) 0 else length(model_info$strata$levels)
@@ -128,7 +132,7 @@ two_way_anova_server <- function(id, filtered_data) {
       },
       content = function(file) {
         model_info <- models()
-        if (is.null(model_info)) stop("Please run the ANOVA first.")
+        req(model_info)
         download_all_anova_results(model_info, file)
       }
     )
@@ -147,49 +151,49 @@ two_way_anova_server <- function(id, filtered_data) {
 
     df_final <- reactive({
       mod <- models()
-      if (is.null(mod)) return(NULL)
+      req(mod)
       mod$data_used
     })
 
     model_fit <- reactive({
       mod <- models()
-      if (is.null(mod)) return(NULL)
+      req(mod)
       mod$models
     })
 
     compiled_results <- reactive({
       mod <- models()
-      if (is.null(mod)) return(NULL)
+      req(mod)
       compile_anova_results(mod)
     })
 
     summary_table <- reactive({
       res <- compiled_results()
-      if (is.null(res)) return(NULL)
+      req(res)
       res$summary
     })
 
     posthoc_results <- reactive({
       res <- compiled_results()
-      if (is.null(res)) return(NULL)
+      req(res)
       res$posthoc
     })
 
     effect_table <- reactive({
       res <- compiled_results()
-      if (is.null(res)) return(NULL)
+      req(res)
       res$effects
     })
 
     error_table <- reactive({
       res <- compiled_results()
-      if (is.null(res)) return(NULL)
+      req(res)
       res$errors
     })
 
     reactive({
       mod <- models()
-      if (is.null(mod)) return(NULL)
+      req(mod)
 
       data_used <- df_final()
 
