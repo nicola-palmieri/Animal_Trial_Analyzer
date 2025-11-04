@@ -29,6 +29,7 @@ visualize_oneway_ui <- function(id) {
     mainPanel(
       width = 8,
       h4("Plots"),
+      uiOutput(ns("plot_warning")),
       plotOutput(ns("plot"), height = "auto")
     )
   )
@@ -76,6 +77,9 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
     plot_obj <- reactive({
       info <- plot_info()
       req(info)
+      if (!is.null(info$warning) || is.null(info$plot)) {
+        return(NULL)
+      }
       info$plot
     })
     
@@ -88,11 +92,43 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
         h = input$plot_height * s$strata$rows * s$responses$nrow
       )
     })
+
+    last_counts <- reactiveValues(strata = NULL, responses = NULL)
+
+    observeEvent(plot_info(), {
+      info <- isolate(plot_info())
+      if (is.null(info) || is.null(info$defaults) || is.null(info$layout)) {
+        return()
+      }
+
+      strata_panels <- info$layout$strata$panels
+      if (!is.null(info$defaults$strata) && !identical(strata_panels, last_counts$strata)) {
+        updateNumericInput(session, "strata_rows", value = info$defaults$strata$rows)
+        updateNumericInput(session, "strata_cols", value = info$defaults$strata$cols)
+        last_counts$strata <- strata_panels
+      }
+
+      response_panels <- info$layout$responses$panels
+      if (!is.null(info$defaults$responses) && !identical(response_panels, last_counts$responses)) {
+        updateNumericInput(session, "resp_rows", value = info$defaults$responses$rows)
+        updateNumericInput(session, "resp_cols", value = info$defaults$responses$cols)
+        last_counts$responses <- response_panels
+      }
+    }, ignoreNULL = TRUE)
     
     output$layout_controls <- renderUI({
       info <- model_info()
       req(info)
       build_anova_layout_controls(ns, input, info)
+    })
+
+    output$plot_warning <- renderUI({
+      info <- plot_info()
+      if (!is.null(info$warning)) {
+        div(class = "alert alert-warning", HTML(info$warning))
+      } else {
+        NULL
+      }
     })
     
     # ---- Render plot ----
@@ -100,8 +136,9 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
       info <- model_info()
       req(info, input$plot_type)
       if (input$plot_type == "mean_se") {
-        req(plot_obj())
-        plot_obj()
+        plot <- plot_obj()
+        if (is.null(plot)) return(NULL)
+        plot
       }
     },
     width = function() plot_size()$w,
@@ -112,10 +149,13 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
     output$download_plot <- downloadHandler(
       filename = function() paste0("anova_plot_", Sys.Date(), ".png"),
       content = function(file) {
-        req(plot_obj())
+        info <- plot_info()
+        req(is.null(info$warning))
+        plot <- plot_obj()
+        req(plot)
         ggsave(
           filename = file,
-          plot = plot_obj(),
+          plot = plot,
           device = "png",
           dpi = 300,
           width = plot_size()$w / 96,
