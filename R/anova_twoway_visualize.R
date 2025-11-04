@@ -30,7 +30,7 @@ visualize_twoway_ui <- function(id) {
     mainPanel(
       width = 8,
       h4("Plots"),
-      plotOutput(ns("plot"), height = "auto")   # ✅ same as one-way
+      uiOutput(ns("plot_ui"))   # ✅ same as one-way
     )
   )
 }
@@ -85,17 +85,47 @@ visualize_twoway_server <- function(id, filtered_data, model_fit) {
     plot_obj <- reactive({
       info <- plot_info()
       if (is.null(info)) return(NULL)
+      layout <- info$layout
+      strata_valid <- isTRUE(layout$strata$valid %||% TRUE)
+      resp_valid <- isTRUE(layout$responses$valid %||% TRUE)
+      if (!strata_valid || !resp_valid) return(NULL)
       info$plot
     })
-    
+
     plot_size <- reactive({
       info <- plot_info()
       req(info)
-      s <- info$layout
-      list(
-        w = input$plot_width  * s$strata$cols   * s$responses$ncol,
-        h = input$plot_height * s$strata$rows   * s$responses$nrow
-      )
+      layout <- info$layout
+      strata_cols <- layout$strata$cols %||% 1
+      strata_rows <- layout$strata$rows %||% 1
+      strata_valid <- isTRUE(layout$strata$valid %||% TRUE)
+      resp_valid <- isTRUE(layout$responses$valid %||% TRUE)
+      if (!strata_valid || !resp_valid) {
+        list(w = input$plot_width, h = input$plot_height)
+      } else {
+        list(
+          w = input$plot_width  * strata_cols * layout$responses$ncol,
+          h = input$plot_height * strata_rows * layout$responses$nrow
+        )
+      }
+    })
+
+    output$plot_ui <- renderUI({
+      info <- plot_info()
+      if (is.null(info)) {
+        return(div(class = "ta-plot-container", div("No plot available.")))
+      }
+      layout <- info$layout
+      container <- function(content) {
+        div(class = "ta-plot-container", content)
+      }
+      if (!isTRUE(layout$strata$valid %||% TRUE)) {
+        return(container(div(class = "alert alert-warning", layout$strata$message)))
+      }
+      if (!isTRUE(layout$responses$valid %||% TRUE)) {
+        return(container(div(class = "alert alert-warning", layout$responses$message)))
+      }
+      container(plotOutput(ns("plot"), height = "auto"))
     })
     
     output$layout_controls <- renderUI({
@@ -110,8 +140,9 @@ visualize_twoway_server <- function(id, filtered_data, model_fit) {
       req(info, input$plot_type)
 
       if (input$plot_type == "mean_se") {
-        req(plot_obj())
-        plot_obj()
+        plot_to_draw <- plot_obj()
+        req(plot_to_draw)
+        plot_to_draw
       }
     },
     width = function() plot_size()$w,
@@ -122,6 +153,9 @@ visualize_twoway_server <- function(id, filtered_data, model_fit) {
       filename = function() paste0(input$plot_type, "_twoway_anova_plot_", Sys.Date(), ".png"),
       content = function(file) {
         req(plot_obj())
+        layout <- plot_info()$layout
+        req(isTRUE(layout$strata$valid %||% TRUE))
+        req(isTRUE(layout$responses$valid %||% TRUE))
         s <- plot_size()
         ggsave(
           filename = file,

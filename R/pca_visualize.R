@@ -116,6 +116,7 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
 
 visualize_pca_server <- function(id, filtered_data, model_fit) {
   moduleServer(id, function(input, output, session) {
+    ns <- session$ns
     layout_state <- initialize_layout_state(input, session)
     display_mode <- reactiveVal(NULL)
     # -- Reactives ------------------------------------------------------------
@@ -388,35 +389,15 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
         cols_input = layout_state$effective_input("strata_cols")
       )
 
-      combined <- patchwork::wrap_plots(
-        plotlist = plot_list,
-        nrow = layout$nrow,
-        ncol = layout$ncol
-      ) +
-        patchwork::plot_layout(guides = "collect")
+      sync_grid_controls(layout_state, input, session, "strata_rows", "strata_cols", layout)
 
-      list(
-        plot = combined,
-        layout = layout,
-        strata_names = names(plot_list)
-      )
-    })
-
-    observe_layout_synchronization(plot_info, layout_state, session)
-
-    plot_size <- reactive({
-      width <- suppressWarnings(as.numeric(input$plot_width))
-      height <- suppressWarnings(as.numeric(input$plot_height))
-      info <- plot_info()
-      layout <- info$layout
-
-      subplot_w <- ifelse(is.na(width) || width <= 0, 400, width)
-      subplot_h <- ifelse(is.na(height) || height <= 0, 300, height)
-
-      list(
-        w = subplot_w * max(1, layout$ncol),
-        h = subplot_h * max(1, layout$nrow)
-      )
+      if (!isTRUE(layout$valid)) {
+        return(list(
+          plot = NULL,
+          layout = layout,
+          strata_names = names(plot_list)
+        ))
+      }
 
       combined <- patchwork::wrap_plots(
         plotlist = plot_list,
@@ -447,23 +428,74 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
         w = subplot_w * max(1, layout$ncol),
         h = subplot_h * max(1, layout$nrow)
       )
+
+      combined <- patchwork::wrap_plots(
+        plotlist = plot_list,
+        nrow = layout$nrow,
+        ncol = layout$ncol
+      ) +
+        patchwork::plot_layout(guides = "collect")
+
+      list(
+        plot = combined,
+        layout = layout,
+        strata_names = names(plot_list)
+      )
+    })
+
+    observe_layout_synchronization(plot_info, layout_state, session)
+
+    plot_size <- reactive({
+      width <- suppressWarnings(as.numeric(input$plot_width))
+      height <- suppressWarnings(as.numeric(input$plot_height))
+      info <- plot_info()
+      layout <- info$layout
+
+      subplot_w <- ifelse(is.na(width) || width <= 0, 400, width)
+      subplot_h <- ifelse(is.na(height) || height <= 0, 300, height)
+
+      if (is.null(layout) || !isTRUE(layout$valid)) {
+        list(w = subplot_w, h = subplot_h)
+      } else {
+        list(
+          w = subplot_w * max(1, layout$ncol),
+          h = subplot_h * max(1, layout$nrow)
+        )
+      }
+    })
+
+    output$plot_ui <- renderUI({
+      info <- plot_info()
+      layout <- info$layout
+      container <- function(content) {
+        div(class = "ta-plot-container", content)
+      }
+      if (!is.null(layout) && !isTRUE(layout$valid)) {
+        return(container(div(class = "alert alert-warning", layout$message)))
+      }
+      container(plotOutput(ns("plot"), height = "auto"))
     })
 
     plot_obj <- reactive({
       info <- plot_info()
-      validate(need(!is.null(info$plot), "No PCA plots available."))
+      layout <- info$layout
+      if (!is.null(layout) && !isTRUE(layout$valid)) return(NULL)
+      if (is.null(info$plot)) return(NULL)
       info$plot
     })
 
     plot_obj <- reactive({
       info <- plot_info()
-      validate(need(!is.null(info$plot), "No PCA plots available."))
+      layout <- info$layout
+      if (!is.null(layout) && !isTRUE(layout$valid)) return(NULL)
+      if (is.null(info$plot)) return(NULL)
       info$plot
     })
 
     output$plot <- renderPlot({
-      req(plot_obj())
-      plot_obj()
+      obj <- plot_obj()
+      if (is.null(obj)) return(NULL)
+      obj
     },
     width = function() plot_size()$w,
     height = function() plot_size()$h,
@@ -482,11 +514,15 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
       },
       content = function(file) {
         info <- plot_info()
+        layout <- info$layout
+        req(is.null(layout) || isTRUE(layout$valid))
+        plot_item <- plot_obj()
+        req(plot_item)
         size <- plot_size()
 
         ggsave(
           filename = file,
-          plot = info$plot,
+          plot = plot_item,
           device = "png",
           dpi = 300,
           width = size$w / 96,

@@ -22,6 +22,8 @@ pairwise_correlation_visualize_ggpairs_ui <- function(id) {
 pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, correlation_info) {
   moduleServer(id, function(input, output, session) {
 
+    ns <- session$ns
+
     layout_state <- initialize_layout_state(input, session)
 
     resolve_input_value <- function(x) {
@@ -126,11 +128,11 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
 
       strata_order <- resolve_input_value(info$strata_order)
 
+      plots <- list()
+
       if (is.null(group_var)) {
         plot_data <- data[, selected_vars, drop = FALSE]
-        plot_obj <- build_ggpairs_plot(plot_data, basic_color_palette[1])
-        layout <- list(nrow = 1L, ncol = 1L)
-        list(plot = plot_obj, layout = layout)
+        plots[[1]] <- convert_ggmatrix_to_plot(build_ggpairs_plot(plot_data, basic_color_palette[1]))
       } else {
         available_levels <- NULL
         if (!is.null(results$matrices)) {
@@ -152,7 +154,6 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
         }
         names(colors) <- available_levels
 
-        plots <- list()
         for (level in available_levels) {
           subset_rows <- !is.na(data[[group_var]]) & as.character(data[[group_var]]) == level
           subset_data <- data[subset_rows, selected_vars, drop = FALSE]
@@ -165,21 +166,31 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
         }
 
         validate(need(length(plots) > 0, "No data available for the selected strata."))
-
-        layout <- resolve_grid_layout(
-          n_items = length(plots),
-          rows_input = layout_state$effective_input("resp_rows"),
-          cols_input = layout_state$effective_input("resp_cols")
-        )
-
-        combined <- patchwork::wrap_plots(
-          plotlist = plots,
-          nrow = layout$nrow,
-          ncol = layout$ncol
-        )
-
-        list(plot = combined, layout = layout)
       }
+
+      layout <- resolve_grid_layout(
+        n_items = length(plots),
+        rows_input = layout_state$effective_input("resp_rows"),
+        cols_input = layout_state$effective_input("resp_cols")
+      )
+
+      sync_grid_controls(layout_state, input, session, "resp_rows", "resp_cols", layout)
+
+      if (!isTRUE(layout$valid)) {
+        return(list(plot = NULL, layout = layout))
+      }
+
+      if (length(plots) == 1) {
+        return(list(plot = plots[[1]], layout = layout))
+      }
+
+      combined <- patchwork::wrap_plots(
+        plotlist = plots,
+        nrow = layout$nrow,
+        ncol = layout$ncol
+      )
+
+      list(plot = combined, layout = layout)
     })
 
     observe_layout_synchronization(plot_info, layout_state, session)
@@ -188,7 +199,7 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
       info <- plot_info()
       layout <- info$layout
       w <- plot_width()
-      if (!is.null(layout$ncol)) {
+      if (!is.null(layout) && isTRUE(layout$valid) && !is.null(layout$ncol)) {
         w <- w * max(1L, as.integer(layout$ncol))
       }
       w
@@ -198,7 +209,7 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
       info <- plot_info()
       layout <- info$layout
       h <- plot_height()
-      if (!is.null(layout$nrow)) {
+      if (!is.null(layout) && isTRUE(layout$valid) && !is.null(layout$nrow)) {
         h <- h * max(1L, as.integer(layout$nrow))
       }
       h
@@ -208,6 +219,8 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
       filename = function() paste0("pairwise_correlation_ggpairs_", Sys.Date(), ".png"),
       content = function(file) {
         info <- plot_info()
+        layout <- info$layout
+        req(is.null(layout) || isTRUE(layout$valid))
         plot_obj <- info$plot
         req(plot_obj)
         ggplot2::ggsave(
@@ -225,6 +238,7 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
 
     list(
       plot = reactive({ plot_info()$plot }),
+      layout = reactive(plot_info()$layout),
       width = reactive(plot_width_total()),
       height = reactive(plot_height_total())
     )

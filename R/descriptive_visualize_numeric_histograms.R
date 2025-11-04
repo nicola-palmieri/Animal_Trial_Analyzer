@@ -23,16 +23,14 @@ visualize_numeric_histograms_ui <- function(id) {
 
 visualize_numeric_histograms_plot_ui <- function(id) {
   ns <- NS(id)
-  div(
-    class = "ta-plot-container",
-    plotOutput(ns("plot"), width = "100%", height = "auto")
-  )
+  uiOutput(ns("plot_container"))
 }
 
 
 visualize_numeric_histograms_server <- function(id, filtered_data, summary_info, is_active = NULL) {
   moduleServer(id, function(input, output, session) {
 
+    ns <- session$ns
     layout_state <- initialize_layout_state(input, session)
 
     resolve_input_value <- function(x) {
@@ -87,20 +85,6 @@ visualize_numeric_histograms_server <- function(id, filtered_data, summary_info,
       n_panels <- if (is.null(out$panels)) 1L else max(1L, suppressWarnings(as.integer(out$panels)))
       max_val <- 10L
 
-      layout_info <- out$layout
-      safe_rows <- if (!is.null(layout_info) && !is.null(layout_info$nrow) && is.finite(layout_info$nrow)) {
-        as.integer(layout_info$nrow)
-      } else {
-        min(max_val, max(1L, n_panels))
-      }
-
-      safe_cols <- if (!is.null(layout_info) && !is.null(layout_info$ncol) && is.finite(layout_info$ncol)) {
-        as.integer(layout_info$ncol)
-      } else {
-        min(max_val, max(1L, ceiling(n_panels / max(1L, safe_rows))))
-      }
-
-      out$layout <- list(nrow = safe_rows, ncol = safe_cols)
       sync_grid_controls(layout_state, input, session, "resp_rows", "resp_cols", out$layout, max_value = max_val)
       out
     })
@@ -111,14 +95,28 @@ visualize_numeric_histograms_server <- function(id, filtered_data, summary_info,
     plot_size <- reactive({
       req(module_active())
       info <- plot_info()
-      if (is.null(info$layout)) {
+      layout <- info$layout
+      if (is.null(layout) || !isTRUE(layout$valid)) {
         list(w = plot_width(), h = plot_height())
       } else {
         list(
-          w = plot_width()  * info$layout$ncol,
-          h = plot_height() * info$layout$nrow
+          w = plot_width()  * layout$ncol,
+          h = plot_height() * layout$nrow
         )
       }
+    })
+
+    output$plot_container <- renderUI({
+      req(module_active())
+      info <- plot_info()
+      layout <- info$layout
+      container <- function(content) {
+        div(class = "ta-plot-container", content)
+      }
+      if (!is.null(layout) && !isTRUE(layout$valid)) {
+        return(container(div(class = "alert alert-warning", layout$message)))
+      }
+      container(plotOutput(ns("plot"), width = "100%", height = "auto"))
     })
 
     output$download_plot <- downloadHandler(
@@ -127,6 +125,8 @@ visualize_numeric_histograms_server <- function(id, filtered_data, summary_info,
         req(module_active())
         info <- plot_info()
         req(info$plot)
+        layout <- info$layout
+        req(is.null(layout) || isTRUE(layout$valid))
         s <- plot_size()
         ggplot2::ggsave(
           filename = file,
@@ -144,6 +144,9 @@ visualize_numeric_histograms_server <- function(id, filtered_data, summary_info,
     output$plot <- renderPlot({
       req(module_active())
       info <- plot_info()
+      layout <- info$layout
+      if (is.null(layout) || !isTRUE(layout$valid)) return(NULL)
+      if (is.null(info$plot)) return(NULL)
       print(info$plot)
     },
     width = function() {
@@ -251,15 +254,23 @@ build_descriptive_numeric_histogram <- function(df,
     rows_input = suppressWarnings(as.numeric(nrow_input)),
     cols_input = suppressWarnings(as.numeric(ncol_input))
   )
-  
+
+  if (!isTRUE(layout$valid)) {
+    return(list(
+      plot = NULL,
+      layout = layout,
+      panels = length(plots)
+    ))
+  }
+
   combined <- patchwork::wrap_plots(plots, nrow = layout$nrow, ncol = layout$ncol) +
     patchwork::plot_annotation(
       theme = theme(plot.title = element_text(size = 16, face = "bold"))
     )
-  
+
   list(
     plot = combined,
-    layout = list(nrow = layout$nrow, ncol = layout$ncol),
+    layout = layout,
     panels = length(plots)
   )
 }

@@ -44,10 +44,7 @@ visualize_categorical_barplots_ui <- function(id) {
 
 visualize_categorical_barplots_plot_ui <- function(id) {
   ns <- NS(id)
-  div(
-    class = "ta-plot-container",
-    plotOutput(ns("plot"), width = "100%", height = "auto")
-  )
+  uiOutput(ns("plot_container"))
 }
 
 visualize_categorical_barplots_server <- function(id, filtered_data, summary_info, is_active = NULL) {
@@ -142,7 +139,7 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
       req(module_active())
       info <- plot_info()
       layout <- info$layout
-      if (is.null(layout)) {
+      if (is.null(layout) || !isTRUE(layout$valid)) {
         list(w = plot_width(), h = plot_height())
       } else {
         list(
@@ -151,6 +148,19 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
         )
       }
     })
+
+    output$plot_container <- renderUI({
+      req(module_active())
+      info <- plot_info()
+      layout <- info$layout
+      container <- function(content) {
+        div(class = "ta-plot-container", content)
+      }
+      if (!is.null(layout) && !isTRUE(layout$valid)) {
+        return(container(div(class = "alert alert-warning", layout$message)))
+      }
+      container(plotOutput(ns("plot"), width = "100%", height = "auto"))
+    })
     
     
     output$download_plot <- downloadHandler(
@@ -158,6 +168,8 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
       content  = function(file) {
         req(module_active())
         info <- plot_info()
+        layout <- info$layout
+        req(is.null(layout) || isTRUE(layout$valid))
         req(info$plot)
         s <- plot_size()
         ggplot2::ggsave(
@@ -176,6 +188,8 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
     output$plot <- renderPlot({
       req(module_active())
       info <- plot_info()
+      layout <- info$layout
+      if (is.null(layout) || !isTRUE(layout$valid)) return(NULL)
       print(info$plot)
     },
     width = function() {
@@ -323,15 +337,23 @@ build_descriptive_categorical_plot <- function(df,
     rows_input = suppressWarnings(as.numeric(nrow_input)),
     cols_input = suppressWarnings(as.numeric(ncol_input))
   )
-  
+
+  if (!isTRUE(layout$valid)) {
+    return(list(
+      plot = NULL,
+      layout = layout,
+      panels = length(plots)
+    ))
+  }
+
   combined <- patchwork::wrap_plots(plots, nrow = layout$nrow, ncol = layout$ncol) +
     patchwork::plot_annotation(
       theme = theme(plot.title = element_text(size = 16, face = "bold"))
     )
-  
+
   list(
     plot = combined,
-    layout = list(nrow = layout$nrow, ncol = layout$ncol),
+    layout = layout,
     panels = length(plots)
   )
 }

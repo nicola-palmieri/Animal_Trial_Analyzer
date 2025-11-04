@@ -30,7 +30,7 @@ visualize_oneway_ui <- function(id) {
     mainPanel(
       width = 8,
       h4("Plots"),
-      plotOutput(ns("plot"), height = "auto")
+      uiOutput(ns("plot_ui"))
     )
   )
 }
@@ -74,19 +74,47 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
     plot_obj <- reactive({
       info <- plot_info()
       req(info)
+      layout <- info$layout
+      strata_valid <- isTRUE(layout$strata$valid %||% TRUE)
+      resp_valid <- isTRUE(layout$responses$valid %||% TRUE)
+      if (!strata_valid || !resp_valid) return(NULL)
       info$plot
     })
-    
+
     plot_size <- reactive({
       info <- plot_info()
       req(info)
-      s <- plot_info()$layout
-      list(
-        w = input$plot_width * s$strata$cols * s$responses$ncol,
-        h = input$plot_height * s$strata$rows * s$responses$nrow
-      )
+      layout <- info$layout
+      strata_cols <- layout$strata$cols %||% 1
+      strata_rows <- layout$strata$rows %||% 1
+      strata_valid <- isTRUE(layout$strata$valid %||% TRUE)
+      resp_valid <- isTRUE(layout$responses$valid %||% TRUE)
+      if (!strata_valid || !resp_valid) {
+        list(w = input$plot_width, h = input$plot_height)
+      } else {
+        list(
+          w = input$plot_width * strata_cols * layout$responses$ncol,
+          h = input$plot_height * strata_rows * layout$responses$nrow
+        )
+      }
     })
-    
+
+    output$plot_ui <- renderUI({
+      info <- plot_info()
+      req(info)
+      layout <- info$layout
+      container <- function(content) {
+        div(class = "ta-plot-container", content)
+      }
+      if (!isTRUE(layout$strata$valid %||% TRUE)) {
+        return(container(div(class = "alert alert-warning", layout$strata$message)))
+      }
+      if (!isTRUE(layout$responses$valid %||% TRUE)) {
+        return(container(div(class = "alert alert-warning", layout$responses$message)))
+      }
+      container(plotOutput(ns("plot"), height = "auto"))
+    })
+
     output$layout_controls <- renderUI({
       info <- model_info()
       req(info)
@@ -98,8 +126,9 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
       info <- model_info()
       req(info, input$plot_type)
       if (input$plot_type == "mean_se") {
-        req(plot_obj())
-        plot_obj()
+        plot_to_draw <- plot_obj()
+        req(plot_to_draw)
+        plot_to_draw
       }
     },
     width = function() plot_size()$w,
@@ -111,6 +140,9 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
       filename = function() paste0("anova_plot_", Sys.Date(), ".png"),
       content = function(file) {
         req(plot_obj())
+        layout <- plot_info()$layout
+        req(isTRUE(layout$strata$valid %||% TRUE))
+        req(isTRUE(layout$responses$valid %||% TRUE))
         ggsave(
           filename = file,
           plot = plot_obj(),

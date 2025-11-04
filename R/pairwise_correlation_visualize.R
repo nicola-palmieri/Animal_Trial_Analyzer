@@ -22,7 +22,7 @@ visualize_ggpairs_ui <- function(id) {
     mainPanel(
       width = 8,
       h4("Plots"),
-      plotOutput(ns("plot"), height = "auto")
+      uiOutput(ns("plot_ui"))
     )
   )
 }
@@ -69,9 +69,26 @@ visualize_ggpairs_server <- function(id, filtered_data, model_fit) {
       active(handle)
     }, ignoreNULL = FALSE)
 
+    output$plot_ui <- renderUI({
+      h <- active()
+      container <- function(content) {
+        div(class = "ta-plot-container", content)
+      }
+      if (is.null(h)) {
+        return(container(div("Run the pairwise correlation analysis to generate plots.")))
+      }
+      layout <- h$layout()
+      if (!is.null(layout) && !isTRUE(layout$valid)) {
+        return(container(div(class = "alert alert-warning", layout$message)))
+      }
+      container(plotOutput(ns("plot"), height = "auto"))
+    })
+
     output$plot <- renderPlot({
       h <- active()
       req(h)
+      layout <- h$layout()
+      if (!is.null(layout) && !isTRUE(layout$valid)) return(NULL)
       plot_obj <- h$plot()
       validate(need(!is.null(plot_obj), "No plot available."))
       print(plot_obj)
