@@ -24,6 +24,17 @@ initialize_layout_state <- function(input, session) {
     resp_cols = TRUE
   )
 
+  paired_name <- function(name) {
+    switch(
+      name,
+      strata_rows = "strata_cols",
+      strata_cols = "strata_rows",
+      resp_rows   = "resp_cols",
+      resp_cols   = "resp_rows",
+      NULL
+    )
+  }
+
   observe_numeric_input <- function(name) {
     observeEvent(input[[name]], {
       if (isTRUE(suppress_updates[[name]])) {
@@ -45,7 +56,17 @@ initialize_layout_state <- function(input, session) {
   lapply(c("strata_rows", "strata_cols", "resp_rows", "resp_cols"), observe_numeric_input)
 
   effective_input <- function(name) {
-    if (isTRUE(layout_manual[[name]])) layout_overrides[[name]] else 0
+    if (isTRUE(layout_manual[[name]])) {
+      layout_overrides[[name]]
+    } else {
+      counterpart <- paired_name(name)
+      if (!is.null(counterpart) && isTRUE(layout_manual[[counterpart]])) {
+        val <- default_ui_value(input[[name]])
+        as.integer(val)
+      } else {
+        0L
+      }
+    }
   }
 
   default_ui_value <- function(cur_val) {
@@ -57,6 +78,7 @@ initialize_layout_state <- function(input, session) {
     overrides = layout_overrides,
     manual = layout_manual,
     suppress = suppress_updates,
+    paired_name = paired_name,
     effective_input = effective_input,
     default_ui_value = default_ui_value
   )
@@ -73,17 +95,24 @@ sync_grid_controls <- function(layout_state,
     return(invisible(NULL))
   }
 
+  paired_name <- layout_state$paired_name
+
   update_control <- function(name, target) {
     if (is.null(name) || is.null(target) || !is.finite(target)) return()
 
-    target <- as.integer(max(1L, min(max_value, round(target))))
+    counterpart <- paired_name(name)
+    if (!is.null(counterpart) && isTRUE(shiny::isolate(layout_state$manual[[counterpart]]))) {
+      return()
+    }
 
     if (isTRUE(shiny::isolate(layout_state$manual[[name]]))) {
       return()
     }
 
+    target <- as.integer(max(1L, min(max_value, round(target))))
+
     current <- shiny::isolate(input[[name]])
-    if (isTRUE(!identical(as.integer(current), target))) {
+    if (!identical(as.integer(current), target)) {
       layout_state$suppress[[name]] <- TRUE
       updateNumericInput(session, name, value = target, min = 1, max = max_value)
     }

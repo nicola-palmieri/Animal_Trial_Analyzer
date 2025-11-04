@@ -81,10 +81,8 @@ visualize_numeric_histograms_server <- function(id, filtered_data, summary_info,
       )
       validate(need(!is.null(out), "No numeric variables available for plotting."))
 
-      n_panels <- if (is.null(out$panels)) 1L else max(1L, suppressWarnings(as.integer(out$panels)))
-      max_val <- 10L
+      sync_grid_controls(layout_state, input, session, "resp_rows", "resp_cols", out$layout)
 
-      sync_grid_controls(layout_state, input, session, "resp_rows", "resp_cols", out$layout, max_value = max_val)
       out
     })
 
