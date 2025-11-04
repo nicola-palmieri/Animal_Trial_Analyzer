@@ -1,5 +1,5 @@
 # ===============================================================
-# 🧪 Table Analyzer — Upload Module (simple editable column types)
+# 🧪 Table Analyzer — Upload Module (Stable wide-format version)
 # ===============================================================
 
 upload_ui <- function(id) {
@@ -25,7 +25,7 @@ upload_ui <- function(id) {
       fileInput(
         ns("file"),
         "Upload Excel file (.xlsx / .xls / .xlsm)",
-        accept = c(".xlsx", ".xls", ".xlsm)")
+        accept = c(".xlsx", ".xls", ".xlsm")
       ),
       uiOutput(ns("sheet_selector")),
       hr(),
@@ -47,13 +47,14 @@ upload_server <- function(id) {
     df <- reactiveVal(NULL)
     editable_cols <- reactiveVal(NULL)
     
-    # ---- Reset ----
+    # -----------------------------------------------------------
+    # 1️⃣ Handle source selection
+    # -----------------------------------------------------------
     observeEvent(input$data_source, {
       df(NULL)
-      output$preview <- renderDT(data.frame())
-      output$validation_msg <- renderText("")
-      output$sheet_selector <- renderUI(NULL)
       output$type_selectors <- renderUI(NULL)
+      output$sheet_selector <- renderUI(NULL)
+      output$preview <- renderDT(data.frame())
       
       if (input$data_source == "example") {
         path <- "data/toy_animal_trial_data_long.xlsx"
@@ -64,11 +65,14 @@ upload_server <- function(id) {
         output$validation_msg <- renderText("📂 Loaded built-in example dataset (long format).")
         output$preview <- renderDT(data, options = list(scrollX = TRUE, pageLength = 5))
         create_type_selectors(data)
+      } else {
+        output$validation_msg <- renderText("Please upload an Excel file.")
       }
     }, ignoreInit = FALSE)
     
-    
-    # ---- Example layout ----
+    # -----------------------------------------------------------
+    # 2️⃣ Example layout preview
+    # -----------------------------------------------------------
     output$layout_example <- renderUI({
       req(input$data_source %in% c("long", "wide"))
       long_path <- "data/toy_animal_trial_data_long.xlsx"
@@ -95,60 +99,80 @@ upload_server <- function(id) {
       )
     })
     
-    
-    # ---- File upload ----
+    # -----------------------------------------------------------
+    # 3️⃣ File upload → detect sheets
+    # -----------------------------------------------------------
     observeEvent(input$file, {
-      req(input$data_source != "example", input$file)
+      req(input$data_source != "example")
       ext <- tolower(tools::file_ext(input$file$name))
       validate(need(ext %in% c("xlsx", "xls", "xlsm"),
                     "❌ Invalid file type. Please upload .xlsx/.xls/.xlsm."))
       
       sheets <- tryCatch(readxl::excel_sheets(input$file$datapath),
                          error = function(e) NULL)
-      validate(need(!is.null(sheets), "❌ No readable sheets found in the workbook."))
+      validate(need(!is.null(sheets), "❌ No readable sheets found in workbook."))
+      
       output$validation_msg <- renderText(paste("✅ File loaded:", input$file$name))
-      output$sheet_selector <- renderUI(selectInput(ns("sheet"), "Select sheet:", choices = sheets))
+      output$sheet_selector <- renderUI(
+        selectInput(ns("sheet"), "Select sheet:", choices = sheets)
+      )
     }, ignoreInit = TRUE)
     
-    
-    # ---- Load selected sheet ----
-    observeEvent(list(input$sheet, input$file$datapath, input$data_source), {
-      req(input$data_source != "example", input$file, input$sheet)
+    # -----------------------------------------------------------
+    # 4️⃣ Load selected sheet (handles both long & wide)
+    # -----------------------------------------------------------
+    observeEvent(list(input$sheet, input$data_source), {
+      req(input$file, input$sheet, input$data_source != "example")
+      path <- input$file$datapath
       data <- NULL
       
       if (input$data_source == "wide") {
+        # ⚙️ Wide format conversion with error handling
         data <- tryCatch(
-          convert_wide_to_long(input$file$datapath, sheet = input$sheet, replicate_col = "Replicate"),
+          convert_wide_to_long(
+            path,
+            sheet = input$sheet,
+            replicate_col = "Replicate"
+          ),
           error = function(e) {
-            output$validation_msg <- renderText(paste("❌ Error converting wide format:", conditionMessage(e)))
+            output$validation_msg <- renderText(
+              paste("❌ Error converting wide format:", conditionMessage(e))
+            )
             NULL
           }
         )
-        req(!is.null(data))
+        if (is.null(data)) return()
         output$validation_msg <- renderText("✅ Wide format reshaped successfully.")
       } else {
+        # 🧾 Simple long format load
         data <- tryCatch(
-          readxl::read_excel(input$file$datapath, sheet = input$sheet),
+          readxl::read_excel(path, sheet = input$sheet),
           error = function(e) {
-            output$validation_msg <- renderText(paste("❌ Error loading sheet:", conditionMessage(e)))
+            output$validation_msg <- renderText(
+              paste("❌ Error loading sheet:", conditionMessage(e))
+            )
             NULL
           }
         )
-        req(!is.null(data))
+        if (is.null(data)) return()
         output$validation_msg <- renderText("✅ Long format loaded successfully.")
       }
       
+      # ✅ Shared postprocessing and preview
       data <- preprocess_uploaded_table(data)
       df(data)
       output$preview <- renderDT(data, options = list(scrollX = TRUE, pageLength = 5))
       create_type_selectors(data)
     })
     
-    
-    # ---- Create type selectors ----
+    # -----------------------------------------------------------
+    # 5️⃣ Create type selectors
+    # -----------------------------------------------------------
     create_type_selectors <- function(data) {
+      req(data)
       num_vars <- names(data)[sapply(data, is.numeric)]
-      few_level_nums <- num_vars[sapply(data[num_vars], function(x) length(unique(na.omit(x))) <= 10)]
+      few_level_nums <- num_vars[sapply(data[num_vars], function(x)
+        length(unique(na.omit(x))) <= 10)]
       editable_cols(few_level_nums)
       
       if (length(few_level_nums) == 0) {
@@ -172,24 +196,26 @@ upload_server <- function(id) {
       })
     }
     
-    
-    # ---- Update df when user changes type ----
+    # -----------------------------------------------------------
+    # 6️⃣ Apply user type edits reactively
+    # -----------------------------------------------------------
     observe({
       req(df(), editable_cols())
       data <- df()
       for (col in editable_cols()) {
-        input_id <- paste0("type_", col)
-        sel <- input[[input_id]]
-        if (!is.null(sel) && sel == "Categorical") {
+        sel <- input[[paste0("type_", col)]] %||% "Numeric"
+        if (sel == "Categorical") {
           data[[col]] <- factor(as.character(data[[col]]))
-        } else if (!is.null(sel) && sel == "Numeric") {
+        } else {
           data[[col]] <- suppressWarnings(as.numeric(as.character(data[[col]])))
         }
       }
       df(data)
     })
     
-    
-    return(df)
+    # -----------------------------------------------------------
+    # ✅ Return reactive data
+    # -----------------------------------------------------------
+    df
   })
 }
