@@ -274,6 +274,7 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
       n_cols <- layout$ncol
 
       plot <- build_metric_plot(metric_info, y_label, title, n_rows, n_cols)
+      sync_grid_controls(layout_state, input, session, "resp_rows", "resp_cols", list(nrow = n_rows, ncol = n_cols))
 
       list(
         plot = plot,

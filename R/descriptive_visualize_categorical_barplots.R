@@ -132,6 +132,7 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
         fill_colors = custom_colors()
       )
       validate(need(!is.null(out), "No categorical variables available for plotting."))
+      sync_grid_controls(layout_state, input, session, "resp_rows", "resp_cols", out$layout)
       out
     })
 
