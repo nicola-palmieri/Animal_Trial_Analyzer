@@ -15,7 +15,7 @@ visualize_categorical_barplots_ui <- function(id) {
       column(
         6,
         numericInput(
-          ns("n_rows"),
+          ns("resp_rows"),
           "Grid rows",
           value = 3,
           min = 1,
@@ -26,7 +26,7 @@ visualize_categorical_barplots_ui <- function(id) {
       column(
         6,
         numericInput(
-          ns("n_cols"),
+          ns("resp_cols"),
           "Grid columns",
           value = 2,
           min = 1,
@@ -53,6 +53,8 @@ visualize_categorical_barplots_plot_ui <- function(id) {
 visualize_categorical_barplots_server <- function(id, filtered_data, summary_info, is_active = NULL) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
+
+    layout_state <- initialize_layout_state(input, session)
 
     resolve_input_value <- function(x) {
       if (is.null(x)) return(NULL)
@@ -125,13 +127,15 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
         group_var = group_var,
         strata_levels = strata_levels,
         show_proportions = isTRUE(input$show_proportions),
-        nrow_input = input$n_rows,
-        ncol_input = input$n_cols,
+        nrow_input = layout_state$effective_input("resp_rows"),
+        ncol_input = layout_state$effective_input("resp_cols"),
         fill_colors = custom_colors()
       )
       validate(need(!is.null(out), "No categorical variables available for plotting."))
       out
     })
+
+    observe_layout_synchronization(plot_info, layout_state, session)
 
     plot_size <- reactive({
       req(module_active())

@@ -10,8 +10,8 @@ pairwise_correlation_visualize_ggpairs_ui <- function(id) {
       column(6, numericInput(ns("plot_height"), "Subplot height (px)", 600, 200, 2000, 50))
     ),
     fluidRow(
-      column(6, numericInput(ns("grid_rows"),    "Grid rows",    1, 1, 10, 1)),
-      column(6, numericInput(ns("grid_cols"),    "Grid columns", 1, 1, 10, 1))
+      column(6, numericInput(ns("resp_rows"),    "Grid rows",    1, 1, 10, 1)),
+      column(6, numericInput(ns("resp_cols"),    "Grid columns", 1, 1, 10, 1))
     ),
     hr(),
     downloadButton(ns("download_plot"), "Download Plot", style = "width: 100%;")
@@ -21,6 +21,8 @@ pairwise_correlation_visualize_ggpairs_ui <- function(id) {
 
 pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, correlation_info) {
   moduleServer(id, function(input, output, session) {
+
+    layout_state <- initialize_layout_state(input, session)
 
     resolve_input_value <- function(x) {
       if (is.null(x)) return(NULL)
@@ -40,14 +42,6 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
 
     plot_height <- reactive({
       sanitize_numeric(input$plot_height, 600, 200, 2000)
-    })
-
-    grid_rows <- reactive({
-      as.integer(sanitize_numeric(input$grid_rows, 1, 1, 10))
-    })
-
-    grid_cols <- reactive({
-      as.integer(sanitize_numeric(input$grid_cols, 1, 1, 10))
     })
 
     build_ggpairs_plot <- function(data, color_value, title = NULL) {
@@ -172,11 +166,23 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
 
         validate(need(length(plots) > 0, "No data available for the selected strata."))
 
-        combined <- patchwork::wrap_plots(plotlist = plots, nrow = grid_rows(), ncol = grid_cols())
-        layout <- list(nrow = grid_rows(), ncol = grid_cols())
+        layout <- resolve_grid_layout(
+          n_items = length(plots),
+          rows_input = layout_state$effective_input("resp_rows"),
+          cols_input = layout_state$effective_input("resp_cols")
+        )
+
+        combined <- patchwork::wrap_plots(
+          plotlist = plots,
+          nrow = layout$nrow,
+          ncol = layout$ncol
+        )
+
         list(plot = combined, layout = layout)
       }
     })
+
+    observe_layout_synchronization(plot_info, layout_state, session)
 
     plot_width_total <- reactive({
       info <- plot_info()

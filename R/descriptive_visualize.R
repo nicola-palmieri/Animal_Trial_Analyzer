@@ -38,6 +38,7 @@ visualize_descriptive_ui <- function(id) {
 visualize_descriptive_server <- function(id, filtered_data, descriptive_summary) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
+    layout_state <- initialize_layout_state(input, session)
 
     active_type <- reactive({
       type <- input$plot_type

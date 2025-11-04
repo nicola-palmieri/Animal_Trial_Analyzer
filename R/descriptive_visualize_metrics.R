@@ -13,8 +13,8 @@ metric_panel_ui <- function(id, default_width = 400, default_height = 300,
     ),
     hr(),
     fluidRow(
-      column(6, numericInput(ns("n_rows"), "Grid rows",    value = default_rows, min = 1, max = 10, step = 1)),
-      column(6, numericInput(ns("n_cols"), "Grid columns", value = default_cols, min = 1, max = 10, step = 1))
+      column(6, numericInput(ns("resp_rows"), "Grid rows",    value = default_rows, min = 1, max = 10, step = 1)),
+      column(6, numericInput(ns("resp_cols"), "Grid columns", value = default_cols, min = 1, max = 10, step = 1))
     ),
     hr(),
     downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;")
@@ -59,14 +59,6 @@ visualize_missing_plot_ui <- function(id) {
 resolve_metric_input <- function(x) {
   if (is.null(x)) return(NULL)
   if (is.reactive(x)) x() else x
-}
-
-safe_numeric_input <- function(value, default = 1L) {
-  val <- suppressWarnings(as.integer(value))
-  if (length(val) == 0 || is.na(val) || val <= 0) {
-    return(default)
-  }
-  max(1L, min(10L, val))
 }
 
 safe_cv <- function(x) {
@@ -216,6 +208,8 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
                                  y_label, title, filename_prefix, is_active = NULL) {
   moduleServer(id, function(input, output, session) {
 
+    layout_state <- initialize_layout_state(input, session)
+
     plot_width <- reactive({
       w <- input$plot_width
       if (is.null(w) || !is.numeric(w) || is.na(w)) 400 else w
@@ -270,8 +264,14 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
         metric_info$group_label <- group_label
       }
 
-      n_rows <- safe_numeric_input(input$n_rows, default = 1L)
-      n_cols <- safe_numeric_input(input$n_cols, default = 1L)
+      layout <- resolve_grid_layout(
+        n_items = 1L,
+        rows_input = layout_state$effective_input("resp_rows"),
+        cols_input = layout_state$effective_input("resp_cols")
+      )
+
+      n_rows <- layout$nrow
+      n_cols <- layout$ncol
 
       plot <- build_metric_plot(metric_info, y_label, title, n_rows, n_cols)
 
@@ -280,6 +280,8 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
         layout = list(nrow = n_rows, ncol = n_cols)
       )
     })
+
+    observe_layout_synchronization(plot_details, layout_state, session)
 
     plot_size <- reactive({
       req(module_active())
