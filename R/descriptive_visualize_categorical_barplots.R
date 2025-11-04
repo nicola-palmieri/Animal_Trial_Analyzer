@@ -16,7 +16,7 @@ visualize_categorical_barplots_ui <- function(id) {
         numericInput(
           ns("resp_rows"),
           "Grid rows",
-          value = 3,
+          value = 1,
           min = 1,
           max = 10,
           step = 1
@@ -27,7 +27,7 @@ visualize_categorical_barplots_ui <- function(id) {
         numericInput(
           ns("resp_cols"),
           "Grid columns",
-          value = 2,
+          value = 1,
           min = 1,
           max = 10,
           step = 1

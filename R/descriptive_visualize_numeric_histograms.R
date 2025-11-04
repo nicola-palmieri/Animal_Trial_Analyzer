@@ -11,8 +11,8 @@ visualize_numeric_histograms_ui <- function(id) {
       column(6, numericInput(ns("plot_height"), "Subplot height (px)", 300, 200, 2000, 50))
     ),
     fluidRow(
-      column(6, numericInput(ns("resp_rows"), "Grid rows",    value = 2, min = 1, max = 10, step = 1)),
-      column(6, numericInput(ns("resp_cols"), "Grid columns", value = 3, min = 1, max = 10, step = 1))
+      column(6, numericInput(ns("resp_rows"), "Grid rows",    value = 1, min = 1, max = 10, step = 1)),
+      column(6, numericInput(ns("resp_cols"), "Grid columns", value = 1, min = 1, max = 10, step = 1))
     ),
     hr(),
     downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;")

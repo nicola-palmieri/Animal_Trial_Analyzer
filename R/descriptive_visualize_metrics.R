@@ -4,7 +4,7 @@
 
 # ---- UI helpers ----
 metric_panel_ui <- function(id, default_width = 400, default_height = 300,
-                            default_rows = 2, default_cols = 3) {
+                            default_rows = 1, default_cols = 1) {
   ns <- NS(id)
   tagList(
     fluidRow(

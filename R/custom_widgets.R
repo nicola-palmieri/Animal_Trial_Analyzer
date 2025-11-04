@@ -4,10 +4,22 @@
 
 # ---- Palette ----
 basic_color_palette <- c(
-  "steelblue", "red", "green", "blue",
-  "orange", "purple", "brown", "gold",
-  "pink", "cyan", "magenta", "yellow",
-  "black", "gray", "darkgreen", "darkred"
+  "steelblue" = "#4682B4",
+  "red"       = "#FF0000",
+  "green"     = "#008000",  # ✅ web green (not ggplot's neon)
+  "blue"      = "#0000FF",
+  "orange"    = "#FFA500",
+  "purple"    = "#800080",
+  "brown"     = "#A52A2A",
+  "gold"      = "#FFD700",
+  "pink"      = "#FF69B4",
+  "cyan"      = "#00FFFF",
+  "magenta"   = "#FF00FF",
+  "yellow"    = "#FFFF00",
+  "black"     = "#000000",
+  "gray"      = "#808080",
+  "darkgreen" = "#006400",
+  "darkred"   = "#8B0000"
 )
 
 # ---- UI Helper ----
@@ -100,20 +112,24 @@ color_dropdown_input <- function(ns, id = "color_choice", palette = basic_color_
       tags$div(
         id = ns(paste0(id, "_grid")),
         class = "color-dropdown-grid",
-        lapply(palette, function(col) {
+        lapply(names(palette), function(col_name) {
+          hex <- palette[[col_name]]
           tags$div(
             class = "color-cell",
-            title = col,
-            style = sprintf("background-color:%s;", col),
+            title = col_name,  # tooltip shows readable color name
+            style = sprintf("background-color:%s;", hex),
             onclick = sprintf(
               "
-              var button = $('#%s_button');
-              button.find('.color-dropdown-swatch').css('background-color','%s');
-              $('#%s_grid').removeClass('open');
-              Shiny.setInputValue('%s','%s',{priority:'event'});
-            ", ns(id), col, ns(id), ns(id), col)
+      var button = $('#%s_button');
+      button.find('.color-dropdown-swatch').css('background-color','%s');
+      $('#%s_grid').removeClass('open');
+      Shiny.setInputValue('%s','%s',{priority:'event'});
+      ",
+              ns(id), hex, ns(id), ns(id), hex
+            )
           )
         })
+        
       )
     ),
     tags$script(HTML(sprintf("
