@@ -13,6 +13,7 @@ library(ggplot2)
 library(lmerTest)
 library(officer)
 library(patchwork)
+library(readxl)
 library(shiny)
 library(shinyjqui)
 library(skimr)
@@ -159,7 +160,10 @@ one_way_anova_server <- function(id, filtered_data) {
     models <- eventReactive(input$run, {
       req(df(), input$group, input$order)
       resp_vals <- responses()
-      req(length(resp_vals) > 0)
+      validate(
+        need(length(resp_vals) > 0, "Please select at least one response variable."),
+        need(all(input$order %in% unique(df()[[input$group]])), "Invalid level order.")
+      )
       prepare_stratified_anova(
         df = df(),
         responses = resp_vals,
@@ -185,7 +189,7 @@ one_way_anova_server <- function(id, filtered_data) {
       },
       content = function(file) {
         model_info <- models()
-        if (is.null(model_info)) stop("Please run the ANOVA first.")
+        req(model_info)
         download_all_anova_results(model_info, file)
       }
     )
@@ -204,49 +208,49 @@ one_way_anova_server <- function(id, filtered_data) {
 
     df_final <- reactive({
       mod <- models()
-      if (is.null(mod)) return(NULL)
+      req(mod)
       mod$data_used
     })
 
     model_fit <- reactive({
       mod <- models()
-      if (is.null(mod)) return(NULL)
+      req(mod)
       mod$models
     })
 
     compiled_results <- reactive({
       mod <- models()
-      if (is.null(mod)) return(NULL)
+      req(mod)
       compile_anova_results(mod)
     })
 
     summary_table <- reactive({
       res <- compiled_results()
-      if (is.null(res)) return(NULL)
+      req(res)
       res$summary
     })
 
     posthoc_results <- reactive({
       res <- compiled_results()
-      if (is.null(res)) return(NULL)
+      req(res)
       res$posthoc
     })
 
     effect_table <- reactive({
       res <- compiled_results()
-      if (is.null(res)) return(NULL)
+      req(res)
       res$effects
     })
 
     error_table <- reactive({
       res <- compiled_results()
-      if (is.null(res)) return(NULL)
+      req(res)
       res$errors
     })
 
     reactive({
       mod <- models()
-      if (is.null(mod)) return(NULL)
+      req(mod)
 
       data_used <- df_final()
 
@@ -333,7 +337,10 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
     # ---- Build plot info ----
     plot_info <- reactive({
       info <- model_info()
-      if (is.null(info) || info$type != "oneway_anova") return(NULL)
+      req(info)
+      validate(
+        need(info$type == "oneway_anova", "No one-way ANOVA results available for plotting.")
+      )
       data <- df()
       build_anova_plot_info(
         data,
@@ -347,13 +354,13 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
     
     plot_obj <- reactive({
       info <- plot_info()
-      if (is.null(info)) return(NULL)
+      req(info)
       info$plot
     })
     
     plot_size <- reactive({
       info <- plot_info()
-      if (is.null(info)) return(list(w = input$plot_width, h = input$plot_height))
+      req(info)
       s <- plot_info()$layout
       list(
         w = input$plot_width * s$strata$cols * s$responses$ncol,
@@ -363,7 +370,7 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
     
     output$layout_controls <- renderUI({
       info <- model_info()
-      if (is.null(info) || info$type != "oneway_anova") return(NULL)
+      req(info)
       build_anova_layout_controls(ns, input, info, layout_state$default_ui_value)
     })
     
@@ -1439,7 +1446,11 @@ two_way_anova_server <- function(id, filtered_data) {
     models <- eventReactive(input$run, {
       req(df(), input$factor1, input$order1, input$factor2, input$order2)
       resp_vals <- responses()
-      req(length(resp_vals) > 0)
+      validate(
+        need(length(resp_vals) > 0, "Please select at least one response variable."),
+        need(all(input$order1 %in% unique(df()[[input$factor1]])), "Invalid level order for first factor."),
+        need(all(input$order2 %in% unique(df()[[input$factor2]])), "Invalid level order for second factor.")
+      )
       prepare_stratified_anova(
         df = df(),
         responses = resp_vals,
@@ -1460,7 +1471,7 @@ two_way_anova_server <- function(id, filtered_data) {
     output$download_all <- downloadHandler(
       filename = function() {
         model_info <- models()
-        if (is.null(model_info)) return("anova_results.docx")
+        req(model_info)
         
         n_resp <- length(model_info$responses)
         n_strata <- if (is.null(model_info$strata)) 0 else length(model_info$strata$levels)
@@ -1470,7 +1481,7 @@ two_way_anova_server <- function(id, filtered_data) {
       },
       content = function(file) {
         model_info <- models()
-        if (is.null(model_info)) stop("Please run the ANOVA first.")
+        req(model_info)
         download_all_anova_results(model_info, file)
       }
     )
@@ -1489,49 +1500,49 @@ two_way_anova_server <- function(id, filtered_data) {
 
     df_final <- reactive({
       mod <- models()
-      if (is.null(mod)) return(NULL)
+      req(mod)
       mod$data_used
     })
 
     model_fit <- reactive({
       mod <- models()
-      if (is.null(mod)) return(NULL)
+      req(mod)
       mod$models
     })
 
     compiled_results <- reactive({
       mod <- models()
-      if (is.null(mod)) return(NULL)
+      req(mod)
       compile_anova_results(mod)
     })
 
     summary_table <- reactive({
       res <- compiled_results()
-      if (is.null(res)) return(NULL)
+      req(res)
       res$summary
     })
 
     posthoc_results <- reactive({
       res <- compiled_results()
-      if (is.null(res)) return(NULL)
+      req(res)
       res$posthoc
     })
 
     effect_table <- reactive({
       res <- compiled_results()
-      if (is.null(res)) return(NULL)
+      req(res)
       res$effects
     })
 
     error_table <- reactive({
       res <- compiled_results()
-      if (is.null(res)) return(NULL)
+      req(res)
       res$errors
     })
 
     reactive({
       mod <- models()
-      if (is.null(mod)) return(NULL)
+      req(mod)
 
       data_used <- df_final()
 
@@ -1625,7 +1636,10 @@ visualize_twoway_server <- function(id, filtered_data, model_fit) {
 
     plot_info <- reactive({
       info <- model_info()
-      if (is.null(info) || info$type != "twoway_anova") return(NULL)
+      req(info)
+      validate(
+        need(info$type == "twoway_anova", "Loaded analysis is not a two-way ANOVA result.")
+      )
       data <- df()
       line_colors <- custom_colors()
       if (is.null(line_colors) || length(line_colors) == 0) {
@@ -1649,7 +1663,7 @@ visualize_twoway_server <- function(id, filtered_data, model_fit) {
     
     plot_size <- reactive({
       info <- plot_info()
-      if (is.null(info)) return(list(w = input$plot_width, h = input$plot_height))
+      req(info)
       s <- info$layout
       list(
         w = input$plot_width  * s$strata$cols   * s$responses$ncol,
@@ -1659,7 +1673,7 @@ visualize_twoway_server <- function(id, filtered_data, model_fit) {
     
     output$layout_controls <- renderUI({
       info <- model_info()
-      if (is.null(info) || info$type != "twoway_anova") return(NULL)
+      req(info)
       build_anova_layout_controls(ns, input, info, layout_state$default_ui_value)
     })
     
@@ -1845,17 +1859,20 @@ descriptive_server <- function(id, filtered_data) {
     # ------------------------------------------------------------
     summary_data <- eventReactive(input$run, {
       req(df())
-      raw_data <- df()
-      local_data <- raw_data  # create a copy to avoid modifying shared reactive
+      
+      local_data <- df()
       selected_vars <- unique(c(input$cat_vars, input$num_vars))
-      validate(need(length(selected_vars) > 0, "Please select at least one variable."))
-
+      
+      validate(
+        need(length(selected_vars) > 0, "Please select at least one variable.")
+      )
+      
       strat_details <- strat_info()
       group_var <- strat_details$var
       data_columns <- selected_vars
-
+      
+      # --- Handle stratification if present ---
       if (!is.null(group_var)) {
-        # keep ONLY selected levels, in the exact order; drop NA and unused levels
         sel <- strat_details$levels
         if (!is.null(sel) && length(sel) > 0) {
           local_data <- dplyr::filter(local_data, .data[[group_var]] %in% sel)
@@ -1864,20 +1881,22 @@ descriptive_server <- function(id, filtered_data) {
           local_data[[group_var]] <- factor(as.character(local_data[[group_var]]))
         }
         local_data <- droplevels(local_data)
-
         data_columns <- unique(c(data_columns, group_var))
       }
-
+      
+      # --- Keep only selected valid columns ---
       data_columns <- data_columns[!is.na(data_columns) & nzchar(data_columns)]
       data_columns <- intersect(data_columns, names(local_data))
       local_data <- local_data[, data_columns, drop = FALSE]
-
+      
+      # --- Identify strata levels (if any) ---
       strata_levels <- if (!is.null(group_var) && group_var %in% names(local_data)) {
         levels(local_data[[group_var]])
       } else {
         NULL
       }
-
+      
+      # --- Compute summary ---
       list(
         summary = compute_descriptive_summary(local_data, group_var),
         selected_vars = selected_vars,
@@ -1886,6 +1905,7 @@ descriptive_server <- function(id, filtered_data) {
         strata_levels = strata_levels
       )
     })
+    
     
     
     
@@ -1916,7 +1936,7 @@ descriptive_server <- function(id, filtered_data) {
     # ------------------------------------------------------------
     df_final <- reactive({
       details <- summary_data()
-      if (is.null(details)) return(NULL)
+      req(details)
       details$processed_data
     })
 
@@ -1924,7 +1944,7 @@ descriptive_server <- function(id, filtered_data) {
 
     summary_table <- reactive({
       details <- summary_data()
-      if (is.null(details)) return(NULL)
+      req(details)
       details$summary
     })
 
@@ -1934,25 +1954,25 @@ descriptive_server <- function(id, filtered_data) {
 
     selected_vars_reactive <- reactive({
       details <- summary_data()
-      if (is.null(details)) return(NULL)
+      req(details)
       details$selected_vars
     })
 
     group_var_reactive <- reactive({
       details <- summary_data()
-      if (is.null(details)) return(NULL)
+      req(details)
       details$group_var
     })
 
     strata_levels_reactive <- reactive({
       details <- summary_data()
-      if (is.null(details)) return(NULL)
+      req(details)
       details$strata_levels
     })
 
     reactive({
       details <- summary_data()
-      if (is.null(details)) return(NULL)
+      req(details)
 
       data_used <- df_final()
 
@@ -2166,12 +2186,9 @@ visualize_descriptive_server <- function(id, filtered_data, descriptive_summary)
 
     active_type <- reactive({
       type <- input$plot_type
-      if (is.null(type) || !length(type) || !nzchar(type[[1]])) {
-        "categorical"
-      } else {
-        type[[1]]
-      }
+      if (is.null(type) || !nzchar(type[1])) "categorical" else type[1]
     })
+    
 
     # ==========================================================
     # 🔹 Inject the correct UI for each submodule
@@ -2384,17 +2401,18 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
 
     plot_size <- reactive({
       req(module_active())
-
       info <- plot_info()
-      if (is.null(info$layout)) {
+      layout <- info$layout
+      if (is.null(layout)) {
         list(w = plot_width(), h = plot_height())
       } else {
         list(
-          w = plot_width()  * info$layout$ncol,
-          h = plot_height() * info$layout$nrow
+          w = plot_width()  * layout$ncol,
+          h = plot_height() * layout$nrow
         )
       }
     })
+    
     
     output$download_plot <- downloadHandler(
       filename = function() paste0("categorical_barplots_", Sys.Date(), ".png"),
@@ -2419,7 +2437,6 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
     output$plot <- renderPlot({
       req(module_active())
       info <- plot_info()
-      validate(need(!is.null(info$plot), "No plot available."))
       print(info$plot)
     },
     width = function() {
@@ -3062,15 +3079,17 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
     plot_size <- reactive({
       req(module_active())
       info <- plot_info()
-      if (is.null(info$layout)) {
+      layout <- info$layout
+      if (is.null(layout)) {
         list(w = plot_width(), h = plot_height())
       } else {
         list(
-          w = plot_width()  * info$layout$ncol,
-          h = plot_height() * info$layout$nrow
+          w = plot_width()  * layout$ncol,
+          h = plot_height() * layout$nrow
         )
       }
     })
+    
     
     output$download_plot <- downloadHandler(
       filename = function() paste0("numeric_boxplots_", Sys.Date(), ".png"),
@@ -3095,7 +3114,6 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
     output$plot <- renderPlot({
       req(module_active())
       info <- plot_info()
-      validate(need(!is.null(info$plot), "No plot available."))
       print(info$plot)
     },
     width = function() {
@@ -3245,21 +3263,20 @@ visualize_numeric_histograms_server <- function(id, filtered_data, summary_info,
     })
 
     plot_info <- reactive({
-      req(module_active())
-
+      # --- Validate summary availability ---
       info <- summary_info()
-
       validate(need(!is.null(info), "Summary not available."))
-
+      
+      # --- Prepare data ---
       processed <- resolve_input_value(info$processed_data)
       dat <- if (!is.null(processed)) processed else filtered_data()
-
       validate(need(!is.null(dat) && is.data.frame(dat) && nrow(dat) > 0, "No data available."))
-
+      
       selected_vars <- resolve_input_value(info$selected_vars)
       group_var     <- resolve_input_value(info$group_var)
       strata_levels <- resolve_input_value(info$strata_levels)
-
+      
+      # --- Build histograms ---
       out <- build_descriptive_numeric_histogram(
         df = dat,
         selected_vars = selected_vars,
@@ -3269,52 +3286,31 @@ visualize_numeric_histograms_server <- function(id, filtered_data, summary_info,
         nrow_input = input$n_rows,
         ncol_input = input$n_cols
       )
-
       validate(need(!is.null(out), "No numeric variables available for plotting."))
-
-      n_panels <- out$panels
-      max_val  <- 10L
-
-      layout_info <- out$layout
-      if (is.null(layout_info) || !is.list(layout_info)) {
-        layout_info <- list()
-      }
-
+      
+      # --- Safe layout correction ---
+      n_panels <- out$panels %||% 1L
+      layout_info <- out$layout %||% list(nrow = NULL, ncol = NULL)
+      max_val <- 10L
+      
       safe_rows <- layout_info$nrow
       safe_cols <- layout_info$ncol
-
-      if (is.null(safe_rows) || !is.finite(safe_rows)) {
-        safe_rows <- min(10L, max(1L, as.integer(n_panels)))
-      }
-      if (is.null(safe_cols) || !is.finite(safe_cols)) {
-        safe_cols <- min(10L, max(1L, ceiling(as.integer(n_panels) / max(1L, safe_rows))))
-      }
-
-      safe_rows <- min(max(1L, as.integer(safe_rows)), max_val)
-      safe_cols <- min(max(1L, as.integer(safe_cols)), max_val)
-
-      current_rows <- suppressWarnings(as.integer(input$n_rows))
-      current_cols <- suppressWarnings(as.integer(input$n_cols))
-
-      if (length(current_rows) == 0 || is.na(current_rows)) current_rows <- NULL
-      if (length(current_cols) == 0 || is.na(current_cols)) current_cols <- NULL
-
+      
+      if (is.null(safe_rows) || !is.finite(safe_rows))
+        safe_rows <- min(max_val, max(1L, as.integer(n_panels)))
+      
+      if (is.null(safe_cols) || !is.finite(safe_cols))
+        safe_cols <- min(max_val, max(1L, ceiling(n_panels / max(1L, safe_rows))))
+      
+      # --- Apply layout updates safely (isolated to avoid reactivity loops) ---
       isolate({
-        if (!identical(current_rows, safe_rows)) {
-          updateNumericInput(session, "n_rows", value = safe_rows, min = 1, max = max_val)
-        } else {
-          updateNumericInput(session, "n_rows", min = 1, max = max_val)
-        }
-
-        if (!identical(current_cols, safe_cols)) {
-          updateNumericInput(session, "n_cols", value = safe_cols, min = 1, max = max_val)
-        } else {
-          updateNumericInput(session, "n_cols", min = 1, max = max_val)
-        }
+        updateNumericInput(session, "n_rows", value = safe_rows, min = 1, max = max_val)
+        updateNumericInput(session, "n_cols", value = safe_cols, min = 1, max = max_val)
       })
-
+      
       out
     })
+    
 
     plot_size <- reactive({
       req(module_active())
@@ -3352,7 +3348,6 @@ visualize_numeric_histograms_server <- function(id, filtered_data, summary_info,
     output$plot <- renderPlot({
       req(module_active())
       info <- plot_info()
-      validate(need(!is.null(info$plot), "No plot available."))
       print(info$plot)
     },
     width = function() {
@@ -3591,19 +3586,19 @@ analysis_server <- function(id, filtered_data) {
     # ---- Current module getter ----
     current_mod <- reactive({
       type <- input$analysis_type
-      if (is.null(type) || !nzchar(type)) return(NULL)
+      req(type)
       modules[[type]]
     })
     
     current_ui <- reactive({
       mod <- current_mod()
-      if (is.null(mod)) return(NULL)
+      req(mod)
       mod$ui(ns(mod$id))
     })
     
     # ---- Lazy server initialization ----
     normalize_analysis_type <- function(mod_type) {
-      lookup <- list(
+      lookup <- c(
         desc = "DESCRIPTIVE",
         anova1 = "ANOVA",
         anova2 = "ANOVA",
@@ -3612,85 +3607,66 @@ analysis_server <- function(id, filtered_data) {
         pairs = "CORR",
         pca = "PCA"
       )
-      if (is.null(mod_type)) return(NULL)
-      if (mod_type %in% names(lookup)) lookup[[mod_type]] else toupper(mod_type)
+      lookup[[mod_type]] %||% toupper(mod_type)
     }
+    
 
     ensure_module_server <- function(mod) {
       key <- mod$id
       if (!is.null(server_cache[[key]])) return(server_cache[[key]])
-
+      
       result <- tryCatch(mod$server(mod$id, df), error = function(e) {
         warning(sprintf("Module '%s' failed to initialize: %s", key, conditionMessage(e)))
         NULL
       })
-
-      default_analysis_type <- normalize_analysis_type(mod$type)
-
-      if (is.null(result)) {
-        server_cache[[key]] <- reactive(NULL)
-      } else if (is.reactive(result)) {
-        server_cache[[key]] <- reactive({
-          val <- result()
-          if (is.null(val)) return(NULL)
-          if (!is.list(val)) {
-            return(list(
-              analysis_type = default_analysis_type,
-              data_used = NULL,
-              model = val,
-              summary = NULL,
-              posthoc = NULL,
-              effects = NULL,
-              stats = NULL,
-              metadata = list(),
-              type = mod$type
-            ))
-          }
-          if (is.null(val$type)) val$type <- mod$type
-          if (is.null(val$analysis_type)) val$analysis_type <- default_analysis_type
-          val
-        })
-      } else {
-        server_cache[[key]] <- reactive(list(
-          analysis_type = default_analysis_type,
-          data_used = NULL,
-          model = result,
-          summary = NULL,
-          posthoc = NULL,
-          effects = NULL,
-          stats = NULL,
-          metadata = list(),
-          type = mod$type
-        ))
-      }
-
-      server_cache[[key]]
+      
+      default_type <- normalize_analysis_type(mod$type)
+      
+      # --- Standardize all outputs to a reactive returning a list ---
+      standardized <- reactive({
+        val <- if (is.reactive(result)) result() else result
+        req(val)
+        
+        val$analysis_type <- val$analysis_type %||% default_type
+        val$type <- val$type %||% mod$type
+        val$data_used <- val$data_used %||% NULL
+        val$summary <- val$summary %||% NULL
+        val$posthoc <- val$posthoc %||% NULL
+        val$effects <- val$effects %||% NULL
+        val$stats <- val$stats %||% NULL
+        val$metadata <- val$metadata %||% list()
+        val
+      })
+      
+      server_cache[[key]] <- standardized
+      standardized
     }
+    
     
     # ---- Render active submodule UI ----
     output$config_panel <- renderUI({
       ui <- current_ui()
-      if (is.null(ui)) return(NULL)
+      req(ui)
       ui$config
     })
     
     output$results_panel <- renderUI({
       ui <- current_ui()
-      if (is.null(ui)) return(NULL)
+      req(ui)
       ui$results
     })
     
     # ---- Connect the current selected module's server ----
     current_server <- reactive({
       mod <- current_mod()
-      if (is.null(mod)) return(NULL)
+      req(mod)
       ensure_module_server(mod)
     })
     
     # ---- Unified model output ----
     model_out <- reactive({
       srv <- current_server()
-      if (is.null(srv)) return(NULL)
+      req(srv)
       srv()
     })
     
@@ -3712,63 +3688,56 @@ add_color_customization_ui <- function(ns, multi_group = TRUE) {
 
 # ---- SERVER ----
 add_color_customization_server <- function(ns, input, output, data, color_var_reactive, multi_group = TRUE) {
+  default_color <- "steelblue"
+  
+  # ---- Dynamic UI ----
   output$color_custom_ui <- renderUI({
     req(data())
-    color_var <- color_var_reactive()
-
-    single_color_ui <- tagList(
-      br(),
-      h5("Line color"),
-      color_dropdown_input(ns, "single_color", basic_color_palette, ncol = 4)
-    )
-
-    if (isTRUE(multi_group)) {
-      if (is.null(color_var) || identical(color_var, "") || identical(color_var, "None")) {
-        single_color_ui
-      } else {
-        render_color_inputs(ns, data, color_var)
-      }
+    
+    color_var <- color_var_reactive() %||% ""
+    
+    # Single color UI shown when multi-group off or no color_var available
+    if (!isTRUE(multi_group) || color_var %in% c("", "None")) {
+      tagList(
+        br(),
+        h5("Line color"),
+        color_dropdown_input(ns, "single_color", basic_color_palette, ncol = 4)
+      )
     } else {
-      single_color_ui
+      render_color_inputs(ns, data, color_var)
     }
   })
-
+  
+  # ---- Reactive color mapping ----
   reactive({
-    if (isTRUE(multi_group)) {
-      color_var <- color_var_reactive()
-      if (is.null(color_var) || identical(color_var, "") || identical(color_var, "None")) {
-        selected_color <- input$single_color
-        if (is.null(selected_color) || identical(selected_color, "")) selected_color <- "steelblue"
-        return(selected_color)
-      }
-
-      dataset <- data()
-      if (is.null(dataset) || !color_var %in% names(dataset)) {
-        selected_color <- input$single_color
-        if (is.null(selected_color) || identical(selected_color, "")) selected_color <- "steelblue"
-        return(selected_color)
-      }
-
-      lvls <- levels(as.factor(dataset[[color_var]]))
-      base_palette <- rep(basic_color_palette, length.out = length(lvls))
-      cols <- vapply(seq_along(lvls), function(i) {
-        input_val <- input[[paste0("col_", color_var, "_", i)]]
-        if (is.null(input_val) || identical(input_val, "")) {
-          base_palette[i]
-        } else {
-          input_val
-        }
-      }, character(1))
-      names(cols) <- lvls
-      cols
-    } else {
-      selected_color <- input$single_color
-      if (is.null(selected_color)) selected_color <- "steelblue"
-      selected_color
+    # --- Single-color mode (no grouping variable or disabled) ---
+    if (!isTRUE(multi_group)) {
+      return(input$single_color %||% default_color)
     }
+    
+    color_var <- color_var_reactive() %||% ""
+    if (color_var %in% c("", "None")) {
+      return(input$single_color %||% default_color)
+    }
+    
+    dataset <- data()
+    req(dataset)
+    
+    if (!color_var %in% names(dataset)) {
+      return(input$single_color %||% default_color)
+    }
+    
+    lvls <- levels(as.factor(dataset[[color_var]]))
+    base_palette <- rep(basic_color_palette, length.out = length(lvls))
+    
+    cols <- vapply(seq_along(lvls), function(i) {
+      input[[paste0("col_", color_var, "_", i)]] %||% base_palette[i]
+    }, character(1))
+    
+    names(cols) <- lvls
+    cols
   })
 }
-
 # ===============================================================
 # 🎨 UI helper to assign colors per level of a factor
 # ===============================================================
@@ -3840,7 +3809,7 @@ resolve_palette_for_levels <- function(levels, custom = NULL) {
   stats::setNames(basic_color_palette[seq_len(n_levels)], unique_levels)
 }
 # ===============================================================
-# 🧪 Table Analyzer — Filter Module
+# 🧪 Table Analyzer — Filter Module (Refactored Reactive Version)
 # ===============================================================
 
 filter_ui <- function(id) {
@@ -3866,7 +3835,6 @@ filter_ui <- function(id) {
 filter_server <- function(id, uploaded_data) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
-    
     df <- reactive(uploaded_data())
     
     # --- 1. Column selector ---
@@ -3884,7 +3852,7 @@ filter_server <- function(id, uploaded_data) {
     output$filter_widgets <- renderUI({
       req(df())
       cols <- input$columns
-      if (is.null(cols) || length(cols) == 0) return(NULL)
+      req(cols)
       
       make_numeric_widget <- function(col, x) {
         rng <- suppressWarnings(range(x, na.rm = TRUE))
@@ -3894,23 +3862,15 @@ filter_server <- function(id, uploaded_data) {
           column(
             6,
             numericInput(
-              ns(paste0("min_", col)),
-              label = paste(col, "(min)"),
-              value = rng[1],
-              min = rng[1],
-              max = rng[2],
-              step = step_val
+              ns(paste0("min_", col)), paste(col, "(min)"),
+              value = rng[1], min = rng[1], max = rng[2], step = step_val
             )
           ),
           column(
             6,
             numericInput(
-              ns(paste0("max_", col)),
-              label = paste(col, "(max)"),
-              value = rng[2],
-              min = rng[1],
-              max = rng[2],
-              step = step_val
+              ns(paste0("max_", col)), paste(col, "(max)"),
+              value = rng[2], min = rng[1], max = rng[2], step = step_val
             )
           )
         )
@@ -3918,33 +3878,25 @@ filter_server <- function(id, uploaded_data) {
       
       make_logical_widget <- function(col) {
         checkboxGroupInput(
-          ns(paste0("filter_", col)),
-          label = col,
-          choices = c(TRUE, FALSE),
-          selected = c(TRUE, FALSE),
-          inline = TRUE
+          ns(paste0("filter_", col)), label = col,
+          choices = c(TRUE, FALSE), selected = c(TRUE, FALSE), inline = TRUE
         )
       }
       
       make_factor_widget <- function(col, x) {
         choices <- sort(unique(as.character(x)))
         selectInput(
-          ns(paste0("filter_", col)),
-          label = col,
-          choices = choices,
-          multiple = TRUE,
-          selected = choices
+          ns(paste0("filter_", col)), label = col,
+          choices = choices, multiple = TRUE, selected = choices
         )
       }
       
-      widgets <- lapply(cols, function(col) {
-        col_data <- df()[[col]]
-        if (is.numeric(col_data)) make_numeric_widget(col, col_data)
-        else if (is.logical(col_data)) make_logical_widget(col)
-        else make_factor_widget(col, col_data)
-      })
-      
-      tagList(widgets)
+      tagList(lapply(cols, function(col) {
+        x <- df()[[col]]
+        if (is.numeric(x)) make_numeric_widget(col, x)
+        else if (is.logical(x)) make_logical_widget(col)
+        else make_factor_widget(col, x)
+      }))
     })
     
     # --- 3. Reactive filtering ---
@@ -3952,26 +3904,26 @@ filter_server <- function(id, uploaded_data) {
       req(df())
       data <- df()
       cols <- input$columns
-      if (is.null(cols) || length(cols) == 0) return(data)
+      
+      if (is.null(cols) || !length(cols)) return(data)
       
       for (col in cols) {
-        col_data <- data[[col]]
+        x <- data[[col]]
         
-        if (is.numeric(col_data)) {
-          min_val <- input[[paste0("min_", col)]]
-          max_val <- input[[paste0("max_", col)]]
-          if (is.null(min_val) || is.null(max_val)) {
+        # Numeric columns
+        if (is.numeric(x)) {
+          min_val <- input[[paste0("min_", col)]] %||% -Inf
+          max_val <- input[[paste0("max_", col)]] %||% Inf
+          data <- subset(data, x >= min_val & x <= max_val)
+        }
+        # Logical / Factor / Character
+        else {
+          sel <- input[[paste0("filter_", col)]] %||% character(0)
+          if (!length(sel)) {
             data <- data[0, , drop = FALSE]
             break
           }
-          data <- data[data[[col]] >= min_val & data[[col]] <= max_val, , drop = FALSE]
-        } else {
-          sel <- input[[paste0("filter_", col)]]
-          if (is.null(sel) || length(sel) == 0) {
-            data <- data[0, , drop = FALSE]
-            break
-          }
-          data <- data[data[[col]] %in% sel, , drop = FALSE]
+          data <- subset(data, as.character(x) %in% sel)
         }
       }
       
@@ -3980,18 +3932,15 @@ filter_server <- function(id, uploaded_data) {
     
     # --- 4. Preview table ---
     output$filtered_preview <- renderDT({
-      datatable(
-        filtered_df(),
-        options = list(scrollX = TRUE, pageLength = 5)
-      )
+      datatable(filtered_df(), options = list(scrollX = TRUE, pageLength = 5))
     })
     
-    # --- 5. Return filtered data for downstream modules ---
-    return(filtered_df)
+    # --- 5. Return filtered data downstream ---
+    filtered_df
   })
 }
 # ===============================================================
-# 🧪 Table Analyzer — Upload Module (simple editable column types)
+# 🧪 Table Analyzer — Upload Module (Stable wide-format version)
 # ===============================================================
 
 upload_ui <- function(id) {
@@ -4017,7 +3966,7 @@ upload_ui <- function(id) {
       fileInput(
         ns("file"),
         "Upload Excel file (.xlsx / .xls / .xlsm)",
-        accept = c(".xlsx", ".xls", ".xlsm)")
+        accept = c(".xlsx", ".xls", ".xlsm")
       ),
       uiOutput(ns("sheet_selector")),
       hr(),
@@ -4039,13 +3988,14 @@ upload_server <- function(id) {
     df <- reactiveVal(NULL)
     editable_cols <- reactiveVal(NULL)
     
-    # ---- Reset ----
+    # -----------------------------------------------------------
+    # 1️⃣ Handle source selection
+    # -----------------------------------------------------------
     observeEvent(input$data_source, {
       df(NULL)
-      output$preview <- renderDT(data.frame())
-      output$validation_msg <- renderText("")
-      output$sheet_selector <- renderUI(NULL)
       output$type_selectors <- renderUI(NULL)
+      output$sheet_selector <- renderUI(NULL)
+      output$preview <- renderDT(data.frame())
       
       if (input$data_source == "example") {
         path <- "data/toy_animal_trial_data_long.xlsx"
@@ -4056,11 +4006,14 @@ upload_server <- function(id) {
         output$validation_msg <- renderText("📂 Loaded built-in example dataset (long format).")
         output$preview <- renderDT(data, options = list(scrollX = TRUE, pageLength = 5))
         create_type_selectors(data)
+      } else {
+        output$validation_msg <- renderText("Please upload an Excel file.")
       }
     }, ignoreInit = FALSE)
     
-    
-    # ---- Example layout ----
+    # -----------------------------------------------------------
+    # 2️⃣ Example layout preview
+    # -----------------------------------------------------------
     output$layout_example <- renderUI({
       req(input$data_source %in% c("long", "wide"))
       long_path <- "data/toy_animal_trial_data_long.xlsx"
@@ -4087,60 +4040,80 @@ upload_server <- function(id) {
       )
     })
     
-    
-    # ---- File upload ----
+    # -----------------------------------------------------------
+    # 3️⃣ File upload → detect sheets
+    # -----------------------------------------------------------
     observeEvent(input$file, {
-      req(input$data_source != "example", input$file)
+      req(input$data_source != "example")
       ext <- tolower(tools::file_ext(input$file$name))
       validate(need(ext %in% c("xlsx", "xls", "xlsm"),
                     "❌ Invalid file type. Please upload .xlsx/.xls/.xlsm."))
       
       sheets <- tryCatch(readxl::excel_sheets(input$file$datapath),
                          error = function(e) NULL)
-      validate(need(!is.null(sheets), "❌ No readable sheets found in the workbook."))
+      validate(need(!is.null(sheets), "❌ No readable sheets found in workbook."))
+      
       output$validation_msg <- renderText(paste("✅ File loaded:", input$file$name))
-      output$sheet_selector <- renderUI(selectInput(ns("sheet"), "Select sheet:", choices = sheets))
+      output$sheet_selector <- renderUI(
+        selectInput(ns("sheet"), "Select sheet:", choices = sheets)
+      )
     }, ignoreInit = TRUE)
     
-    
-    # ---- Load selected sheet ----
-    observeEvent(list(input$sheet, input$file$datapath, input$data_source), {
-      req(input$data_source != "example", input$file, input$sheet)
+    # -----------------------------------------------------------
+    # 4️⃣ Load selected sheet (handles both long & wide)
+    # -----------------------------------------------------------
+    observeEvent(list(input$sheet, input$data_source), {
+      req(input$file, input$sheet, input$data_source != "example")
+      path <- input$file$datapath
       data <- NULL
       
       if (input$data_source == "wide") {
+        # ⚙️ Wide format conversion with error handling
         data <- tryCatch(
-          convert_wide_to_long(input$file$datapath, sheet = input$sheet, replicate_col = "Replicate"),
+          convert_wide_to_long(
+            path,
+            sheet = input$sheet,
+            replicate_col = "Replicate"
+          ),
           error = function(e) {
-            output$validation_msg <- renderText(paste("❌ Error converting wide format:", conditionMessage(e)))
+            output$validation_msg <- renderText(
+              paste("❌ Error converting wide format:", conditionMessage(e))
+            )
             NULL
           }
         )
-        req(!is.null(data))
+        if (is.null(data)) return()
         output$validation_msg <- renderText("✅ Wide format reshaped successfully.")
       } else {
+        # 🧾 Simple long format load
         data <- tryCatch(
-          readxl::read_excel(input$file$datapath, sheet = input$sheet),
+          readxl::read_excel(path, sheet = input$sheet),
           error = function(e) {
-            output$validation_msg <- renderText(paste("❌ Error loading sheet:", conditionMessage(e)))
+            output$validation_msg <- renderText(
+              paste("❌ Error loading sheet:", conditionMessage(e))
+            )
             NULL
           }
         )
-        req(!is.null(data))
+        if (is.null(data)) return()
         output$validation_msg <- renderText("✅ Long format loaded successfully.")
       }
       
+      # ✅ Shared postprocessing and preview
       data <- preprocess_uploaded_table(data)
       df(data)
       output$preview <- renderDT(data, options = list(scrollX = TRUE, pageLength = 5))
       create_type_selectors(data)
     })
     
-    
-    # ---- Create type selectors ----
+    # -----------------------------------------------------------
+    # 5️⃣ Create type selectors
+    # -----------------------------------------------------------
     create_type_selectors <- function(data) {
+      req(data)
       num_vars <- names(data)[sapply(data, is.numeric)]
-      few_level_nums <- num_vars[sapply(data[num_vars], function(x) length(unique(na.omit(x))) <= 10)]
+      few_level_nums <- num_vars[sapply(data[num_vars], function(x)
+        length(unique(na.omit(x))) <= 10)]
       editable_cols(few_level_nums)
       
       if (length(few_level_nums) == 0) {
@@ -4164,25 +4137,27 @@ upload_server <- function(id) {
       })
     }
     
-    
-    # ---- Update df when user changes type ----
+    # -----------------------------------------------------------
+    # 6️⃣ Apply user type edits reactively
+    # -----------------------------------------------------------
     observe({
       req(df(), editable_cols())
       data <- df()
       for (col in editable_cols()) {
-        input_id <- paste0("type_", col)
-        sel <- input[[input_id]]
-        if (!is.null(sel) && sel == "Categorical") {
+        sel <- input[[paste0("type_", col)]] %||% "Numeric"
+        if (sel == "Categorical") {
           data[[col]] <- factor(as.character(data[[col]]))
-        } else if (!is.null(sel) && sel == "Numeric") {
+        } else {
           data[[col]] <- suppressWarnings(as.numeric(as.character(data[[col]])))
         }
       }
       df(data)
     })
     
-    
-    return(df)
+    # -----------------------------------------------------------
+    # ✅ Return reactive data
+    # -----------------------------------------------------------
+    df
   })
 }
 # Clean names + convert characters to ordered factors
@@ -4242,63 +4217,69 @@ convert_wide_to_long <- function(path, sheet = 1, replicate_col = "Replicate") {
   as_tibble(data_long)
 }
 # ===============================================================
-# 🧩 Visualization Coordinator
+# 🧩 Visualization Coordinator (Refactored & Consistent)
 # ===============================================================
 
 visualize_ui <- function(id) {
   ns <- NS(id)
-  tagList(
-    uiOutput(ns("dynamic_ui"))
-  )
+  uiOutput(ns("dynamic_ui"))
 }
 
 visualize_server <- function(id, filtered_data, model_fit) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
-    # reactive model info
-    model_info <- reactive(model_fit())
+    # -----------------------------------------------------------
+    # 1️⃣ Reactive model info
+    # -----------------------------------------------------------
+    model_info <- reactive({
+      req(model_fit())
+      model_fit()
+    })
     
-    # detect analysis type
+    # -----------------------------------------------------------
+    # 2️⃣ Detect analysis type (robust default)
+    # -----------------------------------------------------------
     analysis_type <- reactive({
       info <- model_info()
-      if (is.null(info$type)) return("oneway_anova")  # default
-      info$type
+      type <- info$type %||% "oneway_anova"
+      tolower(type)
     })
     
-    # dynamic UI placeholder
+    # -----------------------------------------------------------
+    # 3️⃣ Dynamic UI loading
+    # -----------------------------------------------------------
     output$dynamic_ui <- renderUI({
       type <- analysis_type()
-      if (type == "oneway_anova") {
-        visualize_oneway_ui(ns("oneway"))
-      } else if (type == "twoway_anova") {
-        visualize_twoway_ui(ns("twoway"))
-      } else if (type == "pairwise_correlation") {
-        visualize_ggpairs_ui(ns("ggpairs"))
-      } else if (type == "pca") {
-        visualize_pca_ui(ns("pca"), filtered_data())
-      } else if (type == "descriptive") {
-        visualize_descriptive_ui(ns("descriptive"))
-      } else {
+      switch(
+        type,
+        "oneway_anova"   = visualize_oneway_ui(ns("oneway")),
+        "twoway_anova"   = visualize_twoway_ui(ns("twoway")),
+        "pairs"          = visualize_ggpairs_ui(ns("ggpairs")),
+        "pca"            = visualize_pca_ui(ns("pca"), filtered_data()),
+        "descriptive"    = visualize_descriptive_ui(ns("descriptive")),
         div("Visualization not yet implemented for this analysis type.")
-      }
+      )
     })
     
-    observe({
+    # -----------------------------------------------------------
+    # 4️⃣ Attach the correct visualization server
+    # -----------------------------------------------------------
+    observeEvent(analysis_type(), {
       type <- analysis_type()
+      
       if (type == "oneway_anova") {
         visualize_oneway_server("oneway", filtered_data, model_info)
       } else if (type == "twoway_anova") {
         visualize_twoway_server("twoway", filtered_data, model_info)
-      } else if (type == "pairwise_correlation") {
+      } else if (type == "pairs") {
         visualize_ggpairs_server("ggpairs", filtered_data, model_info)
       } else if (type == "pca") {
         visualize_pca_server("pca", filtered_data, model_info)
       } else if (type == "descriptive") {
         visualize_descriptive_server("descriptive", filtered_data, model_info)
       }
-    })
-    
+    }, ignoreInit = FALSE)
   })
 }
 # ===============================================================
@@ -4690,7 +4671,7 @@ ggpairs_server <- function(id, data_reactive) {
           plots = res$plots,
           message = res$message
         ),
-        type = "pairwise_correlation",
+        type = "pairs",
         data = df,
         group_var = reactive({
           det <- correlation_store()
@@ -4743,7 +4724,7 @@ visualize_ggpairs_server <- function(id, filtered_data, model_fit) {
 
     correlation_info <- reactive({
       info <- model_fit()
-      if (is.null(info) || is.null(info$type) || info$type != "pairwise_correlation") {
+      if (is.null(info) || is.null(info$type) || info$type != "pairs") {
         return(NULL)
       }
       info
@@ -6344,7 +6325,7 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
 
     output$results_ui <- renderUI({
       mod <- models()
-      if (is.null(mod)) return(NULL)
+      req(mod)
 
       success_resps <- mod$success_responses
       error_resps <- mod$error_responses
@@ -6394,11 +6375,11 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
 
     observeEvent(models(), {
       mod <- models()
-      if (is.null(mod)) return()
+      req(mod)
 
       success_resps <- mod$success_responses
       fits <- mod$fits
-      if (is.null(success_resps) || length(success_resps) == 0) return()
+      req(success_resps)
 
       for (idx in seq_along(success_resps)) {
         local({
@@ -6541,37 +6522,37 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
 
     model_fit <- reactive({
       mod <- models()
-      if (is.null(mod)) return(NULL)
+      req(mod)
       mod$models
     })
 
     compiled_results <- reactive({
       mod <- models()
-      if (is.null(mod)) return(NULL)
+      req(mod)
       compile_regression_results(mod, engine)
     })
 
     summary_table <- reactive({
       res <- compiled_results()
-      if (is.null(res)) return(NULL)
+      req(res)
       res$summary
     })
 
     effect_table <- reactive({
       res <- compiled_results()
-      if (is.null(res)) return(NULL)
+      req(res)
       res$effects
     })
 
     error_table <- reactive({
       res <- compiled_results()
-      if (is.null(res)) return(NULL)
+      req(res)
       res$errors
     })
 
     reactive({
       mod <- models()
-      if (is.null(mod)) return(NULL)
+      req(mod)
 
       data_used <- df_final()
 
@@ -7069,26 +7050,29 @@ multi_response_ui <- function(id) {
 
 multi_response_server <- function(id, data) {
   moduleServer(id, function(input, output, session) {
-
+    ns <- session$ns
+    
+    # --- Reactive data wrapper (clean + guarded)
     df <- reactive({
-      if (is.function(data)) data() else data
+      d <- if (is.function(data)) data() else data
+      req(d)
+      d
     })
-
+    
     # --- Render selectInput dynamically
     output$response_ui <- renderUI({
-      d <- df()
-      req(d)
+      d <- req(df())
       num_vars <- names(d)[sapply(d, is.numeric)]
-
-      # fallback selection
+      validate(need(length(num_vars) > 0, "No numeric variables available."))
+      
       current_selection <- input$response
       if (is.null(current_selection) || !all(current_selection %in% num_vars)) {
         current_selection <- if (length(num_vars) > 0) num_vars[1] else NULL
       }
-
+      
       selectInput(
-        session$ns("response"),
-        if (isTRUE(input$multi_resp))
+        ns("response"),
+        label = if (isTRUE(input$multi_resp))
           "Response variables (numeric):"
         else
           "Response variable (numeric):",
@@ -7097,14 +7081,15 @@ multi_response_server <- function(id, data) {
         multiple = isTRUE(input$multi_resp)
       )
     })
-
-    # --- Return standardized reactive vector
-    reactive({
-      req(input$response)
-      res <- input$response
+    
+    # --- Standardized reactive vector output
+    selected_responses <- reactive({
+      res <- req(input$response)
       if (!isTRUE(input$multi_resp)) res <- res[1]
       unique(res)
     })
+    
+    return(selected_responses)
   })
 }
 # ===============================================================
@@ -7124,95 +7109,71 @@ stratification_ui <- function(id, ns = NULL) {
   } else {
     NS(id)
   }
-
-  shiny::tagList(
-    shiny::uiOutput(ns_fn("stratify_var_ui")),
-    shiny::uiOutput(ns_fn("strata_order_ui"))
+  
+  tagList(
+    uiOutput(ns_fn("stratify_var_ui")),
+    uiOutput(ns_fn("strata_order_ui"))
   )
 }
 
-
 stratification_server <- function(id, data) {
   moduleServer(id, function(input, output, session) {
+    ns <- session$ns
     
-    # ---- Resolve reactive or static data frame ----
-    resolved_data <- reactive({
-      if (is.function(data)) data() else data
+    # ---- Resolve data ----
+    df <- reactive({
+      d <- if (is.function(data)) data() else data
+      req(is.data.frame(d))
+      validate(need(nrow(d) > 0, "No data available for stratification."))
+      d
     })
     
-    # ---- UI for selecting stratification variable ----
-    output$stratify_var_ui <- shiny::renderUI({
-      df <- resolved_data()
-      
-      choices <- STRAT_NONE_LABEL
-      if (is.data.frame(df) && ncol(df) > 0) {
-        cat_cols <- names(df)[vapply(df, function(x) is.character(x) || is.factor(x), logical(1))]
-        cat_cols <- setdiff(unique(cat_cols), STRAT_NONE_LABEL)
-        if (length(cat_cols) > 0) {
-          choices <- c(STRAT_NONE_LABEL, cat_cols)
-        }
-      }
+    # ---- UI: choose stratification variable ----
+    output$stratify_var_ui <- renderUI({
+      d <- req(df())
+      cat_cols <- names(d)[vapply(d, function(x) is.factor(x) || is.character(x), logical(1))]
+      choices <- c(STRAT_NONE_LABEL, cat_cols)
       
       current <- isolate(input$stratify_var)
       if (is.null(current) || !(current %in% choices)) {
         current <- STRAT_NONE_LABEL
       }
       
-      shiny::selectInput(
-        session$ns("stratify_var"),
+      selectInput(
+        ns("stratify_var"),
         STRAT_CHOOSE_LABEL,
         choices = choices,
         selected = current
       )
     })
     
-    
-    # ---- Reactive containing selected variable + levels ----
+    # ---- Reactive: details about selected variable and levels ----
     strat_details <- reactive({
-      df <- resolved_data()
-      if (is.null(df) || !is.data.frame(df) || nrow(df) == 0) {
-        return(list(var = NULL, levels = NULL, available_levels = NULL))
-      }
+      d <- req(df())
       
       strat_var <- input$stratify_var
-      if (is.null(strat_var) || identical(strat_var, STRAT_NONE_LABEL) ||
-          !nzchar(strat_var) || !(strat_var %in% names(df))) {
+      if (is.null(strat_var) ||
+          identical(strat_var, STRAT_NONE_LABEL) ||
+          !nzchar(strat_var) ||
+          !(strat_var %in% names(d))) {
         return(list(var = NULL, levels = NULL, available_levels = NULL))
       }
       
-      # ---- Inline guard_stratification_levels ----
-      values <- df[[strat_var]]
+      values <- d[[strat_var]]
       values <- values[!is.na(values)]
-      n_levels <- length(unique(as.character(values)))
+      available_levels <- if (is.factor(values)) levels(values) else unique(as.character(values))
+      available_levels <- available_levels[nzchar(available_levels)]
       
-      if (n_levels > MAX_STRATIFICATION_LEVELS) {
-        msg <- sprintf(
-          "❌ Stratification variable '%s' has %d levels — please select one with at most %d.",
-          strat_var, n_levels, MAX_STRATIFICATION_LEVELS
-        )
-        shiny::showNotification(msg, type = "error", duration = 8)
-        shiny::updateSelectInput(session, "stratify_var", selected = STRAT_NONE_LABEL)
-        return(list(var = NULL, levels = NULL, available_levels = NULL))
-      }
-      
-      # ---- Extract available levels ----
-      if (is.factor(values)) {
-        available_levels <- levels(values)
-      } else {
-        available_levels <- unique(as.character(values))
-      }
-      
-      available_levels <- available_levels[!is.na(available_levels)]
-      
-      if (length(available_levels) == 0) {
-        return(list(var = strat_var, levels = character(0), available_levels = character(0)))
-      }
+      n_levels <- length(available_levels)
+      validate(need(n_levels <= MAX_STRATIFICATION_LEVELS,
+                    sprintf("Stratification variable '%s' has too many levels (%d > %d).",
+                            strat_var, n_levels, MAX_STRATIFICATION_LEVELS)
+      ))
       
       selected_levels <- input$strata_order
-      if (!is.null(selected_levels) && length(selected_levels) > 0) {
+      if (!is.null(selected_levels)) {
         selected_levels <- selected_levels[selected_levels %in% available_levels]
       }
-      
       if (is.null(selected_levels) || length(selected_levels) == 0) {
         selected_levels <- available_levels
       }
@@ -7224,35 +7185,32 @@ stratification_server <- function(id, data) {
       )
     })
     
-    
-    # ---- UI for level ordering ----
-    output$strata_order_ui <- shiny::renderUI({
+    # ---- UI: order of levels ----
+    output$strata_order_ui <- renderUI({
       details <- strat_details()
       strat_var <- details$var
+      # hide the widget silently if stratification is None
       if (is.null(strat_var)) return(NULL)
       
       available_levels <- details$available_levels
       if (is.null(available_levels) || length(available_levels) == 0) return(NULL)
       
-      selected_levels <- details$levels
-      if (is.null(selected_levels) || length(selected_levels) == 0) {
-        selected_levels <- available_levels
-      }
-      
-      shiny::selectInput(
-        session$ns("strata_order"),
+      selectInput(
+        ns("strata_order"),
         STRAT_ORDER_LABEL,
         choices = available_levels,
-        selected = selected_levels,
+        selected = details$levels,
         multiple = TRUE
       )
     })
     
-    
-    # ---- Output unified reactive for all modules ----
+    # ---- Unified reactive output ----
     reactive({
       details <- strat_details()
-      list(var = details$var, levels = details$levels)
+      list(
+        var = details$var,
+        levels = details$levels
+      )
     })
   })
 }
