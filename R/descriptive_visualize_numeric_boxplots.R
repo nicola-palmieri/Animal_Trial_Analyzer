@@ -52,8 +52,6 @@ visualize_numeric_boxplots_plot_ui <- function(id) {
 visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, is_active = NULL) {
   moduleServer(id, function(input, output, session) {
 
-    layout_state <- initialize_layout_state(input, session)
-
     resolve_input_value <- function(x) {
       if (is.null(x)) return(NULL)
       if (is.reactive(x)) x() else x
@@ -92,21 +90,21 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
       selected_vars <- resolve_input_value(info$selected_vars)
       group_var     <- resolve_input_value(info$group_var)
       
+      grid_rows <- basic_grid_value(input$resp_rows, default = 1)
+      grid_cols <- basic_grid_value(input$resp_cols, default = 6)
+
       out <- build_descriptive_numeric_boxplot(
         df = dat,
         selected_vars = selected_vars,
         group_var = group_var,
         show_points = isTRUE(input$show_points),
-        nrow_input = layout_state$effective_input("resp_rows"),
-        ncol_input = layout_state$effective_input("resp_cols")
+        nrow_input = grid_rows,
+        ncol_input = grid_cols
       )
 
       validate(need(!is.null(out), "No numeric variables available for plotting."))
-      sync_grid_controls(layout_state, input, session, "resp_rows", "resp_cols", out$layout)
       out
     })
-
-    observe_layout_synchronization(plot_info, layout_state, session)
 
     plot_size <- reactive({
       req(module_active())
@@ -220,10 +218,9 @@ build_descriptive_numeric_boxplot <- function(df,
   plots <- Filter(Negate(is.null), plots)
   if (length(plots) == 0) return(NULL)
   
-  layout <- resolve_grid_layout(
-    n_items = length(plots),
-    rows_input = suppressWarnings(as.numeric(nrow_input)),
-    cols_input = suppressWarnings(as.numeric(ncol_input))
+  layout <- basic_grid_layout(
+    rows = suppressWarnings(as.numeric(nrow_input)),
+    cols = suppressWarnings(as.numeric(ncol_input))
   )
   
   combined <- patchwork::wrap_plots(plots, nrow = layout$nrow, ncol = layout$ncol) +

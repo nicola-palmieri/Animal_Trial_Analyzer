@@ -207,8 +207,6 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
                                  y_label, title, filename_prefix, is_active = NULL) {
   moduleServer(id, function(input, output, session) {
 
-    layout_state <- initialize_layout_state(input, session)
-
     plot_width <- reactive({
       w <- input$plot_width
       if (is.null(w) || !is.numeric(w) || is.na(w)) 400 else w
@@ -263,25 +261,16 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
         metric_info$group_label <- group_label
       }
 
-      layout <- resolve_grid_layout(
-        n_items = 1L,
-        rows_input = layout_state$effective_input("resp_rows"),
-        cols_input = layout_state$effective_input("resp_cols")
-      )
-
-      n_rows <- layout$nrow
-      n_cols <- layout$ncol
+      n_rows <- basic_grid_value(input$resp_rows, default = 2)
+      n_cols <- basic_grid_value(input$resp_cols, default = 3)
 
       plot <- build_metric_plot(metric_info, y_label, title, n_rows, n_cols)
-      sync_grid_controls(layout_state, input, session, "resp_rows", "resp_cols", list(nrow = n_rows, ncol = n_cols))
 
       list(
         plot = plot,
         layout = list(nrow = n_rows, ncol = n_cols)
       )
     })
-
-    observe_layout_synchronization(plot_details, layout_state, session)
 
     plot_size <- reactive({
       req(module_active())

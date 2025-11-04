@@ -40,8 +40,6 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
     ns <- session$ns
     
     df <- reactive(filtered_data())
-    layout_state <- initialize_layout_state(input, session)
-    
     # ---- Plug in color customization module (single-color mode) ----
     custom_colors <- add_color_customization_server(
       ns = ns,
@@ -60,15 +58,20 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
         need(info$type == "oneway_anova", "No one-way ANOVA results available for plotting.")
       )
       data <- df()
+      layout_inputs <- list(
+        strata_rows = input$strata_rows,
+        strata_cols = input$strata_cols,
+        resp_rows = input$resp_rows,
+        resp_cols = input$resp_cols
+      )
+
       build_anova_plot_info(
         data,
         info,
-        layout_state$effective_input,
+        layout_inputs,
         line_colors = custom_colors()
       )
     })
-    
-    observe_layout_synchronization(plot_info, layout_state, session)
     
     plot_obj <- reactive({
       info <- plot_info()
@@ -89,7 +92,7 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
     output$layout_controls <- renderUI({
       info <- model_info()
       req(info)
-      build_anova_layout_controls(ns, input, info, layout_state$default_ui_value)
+      build_anova_layout_controls(ns, input, info)
     })
     
     # ---- Render plot ----

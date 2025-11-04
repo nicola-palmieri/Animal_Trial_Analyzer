@@ -42,8 +42,6 @@ visualize_twoway_server <- function(id, filtered_data, model_fit) {
     
     model_info <- reactive(model_fit())
     
-    layout_state <- initialize_layout_state(input, session)
-
     # ---- color customization ----
     color_var_reactive <- reactive({
       info <- model_info()
@@ -71,15 +69,20 @@ visualize_twoway_server <- function(id, filtered_data, model_fit) {
       if (is.null(line_colors) || length(line_colors) == 0) {
         line_colors <- NULL
       }
+      layout_inputs <- list(
+        strata_rows = input$strata_rows,
+        strata_cols = input$strata_cols,
+        resp_rows = input$resp_rows,
+        resp_cols = input$resp_cols
+      )
+
       build_anova_plot_info(
         data,
         info,
-        layout_state$effective_input,
+        layout_inputs,
         line_colors = line_colors
       )
     })
-
-    observe_layout_synchronization(plot_info, layout_state, session)
     
     plot_obj <- reactive({
       info <- plot_info()
@@ -100,7 +103,7 @@ visualize_twoway_server <- function(id, filtered_data, model_fit) {
     output$layout_controls <- renderUI({
       info <- model_info()
       req(info)
-      build_anova_layout_controls(ns, input, info, layout_state$default_ui_value)
+      build_anova_layout_controls(ns, input, info)
     })
     
     # ✅ simpler, consistent naming and structure
