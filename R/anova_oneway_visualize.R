@@ -56,7 +56,10 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
     # ---- Build plot info ----
     plot_info <- reactive({
       info <- model_info()
-      if (is.null(info) || info$type != "oneway_anova") return(NULL)
+      req(info)
+      validate(
+        need(info$type == "oneway_anova", "No one-way ANOVA results available for plotting.")
+      )
       data <- df()
       build_anova_plot_info(
         data,
@@ -70,13 +73,13 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
     
     plot_obj <- reactive({
       info <- plot_info()
-      if (is.null(info)) return(NULL)
+      req(info)
       info$plot
     })
     
     plot_size <- reactive({
       info <- plot_info()
-      if (is.null(info)) return(list(w = input$plot_width, h = input$plot_height))
+      req(info)
       s <- plot_info()$layout
       list(
         w = input$plot_width * s$strata$cols * s$responses$ncol,
