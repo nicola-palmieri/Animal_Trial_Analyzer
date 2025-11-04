@@ -133,7 +133,8 @@ pca_server <- function(id, filtered_data) {
         group_var = stratify_var,
         strata_levels = strata_levels,
         selected_vars = selected_vars,
-        results = results
+        results = results,
+        data_used = local_data
       )
     })
 
@@ -228,22 +229,129 @@ pca_server <- function(id, filtered_data) {
     )
 
     # Return structured reactive for integration
-    reactive({
+    df_final <- reactive({
       details <- pca_result()
+      if (is.null(details)) return(NULL)
+      details$data_used
+    })
 
-      if (is.null(details)) {
-        return(list(
-          type = "pca",
-          model = NULL,
-          data = df(),
-          vars = input$vars
-        ))
+    model_fit <- reactive({
+      details <- pca_result()
+      if (is.null(details)) return(NULL)
+      details$results
+    })
+
+    compiled_tables <- reactive({
+      details <- pca_result()
+      if (is.null(details)) return(NULL)
+      results <- details$results
+      if (is.null(results) || length(results) == 0) return(NULL)
+
+      loadings_list <- list()
+      variance_list <- list()
+      messages_list <- list()
+
+      for (name in names(results)) {
+        entry <- results[[name]]
+        if (is.null(entry)) {
+          loadings_list[[name]] <- NULL
+          variance_list[[name]] <- NULL
+          messages_list[[name]] <- NULL
+          next
+        }
+
+        if (!is.null(entry$message)) {
+          messages_list[[name]] <- entry$message
+        }
+
+        model <- entry$model
+        if (is.null(model)) {
+          loadings_list[[name]] <- NULL
+          variance_list[[name]] <- NULL
+          next
+        }
+
+        rotation_tbl <- as.data.frame(as.table(model$rotation), stringsAsFactors = FALSE)
+        colnames(rotation_tbl) <- c("Variable", "Component", "Loading")
+        loadings_list[[name]] <- rotation_tbl
+
+        variance_vals <- 100 * model$sdev^2 / sum(model$sdev^2)
+        variance_list[[name]] <- data.frame(
+          Component = paste0("PC", seq_along(variance_vals)),
+          Variance = variance_vals,
+          stringsAsFactors = FALSE
+        )
       }
 
       list(
+        summary = loadings_list,
+        effects = variance_list,
+        messages = messages_list
+      )
+    })
+
+    summary_table <- reactive({
+      res <- compiled_tables()
+      if (is.null(res)) return(NULL)
+      res$summary
+    })
+
+    effect_table <- reactive({
+      res <- compiled_tables()
+      if (is.null(res)) return(NULL)
+      res$effects
+    })
+
+    posthoc_results <- reactive(NULL)
+
+    reactive({
+      details <- pca_result()
+      if (is.null(details)) {
+        return(list(
+          analysis_type = "PCA",
+          data_used = df(),
+          model = NULL,
+          summary = NULL,
+          posthoc = NULL,
+          effects = NULL,
+          stats = if (!is.null(df())) list(n = nrow(df()), vars = names(df())) else NULL,
+          metadata = list(
+            selected_vars = input$vars,
+            group_var = NULL,
+            strata_levels = NULL,
+            messages = NULL
+          ),
+          type = "pca",
+          data = df,
+          vars = input$vars,
+          selected_vars = input$vars,
+          group_var = NULL,
+          strata_levels = NULL
+        ))
+      }
+
+      data_used <- df_final()
+
+      compiled <- compiled_tables()
+      messages <- if (!is.null(compiled)) compiled$messages else NULL
+
+      list(
+        analysis_type = "PCA",
+        data_used = data_used,
+        model = model_fit(),
+        summary = summary_table(),
+        posthoc = posthoc_results(),
+        effects = effect_table(),
+        stats = if (!is.null(data_used)) list(n = nrow(data_used), vars = names(data_used)) else NULL,
+        metadata = list(
+          selected_vars = details$selected_vars,
+          group_var = details$group_var,
+          strata_levels = details$strata_levels,
+          complete_cases = lapply(details$results, `[[`, "data"),
+          messages = messages
+        ),
         type = "pca",
-        model = details$results,
-        data = df(),
+        data = df,
         vars = details$selected_vars,
         selected_vars = details$selected_vars,
         group_var = details$group_var,

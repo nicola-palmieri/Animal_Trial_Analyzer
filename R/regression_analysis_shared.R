@@ -106,7 +106,7 @@ reg_display_lm_summary <- function(m) {
 reg_display_lmm_summary <- function(m) {
   aout <- capture.output(anova(m, type = 3))
   cat(paste(aout, collapse = "\n"), "\n\n")
-  
+
   sout <- capture.output(summary(m))
   start <- grep("^Scaled residuals:", sout)[1]
   stop  <- grep("^Correlation of Fixed Effects:", sout)[1]
@@ -123,6 +123,128 @@ reg_display_lmm_summary <- function(m) {
     else sout <- c(sout, icc_line)
   }
   cat(paste(sout, collapse = "\n"))
+}
+
+# ---------------------------------------------------------------
+# Summaries for standardized regression outputs
+# ---------------------------------------------------------------
+
+clean_regression_coef_names <- function(nms) {
+  vapply(nms, function(name) {
+    name_trim <- trimws(name)
+    if (identical(name_trim, "Estimate")) return("estimate")
+    if (name_trim %in% c("Std. Error", "Std Error", "Std. error")) return("std_error")
+    if (tolower(name_trim) %in% c("t value", "z value", "f value")) return("statistic")
+    if (tolower(name_trim) %in% c("df", "dendf", "numdf")) return(tolower(name_trim))
+    if (grepl("^Pr\\(>", name_trim)) return("p_value")
+    cleaned <- tolower(name_trim)
+    cleaned <- gsub("[^[:alnum:]]+", "_", cleaned)
+    cleaned <- gsub("^_+|_+$", "", cleaned)
+    cleaned <- gsub("_+", "_", cleaned)
+    cleaned
+  }, character(1), USE.NAMES = FALSE)
+}
+
+tidy_regression_model <- function(model, engine) {
+  if (is.null(model)) {
+    return(list(summary = NULL, effects = NULL))
+  }
+
+  coef_mat <- tryCatch(summary(model)$coefficients, error = function(e) NULL)
+  coef_df <- NULL
+  if (!is.null(coef_mat)) {
+    coef_df <- data.frame(
+      term = rownames(coef_mat),
+      coef_mat,
+      row.names = NULL,
+      check.names = FALSE,
+      stringsAsFactors = FALSE
+    )
+    original_names <- names(coef_df)
+    names(coef_df) <- c("term", clean_regression_coef_names(original_names[-1]))
+  }
+
+  metrics <- NULL
+  if (inherits(model, "lm")) {
+    sm <- summary(model)
+    metrics <- data.frame(
+      metric = c("sigma", "r_squared", "adj_r_squared", "nobs"),
+      value = c(sm$sigma, sm$r.squared, sm$adj.r.squared, stats::nobs(model)),
+      stringsAsFactors = FALSE
+    )
+  } else {
+    metrics <- data.frame(
+      metric = c("sigma", "logLik", "AIC", "BIC", "nobs"),
+      value = c(
+        stats::sigma(model),
+        as.numeric(stats::logLik(model)),
+        stats::AIC(model),
+        stats::BIC(model),
+        stats::nobs(model)
+      ),
+      stringsAsFactors = FALSE
+    )
+  }
+
+  anova_tbl <- tryCatch({
+    if (engine == "lm") {
+      car::Anova(model, type = 3)
+    } else {
+      anova(model, type = 3)
+    }
+  }, error = function(e) NULL)
+
+  if (!is.null(anova_tbl)) {
+    anova_tbl <- as.data.frame(anova_tbl)
+    anova_tbl$Effect <- rownames(anova_tbl)
+    rownames(anova_tbl) <- NULL
+    anova_tbl <- anova_tbl[, c("Effect", setdiff(names(anova_tbl), "Effect"))]
+  }
+
+  effects <- list(metrics = metrics, anova = anova_tbl)
+  if (all(vapply(effects, is.null, logical(1)))) effects <- NULL
+
+  list(summary = coef_df, effects = effects)
+}
+
+compile_regression_results <- function(model_info, engine) {
+  if (is.null(model_info) || is.null(model_info$fits)) return(NULL)
+
+  summary_list <- list()
+  effects_list <- list()
+  errors_list <- list()
+
+  for (resp in names(model_info$fits)) {
+    fit_entry <- model_info$fits[[resp]]
+    if (is.null(fit_entry)) next
+
+    if (isTRUE(fit_entry$stratified)) {
+      strata_entries <- fit_entry$strata
+      for (stratum in strata_entries) {
+        label <- if (!is.null(stratum$display)) stratum$display else stratum$label
+        if (is.null(label) || !nzchar(label)) label <- "Stratum"
+        tidy <- tidy_regression_model(stratum$model, engine)
+        if (is.null(summary_list[[resp]])) summary_list[[resp]] <- list()
+        if (is.null(effects_list[[resp]])) effects_list[[resp]] <- list()
+        summary_list[[resp]][[label]] <- tidy$summary
+        effects_list[[resp]][[label]] <- tidy$effects
+        if (!is.null(stratum$error)) {
+          if (is.null(errors_list[[resp]])) errors_list[[resp]] <- list()
+          errors_list[[resp]][[label]] <- stratum$error
+        }
+      }
+    } else {
+      stratum <- fit_entry$strata[[1]]
+      tidy <- tidy_regression_model(stratum$model, engine)
+      summary_list[[resp]] <- tidy$summary
+      effects_list[[resp]] <- tidy$effects
+      if (!is.null(stratum$error)) {
+        errors_list[[resp]] <- stratum$error
+      }
+    }
+  }
+
+  list(summary = summary_list, effects = effects_list, errors = errors_list)
 }
 
 # ===============================================================

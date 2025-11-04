@@ -80,7 +80,9 @@ ggpairs_server <- function(id, data_reactive) {
           matrices = list(),
           plots = list(),
           group_var = NULL,
-          selected_vars = selected_vars
+          selected_vars = selected_vars,
+          data_used = NULL,
+          strata_levels = NULL
         ))
         return()
       }
@@ -104,6 +106,17 @@ ggpairs_server <- function(id, data_reactive) {
 
       matrices <- list()
       plots <- list()
+      processed_data <- data[, unique(c(selected_vars, group_var)), drop = FALSE]
+
+      if (!is.null(group_var)) {
+        keep_rows <- !is.na(processed_data[[group_var]]) &
+          as.character(processed_data[[group_var]]) %in% strata_levels
+        processed_data <- processed_data[keep_rows, , drop = FALSE]
+        processed_data[[group_var]] <- factor(
+          as.character(processed_data[[group_var]]),
+          levels = strata_levels
+        )
+      }
 
       if (is.null(group_var)) {
         dat <- data[, selected_vars, drop = FALSE]
@@ -130,7 +143,9 @@ ggpairs_server <- function(id, data_reactive) {
         matrices = matrices,
         plots = plots,
         group_var = group_var,
-        selected_vars = selected_vars
+        selected_vars = selected_vars,
+        data_used = processed_data,
+        strata_levels = if (!is.null(group_var)) strata_levels else NULL
       ))
     })
 
@@ -201,17 +216,60 @@ ggpairs_server <- function(id, data_reactive) {
     )
 
     # ---- Return structured output for visualization ----
+    df_final <- reactive({
+      res <- correlation_store()
+      if (is.null(res)) return(NULL)
+      res$data_used
+    })
+
+    model_fit <- reactive({
+      res <- correlation_store()
+      if (is.null(res)) return(NULL)
+      res$matrices
+    })
+
+    summary_table <- reactive({
+      res <- correlation_store()
+      if (is.null(res)) return(NULL)
+      res$matrices
+    })
+
+    posthoc_results <- reactive(NULL)
+
+    effect_table <- reactive(NULL)
+
     reactive({
+      res <- correlation_store()
+      if (is.null(res)) return(NULL)
+
+      data_used <- df_final()
+
       list(
+        analysis_type = "CORR",
+        data_used = data_used,
+        model = model_fit(),
+        summary = summary_table(),
+        posthoc = posthoc_results(),
+        effects = effect_table(),
+        stats = if (!is.null(data_used)) list(n = nrow(data_used), vars = names(data_used)) else NULL,
+        metadata = list(
+          selected_vars = res$selected_vars,
+          group_var = res$group_var,
+          strata_levels = res$strata_levels,
+          plots = res$plots,
+          message = res$message
+        ),
         type = "pairwise_correlation",
         data = df,
         group_var = reactive({
-          details <- strat_info()
-          details$var
+          det <- correlation_store()
+          if (is.null(det)) return(NULL)
+          det$group_var
         }),
         strata_order = reactive({
-          details <- strat_info()
-          details$levels
+          det <- correlation_store()
+          if (is.null(det)) return(NULL)
+          det$strata_levels
         }),
         results = reactive(correlation_store())
       )

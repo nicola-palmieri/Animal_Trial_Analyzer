@@ -144,7 +144,77 @@ two_way_anova_server <- function(id, filtered_data) {
     # Render model summaries + downloads (shared helper)
     # -----------------------------------------------------------
     bind_anova_outputs(ns, output, models)
-    
-    return(models)
+
+    df_final <- reactive({
+      mod <- models()
+      if (is.null(mod)) return(NULL)
+      mod$data_used
+    })
+
+    model_fit <- reactive({
+      mod <- models()
+      if (is.null(mod)) return(NULL)
+      mod$models
+    })
+
+    compiled_results <- reactive({
+      mod <- models()
+      if (is.null(mod)) return(NULL)
+      compile_anova_results(mod)
+    })
+
+    summary_table <- reactive({
+      res <- compiled_results()
+      if (is.null(res)) return(NULL)
+      res$summary
+    })
+
+    posthoc_results <- reactive({
+      res <- compiled_results()
+      if (is.null(res)) return(NULL)
+      res$posthoc
+    })
+
+    effect_table <- reactive({
+      res <- compiled_results()
+      if (is.null(res)) return(NULL)
+      res$effects
+    })
+
+    error_table <- reactive({
+      res <- compiled_results()
+      if (is.null(res)) return(NULL)
+      res$errors
+    })
+
+    reactive({
+      mod <- models()
+      if (is.null(mod)) return(NULL)
+
+      data_used <- df_final()
+
+      list(
+        analysis_type = "ANOVA",
+        data_used = data_used,
+        model = model_fit(),
+        summary = summary_table(),
+        posthoc = posthoc_results(),
+        effects = effect_table(),
+        stats = if (!is.null(data_used)) list(n = nrow(data_used), vars = names(data_used)) else NULL,
+        metadata = list(
+          responses = mod$responses,
+          strata = mod$strata,
+          factors = mod$factors,
+          orders = mod$orders,
+          errors = error_table()
+        ),
+        type = "twoway_anova",
+        models = model_fit(),
+        responses = mod$responses,
+        strata = mod$strata,
+        factors = mod$factors,
+        orders = mod$orders
+      )
+    })
   })
 }

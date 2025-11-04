@@ -86,30 +86,68 @@ analysis_server <- function(id, filtered_data) {
     })
     
     # ---- Lazy server initialization ----
+    normalize_analysis_type <- function(mod_type) {
+      lookup <- list(
+        desc = "DESCRIPTIVE",
+        anova1 = "ANOVA",
+        anova2 = "ANOVA",
+        lm = "LM",
+        lmm = "LMM",
+        pairs = "CORR",
+        pca = "PCA"
+      )
+      if (is.null(mod_type)) return(NULL)
+      if (mod_type %in% names(lookup)) lookup[[mod_type]] else toupper(mod_type)
+    }
+
     ensure_module_server <- function(mod) {
       key <- mod$id
       if (!is.null(server_cache[[key]])) return(server_cache[[key]])
-      
+
       result <- tryCatch(mod$server(mod$id, df), error = function(e) {
         warning(sprintf("Module '%s' failed to initialize: %s", key, conditionMessage(e)))
         NULL
       })
-      
-      # Wrap result into a reactive returning a list with 'type' and 'model'
+
+      default_analysis_type <- normalize_analysis_type(mod$type)
+
       if (is.null(result)) {
-        server_cache[[key]] <- reactive(list(type = mod$type, model = NULL))
+        server_cache[[key]] <- reactive(NULL)
       } else if (is.reactive(result)) {
         server_cache[[key]] <- reactive({
           val <- result()
-          # If submodule already returns a list, just add 'type' key
-          if (is.list(val)) c(val, list(type = mod$type))
-          else list(type = mod$type, model = val)
+          if (is.null(val)) return(NULL)
+          if (!is.list(val)) {
+            return(list(
+              analysis_type = default_analysis_type,
+              data_used = NULL,
+              model = val,
+              summary = NULL,
+              posthoc = NULL,
+              effects = NULL,
+              stats = NULL,
+              metadata = list(),
+              type = mod$type
+            ))
+          }
+          if (is.null(val$type)) val$type <- mod$type
+          if (is.null(val$analysis_type)) val$analysis_type <- default_analysis_type
+          val
         })
       } else {
-        # Submodule returned a non-reactive object
-        server_cache[[key]] <- reactive(list(type = mod$type, model = result))
+        server_cache[[key]] <- reactive(list(
+          analysis_type = default_analysis_type,
+          data_used = NULL,
+          model = result,
+          summary = NULL,
+          posthoc = NULL,
+          effects = NULL,
+          stats = NULL,
+          metadata = list(),
+          type = mod$type
+        ))
       }
-      
+
       server_cache[[key]]
     }
     

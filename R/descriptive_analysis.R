@@ -122,23 +122,70 @@ descriptive_server <- function(id, filtered_data) {
     # ------------------------------------------------------------
     # Return full model info
     # ------------------------------------------------------------
-    return(reactive({
+    df_final <- reactive({
       details <- summary_data()
-      if (is.null(details)) {
-        return(NULL)
-      }
+      if (is.null(details)) return(NULL)
+      details$processed_data
+    })
+
+    model_fit <- reactive(NULL)
+
+    summary_table <- reactive({
+      details <- summary_data()
+      if (is.null(details)) return(NULL)
+      details$summary
+    })
+
+    posthoc_results <- reactive(NULL)
+
+    effect_table <- reactive(NULL)
+
+    selected_vars_reactive <- reactive({
+      details <- summary_data()
+      if (is.null(details)) return(NULL)
+      details$selected_vars
+    })
+
+    group_var_reactive <- reactive({
+      details <- summary_data()
+      if (is.null(details)) return(NULL)
+      details$group_var
+    })
+
+    strata_levels_reactive <- reactive({
+      details <- summary_data()
+      if (is.null(details)) return(NULL)
+      details$strata_levels
+    })
+
+    reactive({
+      details <- summary_data()
+      if (is.null(details)) return(NULL)
+
+      data_used <- df_final()
 
       list(
+        analysis_type = "DESCRIPTIVE",
+        data_used = data_used,
+        model = model_fit(),
+        summary = summary_table(),
+        posthoc = posthoc_results(),
+        effects = effect_table(),
+        stats = if (!is.null(data_used)) list(n = nrow(data_used), vars = names(data_used)) else NULL,
+        metadata = list(
+          selected_vars = details$selected_vars,
+          group_var = details$group_var,
+          strata_levels = details$strata_levels
+        ),
         type = "descriptive",
         data = df,
-        summary = reactive({ details <- summary_data(); req(details); details$summary }),
-        selected_vars = reactive({ details <- summary_data(); req(details); details$selected_vars }),
-        group_var = reactive({ details <- summary_data(); req(details); details$group_var }),
-        processed_data = reactive({ details <- summary_data(); req(details); details$processed_data }),
-        strata_levels = reactive({ details <- summary_data(); req(details); details$strata_levels })
+        processed_data = df_final,
+        selected_vars = selected_vars_reactive,
+        group_var = group_var_reactive,
+        strata_levels = strata_levels_reactive
       )
-    }))
-    
+    })
+
   })
 }
 
