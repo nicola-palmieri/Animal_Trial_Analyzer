@@ -1,5 +1,5 @@
 # ===============================================================
-# 🧪 Table Analyzer — Filter Module
+# 🧪 Table Analyzer — Filter Module (Refactored Reactive Version)
 # ===============================================================
 
 filter_ui <- function(id) {
@@ -25,7 +25,6 @@ filter_ui <- function(id) {
 filter_server <- function(id, uploaded_data) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
-    
     df <- reactive(uploaded_data())
     
     # --- 1. Column selector ---
@@ -43,7 +42,7 @@ filter_server <- function(id, uploaded_data) {
     output$filter_widgets <- renderUI({
       req(df())
       cols <- input$columns
-      if (is.null(cols) || length(cols) == 0) return(NULL)
+      req(cols)
       
       make_numeric_widget <- function(col, x) {
         rng <- suppressWarnings(range(x, na.rm = TRUE))
@@ -53,23 +52,15 @@ filter_server <- function(id, uploaded_data) {
           column(
             6,
             numericInput(
-              ns(paste0("min_", col)),
-              label = paste(col, "(min)"),
-              value = rng[1],
-              min = rng[1],
-              max = rng[2],
-              step = step_val
+              ns(paste0("min_", col)), paste(col, "(min)"),
+              value = rng[1], min = rng[1], max = rng[2], step = step_val
             )
           ),
           column(
             6,
             numericInput(
-              ns(paste0("max_", col)),
-              label = paste(col, "(max)"),
-              value = rng[2],
-              min = rng[1],
-              max = rng[2],
-              step = step_val
+              ns(paste0("max_", col)), paste(col, "(max)"),
+              value = rng[2], min = rng[1], max = rng[2], step = step_val
             )
           )
         )
@@ -77,33 +68,25 @@ filter_server <- function(id, uploaded_data) {
       
       make_logical_widget <- function(col) {
         checkboxGroupInput(
-          ns(paste0("filter_", col)),
-          label = col,
-          choices = c(TRUE, FALSE),
-          selected = c(TRUE, FALSE),
-          inline = TRUE
+          ns(paste0("filter_", col)), label = col,
+          choices = c(TRUE, FALSE), selected = c(TRUE, FALSE), inline = TRUE
         )
       }
       
       make_factor_widget <- function(col, x) {
         choices <- sort(unique(as.character(x)))
         selectInput(
-          ns(paste0("filter_", col)),
-          label = col,
-          choices = choices,
-          multiple = TRUE,
-          selected = choices
+          ns(paste0("filter_", col)), label = col,
+          choices = choices, multiple = TRUE, selected = choices
         )
       }
       
-      widgets <- lapply(cols, function(col) {
-        col_data <- df()[[col]]
-        if (is.numeric(col_data)) make_numeric_widget(col, col_data)
-        else if (is.logical(col_data)) make_logical_widget(col)
-        else make_factor_widget(col, col_data)
-      })
-      
-      tagList(widgets)
+      tagList(lapply(cols, function(col) {
+        x <- df()[[col]]
+        if (is.numeric(x)) make_numeric_widget(col, x)
+        else if (is.logical(x)) make_logical_widget(col)
+        else make_factor_widget(col, x)
+      }))
     })
     
     # --- 3. Reactive filtering ---
@@ -111,26 +94,26 @@ filter_server <- function(id, uploaded_data) {
       req(df())
       data <- df()
       cols <- input$columns
-      if (is.null(cols) || length(cols) == 0) return(data)
+      
+      if (is.null(cols) || !length(cols)) return(data)
       
       for (col in cols) {
-        col_data <- data[[col]]
+        x <- data[[col]]
         
-        if (is.numeric(col_data)) {
-          min_val <- input[[paste0("min_", col)]]
-          max_val <- input[[paste0("max_", col)]]
-          if (is.null(min_val) || is.null(max_val)) {
+        # Numeric columns
+        if (is.numeric(x)) {
+          min_val <- input[[paste0("min_", col)]] %||% -Inf
+          max_val <- input[[paste0("max_", col)]] %||% Inf
+          data <- subset(data, x >= min_val & x <= max_val)
+        }
+        # Logical / Factor / Character
+        else {
+          sel <- input[[paste0("filter_", col)]] %||% character(0)
+          if (!length(sel)) {
             data <- data[0, , drop = FALSE]
             break
           }
-          data <- data[data[[col]] >= min_val & data[[col]] <= max_val, , drop = FALSE]
-        } else {
-          sel <- input[[paste0("filter_", col)]]
-          if (is.null(sel) || length(sel) == 0) {
-            data <- data[0, , drop = FALSE]
-            break
-          }
-          data <- data[data[[col]] %in% sel, , drop = FALSE]
+          data <- subset(data, as.character(x) %in% sel)
         }
       }
       
@@ -139,13 +122,10 @@ filter_server <- function(id, uploaded_data) {
     
     # --- 4. Preview table ---
     output$filtered_preview <- renderDT({
-      datatable(
-        filtered_df(),
-        options = list(scrollX = TRUE, pageLength = 5)
-      )
+      datatable(filtered_df(), options = list(scrollX = TRUE, pageLength = 5))
     })
     
-    # --- 5. Return filtered data for downstream modules ---
-    return(filtered_df)
+    # --- 5. Return filtered data downstream ---
+    filtered_df
   })
 }
