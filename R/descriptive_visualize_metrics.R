@@ -35,10 +35,7 @@ visualize_missing_ui <- function(id) {
 
 metric_plot_ui <- function(id) {
   ns <- NS(id)
-  div(
-    class = "ta-plot-container",
-    plotOutput(ns("plot"), width = "100%", height = "auto")
-  )
+  uiOutput(ns("plot_container"))
 }
 
 visualize_cv_plot_ui <- function(id) {
@@ -207,6 +204,8 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
                                  y_label, title, filename_prefix, is_active = NULL) {
   moduleServer(id, function(input, output, session) {
 
+    ns <- session$ns
+
     layout_state <- initialize_layout_state(input, session)
 
     plot_width <- reactive({
@@ -269,15 +268,17 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
         cols_input = layout_state$effective_input("resp_cols")
       )
 
-      n_rows <- layout$nrow
-      n_cols <- layout$ncol
+      if (!isTRUE(layout$valid)) {
+        sync_grid_controls(layout_state, input, session, "resp_rows", "resp_cols", layout)
+        return(list(plot = NULL, layout = layout))
+      }
 
-      plot <- build_metric_plot(metric_info, y_label, title, n_rows, n_cols)
-      sync_grid_controls(layout_state, input, session, "resp_rows", "resp_cols", list(nrow = n_rows, ncol = n_cols))
+      plot <- build_metric_plot(metric_info, y_label, title, layout$nrow, layout$ncol)
+      sync_grid_controls(layout_state, input, session, "resp_rows", "resp_cols", layout)
 
       list(
         plot = plot,
-        layout = list(nrow = n_rows, ncol = n_cols)
+        layout = layout
       )
     })
 
@@ -286,14 +287,28 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
     plot_size <- reactive({
       req(module_active())
       details <- plot_details()
-      if (is.null(details$layout)) {
+      layout <- details$layout
+      if (is.null(layout) || !isTRUE(layout$valid)) {
         list(w = plot_width(), h = plot_height())
       } else {
         list(
-          w = plot_width()  * details$layout$ncol,
-          h = plot_height() * details$layout$nrow
+          w = plot_width()  * layout$ncol,
+          h = plot_height() * layout$nrow
         )
       }
+    })
+
+    output$plot_container <- renderUI({
+      req(module_active())
+      details <- plot_details()
+      layout <- details$layout
+      container <- function(content) {
+        div(class = "ta-plot-container", content)
+      }
+      if (!is.null(layout) && !isTRUE(layout$valid)) {
+        return(container(div(class = "alert alert-warning", layout$message)))
+      }
+      container(plotOutput(ns("plot"), width = "100%", height = "auto"))
     })
 
     output$download_plot <- downloadHandler(
@@ -301,6 +316,8 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
       content = function(file) {
         req(module_active())
         details <- plot_details()
+        layout <- details$layout
+        req(is.null(layout) || isTRUE(layout$valid))
         req(details$plot)
         size <- plot_size()
         ggplot2::ggsave(
@@ -319,6 +336,8 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
     output$plot <- renderPlot({
       req(module_active())
       details <- plot_details()
+      layout <- details$layout
+      if (is.null(layout) || !isTRUE(layout$valid)) return(NULL)
       validate(need(!is.null(details$plot), "No plot available."))
       print(details$plot)
     },

@@ -822,10 +822,22 @@ build_anova_plot_info <- function(data, info, effective_input, line_colors = NUL
         rows_input = effective_input("strata_rows"),
         cols_input = effective_input("strata_cols")
       )
-      
+
+      if (!isTRUE(layout$valid)) {
+        return(list(
+          plot = NULL,
+          layout = list(
+            strata = list(rows = layout$nrow, cols = layout$ncol, valid = layout$valid, message = layout$message),
+            responses = list(nrow = 1L, ncol = 1L, valid = TRUE, message = NULL)
+          ),
+          has_strata = has_strata,
+          n_responses = 0L
+        ))
+      }
+
       max_strata_rows <- max(max_strata_rows, layout$nrow)
       max_strata_cols <- max(max_strata_cols, layout$ncol)
-      
+
       combined <- patchwork::wrap_plots(
         plotlist = strata_plot_list,
         nrow = layout$nrow,
@@ -869,7 +881,19 @@ build_anova_plot_info <- function(data, info, effective_input, line_colors = NUL
     rows_input = effective_input("resp_rows"),
     cols_input = effective_input("resp_cols")
   )
-  
+
+  if (!isTRUE(resp_layout$valid)) {
+    return(list(
+      plot = NULL,
+      layout = list(
+        strata = list(rows = max_strata_rows, cols = max_strata_cols, valid = TRUE, message = NULL),
+        responses = resp_layout
+      ),
+      has_strata = has_strata,
+      n_responses = length(response_plots)
+    ))
+  }
+
   final_plot <- if (length(response_plots) == 1) {
     response_plots[[1]]
   } else {
@@ -884,7 +908,7 @@ build_anova_plot_info <- function(data, info, effective_input, line_colors = NUL
   list(
     plot = final_plot,
     layout = list(
-      strata = list(rows = max_strata_rows, cols = max_strata_cols),
+      strata = list(rows = max_strata_rows, cols = max_strata_cols, valid = TRUE, message = NULL),
       responses = resp_layout
     ),
     has_strata = has_strata,
