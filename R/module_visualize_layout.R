@@ -62,39 +62,6 @@ initialize_layout_state <- function(input, session) {
   )
 }
 
-sync_grid_controls <- function(layout_state,
-                               input,
-                               session,
-                               rows_name,
-                               cols_name,
-                               layout,
-                               max_value = 10L) {
-  if (is.null(layout)) {
-    return(invisible(NULL))
-  }
-
-  update_control <- function(name, target) {
-    if (is.null(name) || is.null(target) || !is.finite(target)) return()
-
-    target <- as.integer(max(1L, min(max_value, round(target))))
-
-    if (isTRUE(shiny::isolate(layout_state$manual[[name]]))) {
-      return()
-    }
-
-    current <- shiny::isolate(input[[name]])
-    if (isTRUE(!identical(as.integer(current), target))) {
-      layout_state$suppress[[name]] <- TRUE
-      updateNumericInput(session, name, value = target, min = 1, max = max_value)
-    }
-  }
-
-  update_control(rows_name, layout$nrow)
-  update_control(cols_name, layout$ncol)
-
-  invisible(NULL)
-}
-
 observe_layout_synchronization <- function(plot_info_reactive, layout_state, session) {
   observeEvent(plot_info_reactive(), {
     plot_info_reactive()

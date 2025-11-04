@@ -174,8 +174,6 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
         cols_input = layout_state$effective_input("resp_cols")
       )
 
-      sync_grid_controls(layout_state, input, session, "resp_rows", "resp_cols", layout)
-
       if (!isTRUE(layout$valid)) {
         return(list(plot = NULL, layout = layout))
       }

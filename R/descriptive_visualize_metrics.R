@@ -269,12 +269,10 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
       )
 
       if (!isTRUE(layout$valid)) {
-        sync_grid_controls(layout_state, input, session, "resp_rows", "resp_cols", layout)
         return(list(plot = NULL, layout = layout))
       }
 
       plot <- build_metric_plot(metric_info, y_label, title, layout$nrow, layout$ncol)
-      sync_grid_controls(layout_state, input, session, "resp_rows", "resp_cols", layout)
 
       list(
         plot = plot,
