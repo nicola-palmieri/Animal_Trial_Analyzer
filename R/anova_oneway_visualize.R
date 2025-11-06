@@ -115,11 +115,16 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
       group2 <- group2[valid_pairs]
       p_vals <- p_vals[valid_pairs]
 
-      level_values <- if (is.factor(stats_df[[factor_var]])) {
-        levels(stats_df[[factor_var]])
-      } else {
-        unique(as.character(stats_df[[factor_var]]))
+      if (!factor_var %in% names(stats_df)) {
+        return(NULL)
       }
+
+      if (!is.factor(stats_df[[factor_var]])) {
+        stats_df[[factor_var]] <- factor(as.character(stats_df[[factor_var]]))
+      }
+
+      level_values <- levels(stats_df[[factor_var]])
+      level_values <- level_values[!is.na(level_values)]
 
       positions1 <- match(group1, level_values)
       positions2 <- match(group2, level_values)
@@ -136,8 +141,12 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
       annotations <- ifelse(p_vals < 0.001, "***",
                             ifelse(p_vals < 0.01, "**", "*"))
 
-      se_vals <- if ("se" %in% names(stats_df)) stats_df$se else rep(0, nrow(stats_df))
-      upper_vals <- stats_df$mean + se_vals
+      if ("ymax" %in% names(stats_df)) {
+        upper_vals <- stats_df$ymax
+      } else {
+        se_vals <- if ("se" %in% names(stats_df)) stats_df$se else rep(0, nrow(stats_df))
+        upper_vals <- stats_df$mean + se_vals
+      }
       upper_vals[!is.finite(upper_vals)] <- stats_df$mean[!is.finite(upper_vals)]
 
       base_y <- suppressWarnings(max(upper_vals, na.rm = TRUE))
@@ -161,9 +170,12 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
 
       y_positions <- base_y + step * seq_along(p_vals)
 
+      xmin_labels <- level_values[positions1]
+      xmax_labels <- level_values[positions2]
+
       signif_df <- data.frame(
-        xmin = positions1,
-        xmax = positions2,
+        xmin = factor(xmin_labels, levels = level_values),
+        xmax = factor(xmax_labels, levels = level_values),
         annotation = annotations,
         y_position = y_positions,
         stringsAsFactors = FALSE
@@ -180,7 +192,13 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
         return(NULL)
       }
 
-      stats_df[[factor_var]] <- as.factor(stats_df[[factor_var]])
+      stats_df <- as.data.frame(stats_df)
+
+      if (!factor_var %in% names(stats_df)) {
+        return(NULL)
+      }
+
+      stats_df[[factor_var]] <- factor(as.character(stats_df[[factor_var]]))
       se_vals <- if ("se" %in% names(stats_df)) stats_df$se else rep(0, nrow(stats_df))
       stats_df$ymin <- stats_df$mean - se_vals
       stats_df$ymax <- stats_df$mean + se_vals
@@ -211,9 +229,9 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
         y_limits <- c(y_lower - padding * 0.25, y_upper + padding)
       }
 
-      p <- ggplot(stats_df, aes(x = !!rlang::sym(factor_var), y = mean)) +
-        geom_col(fill = fill_color, width = 0.65) +
-        geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0.15) +
+      p <- ggplot(stats_df, aes(x = .data[[factor_var]], y = .data$mean)) +
+        geom_col(fill = fill_color, color = fill_color, width = 0.65, stat = "identity") +
+        geom_errorbar(aes(ymin = .data$ymin, ymax = .data$ymax), width = 0.15) +
         theme_minimal(base_size = 14) +
         labs(x = factor_var, y = "Mean ± SE") +
         theme(
