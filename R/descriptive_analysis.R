@@ -199,13 +199,104 @@ compute_descriptive_summary <- function(data, group_var = NULL) {
   numeric_vars <- names(data)[sapply(data, is.numeric)]
   
   group_data <- if (!is.null(group_var)) group_by(data, .data[[group_var]], .drop = TRUE) else data
-  
+
   skim_out <- if (!is.null(group_var)) {
     group_data %>% skim()
   } else {
     skim(data)
   }
-  
+
+  # Custom formatter for categorical top counts (show top 10, rest as "Others")
+  format_top_counts <- function(values, top_n = 10) {
+    if (is.null(values)) {
+      return(NA_character_)
+    }
+
+    values_chr <- as.character(values)
+    values_chr[is.na(values_chr)] <- "<NA>"
+
+    if (!length(values_chr)) {
+      return(NA_character_)
+    }
+
+    counts <- sort(table(values_chr), decreasing = TRUE)
+    if (!length(counts)) {
+      return(NA_character_)
+    }
+
+    top_counts <- head(counts, top_n)
+    remainder <- sum(counts) - sum(top_counts)
+
+    parts <- paste0(names(top_counts), ": ", as.integer(top_counts))
+    if (remainder > 0) {
+      parts <- c(parts, paste0("Others:", remainder))
+    }
+
+    paste(parts, collapse = ", ")
+  }
+
+  factor_vars <- names(data)[vapply(data, function(x) is.factor(x) || is.character(x) || is.logical(x), logical(1))]
+
+  if (length(factor_vars) > 0 && "top_counts" %in% names(skim_out)) {
+    custom_counts <- NULL
+
+    if (!is.null(group_var) && group_var %in% names(data)) {
+      group_keys <- dplyr::group_keys(group_data)
+      group_splits <- dplyr::group_split(group_data)
+
+      custom_counts_list <- vector("list", length(group_splits))
+      for (i in seq_along(group_splits)) {
+        group_df <- group_splits[[i]]
+        per_var <- lapply(factor_vars, function(var) {
+          tibble::tibble(
+            skim_variable = var,
+            top_counts_custom = format_top_counts(group_df[[var]])
+          )
+        })
+        per_var <- dplyr::bind_rows(per_var)
+
+        if (nrow(per_var) == 0) {
+          next
+        }
+
+        key_vals <- group_keys[i, , drop = FALSE]
+        if (ncol(key_vals) > 0) {
+          key_vals <- key_vals[rep(1, nrow(per_var)), , drop = FALSE]
+          per_var <- dplyr::bind_cols(key_vals, per_var)
+        }
+
+        custom_counts_list[[i]] <- per_var
+      }
+
+      if (length(custom_counts_list) > 0) {
+        custom_counts <- dplyr::bind_rows(custom_counts_list)
+      }
+
+      join_cols <- c(names(group_keys), "skim_variable")
+    } else {
+      custom_counts <- dplyr::bind_rows(lapply(factor_vars, function(var) {
+        tibble::tibble(
+          skim_variable = var,
+          top_counts_custom = format_top_counts(data[[var]])
+        )
+      }))
+      join_cols <- "skim_variable"
+    }
+
+    if (!is.null(custom_counts) && nrow(custom_counts) > 0) {
+      skim_out <- dplyr::left_join(skim_out, custom_counts, by = join_cols)
+
+      if ("top_counts_custom" %in% names(skim_out)) {
+        skim_out$top_counts <- as.character(skim_out$top_counts)
+        idx <- which(skim_out$skim_type == "factor" & !is.na(skim_out$top_counts_custom))
+        if (length(idx) > 0) {
+          skim_out$top_counts[idx] <- skim_out$top_counts_custom[idx]
+        }
+        skim_out$top_counts_custom <- NULL
+      }
+    }
+  }
+
   cv_out <- group_data %>%
     summarise(across(
       where(is.numeric),
