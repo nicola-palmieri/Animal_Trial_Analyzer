@@ -149,6 +149,8 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
         plot
         
       } else if (input$plot_type == "barplot_mean_se") {
+        posthoc_all <- compile_anova_results(info)$posthoc
+        print(posthoc_all)
         plot_oneway_barplot_meanse(
           df(),
           info,
@@ -158,9 +160,11 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
             resp_rows   = input$resp_rows,
             resp_cols   = input$resp_cols
           ),
-          line_colors = custom_colors()
+          line_colors = custom_colors(),
+          posthoc_all = posthoc_all
         )
       }
+      
     },
     width = function() plot_size()$w,
     height = function() plot_size()$h,
@@ -189,7 +193,32 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
   })
 }
 
-plot_oneway_barplot_meanse <- function(data, info, layout_values, line_colors = NULL) {
+extract_tukey_for_signif <- function(posthoc_entry) {
+  if (is.null(posthoc_entry) || !is.data.frame(posthoc_entry)) return(NULL)
+  
+  df <- posthoc_entry
+  
+  # split contrast into group1 and group2
+  parts <- strsplit(as.character(df$contrast), " - ")
+  df$group1 <- vapply(parts, `[`, "", 1)
+  df$group2 <- vapply(parts, `[`, "", 2)
+  
+  # clean p.value column
+  df$p.value <- as.character(df$p.value)
+  df$p.value <- gsub("\\*", "", df$p.value)          # remove any stars
+  df$p.value <- gsub("<0\\.001", "0.0009", df$p.value)  # make "<0.001" numeric
+  df$p.value <- suppressWarnings(as.numeric(df$p.value))
+  
+  df <- df %>%
+    dplyr::filter(!is.na(p.value)) %>%
+    dplyr::select(group1, group2, p.value)
+  
+  df
+}
+
+
+plot_oneway_barplot_meanse <- function(data, info, layout_values = list(), line_colors = NULL, posthoc_all = NULL) {
+  
   factor1 <- info$factors$factor1
   responses <- info$responses
   has_strata <- !is.null(info$strata) && !is.null(info$strata$var)
@@ -237,25 +266,94 @@ plot_oneway_barplot_meanse <- function(data, info, layout_values, line_colors = 
             .groups = "drop"
           )
         
+        # ✅ ensure order and matching with contrast group names
+        stats_df[[factor1]] <- factor(stats_df[[factor1]], levels = unique(stats_df[[factor1]]))
+        
+        # ---- optional significance layer ----
+        signif_df <- NULL
+        if (!is.null(posthoc_all)) {
+          if (has_strata && !is.null(strat_var) && strat_var %in% names(data)) {
+            # stratified case
+            if (!is.null(posthoc_all[[resp]]) && !is.null(posthoc_all[[resp]][[stratum]])) {
+              signif_df <- extract_tukey_for_signif(posthoc_all[[resp]][[stratum]])
+            }
+          } else {
+            # non-stratified case
+            if (!is.null(posthoc_all[[resp]])) {
+              signif_df <- extract_tukey_for_signif(posthoc_all[[resp]])
+            }
+          }
+        }
+        
+        # ✅ Step 2: diagnostic prints
+        cat("\n--- DEBUG for", resp, if (has_strata) paste0(" (", stratum, ")"), "---\n")
+        cat("signif_df:\n"); print(signif_df)
+        cat("stats_df:\n"); print(stats_df)
+        cat("factor1 levels:\n"); print(levels(stats_df[[factor1]]))
+        cat("-------------------------------------------\n")
+        
+        # ---- Base barplot ----
         p <- ggplot(stats_df, aes(x = !!sym(factor1), y = mean)) +
-          geom_col(fill = fill_color, width = 0.6, alpha = 0.8) +
-          geom_errorbar(aes(ymin = mean - se, ymax = mean + se),
-                        width = 0.15, color = "gray40", linewidth = 0.5) +
+          geom_col(
+            fill  = fill_color,
+            width = 0.6,
+            alpha = 0.8
+          ) +
+          geom_errorbar(
+            aes(ymin = mean - se, ymax = mean + se),
+            width     = 0.15,
+            color     = "gray40",
+            linewidth = 0.5
+          ) +
           theme_minimal(base_size = 14) +
           labs(
-            x = factor1,
-            y = paste0(resp, " (mean ± SE)"),
+            x     = factor1,
+            y     = "Mean ± SE",
             title = stratum
           ) +
           theme(
-            plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
-            axis.title.x = element_text(margin = margin(t = 6)),
-            axis.title.y = element_text(margin = margin(r = 6)),
+            plot.title    = element_text(size = 14, face = "bold", hjust = 0.5),
+            axis.title.x  = element_text(margin = margin(t = 6)),
+            axis.title.y  = element_text(margin = margin(r = 6)),
+            axis.text.x   = element_text(angle = 30, hjust = 1),
             panel.grid.minor = element_blank(),
             panel.grid.major.x = element_blank(),
-            panel.grid.major.y = element_line(color = "gray90"),
-            axis.text.x = element_text(angle = 30, hjust = 1)
+            panel.grid.major.y = element_line(color = "gray90")
           )
+        
+        # ---- Add significance brackets (if Tukey post-hoc is available) ----
+        if (!is.null(signif_df) && nrow(signif_df) > 0) {
+          signif_df <- signif_df %>%
+            dplyr::filter(p.value < 0.05)   # ✅ keep only significant
+          max_y <- max(stats_df$mean + stats_df$se, na.rm = TRUE)
+          
+          signif_df <- signif_df %>%
+            dplyr::mutate(
+              y_position = seq(
+                from = max_y * 1.05,
+                by   = max_y * 0.05,
+                length.out = n()
+              ),
+              label = dplyr::case_when(
+                p.value < 0.001 ~ "***",
+                p.value < 0.01  ~ "**",
+                p.value < 0.05  ~ "*",
+                TRUE            ~ sprintf("p=%.3f", p.value)
+              )
+            )
+          
+          p <- p + ggsignif::geom_signif(
+            data      = signif_df,
+            aes(xmin = group1, xmax = group2, annotations = label, y_position = y_position),
+            manual    = TRUE,
+            tip_length = 0.01,
+            textsize   = 3.8,
+            vjust      = 0.5,
+            color      = "gray30"
+          )
+        }
+        
+        
         
         stratum_plots[[stratum]] <- p
       }
@@ -284,14 +382,26 @@ plot_oneway_barplot_meanse <- function(data, info, layout_values, line_colors = 
           .groups = "drop"
         )
       
+      # ✅ ensure order and matching with contrast group names
+      stats_df[[factor1]] <- factor(stats_df[[factor1]], levels = unique(stats_df[[factor1]]))
+      
+      # ---- extract Tukey significance ----
+      signif_df <- NULL
+      if (!is.null(posthoc_all) && !is.null(posthoc_all[[resp]])) {
+        signif_df <- extract_tukey_for_signif(posthoc_all[[resp]])
+      }
+      
+      # ---- Base barplot ----
       p <- ggplot(stats_df, aes(x = !!sym(factor1), y = mean)) +
         geom_col(fill = fill_color, width = 0.6, alpha = 0.8) +
-        geom_errorbar(aes(ymin = mean - se, ymax = mean + se),
-                      width = 0.15, color = "gray40", linewidth = 0.5) +
+        geom_errorbar(
+          aes(ymin = mean - se, ymax = mean + se),
+          width = 0.15, color = "gray40", linewidth = 0.5
+        ) +
         theme_minimal(base_size = 14) +
         labs(
           x = factor1,
-          y = paste0(resp, " (mean ± SE)"),
+          y = "Mean ± SE",
           title = resp
         ) +
         theme(
@@ -303,6 +413,46 @@ plot_oneway_barplot_meanse <- function(data, info, layout_values, line_colors = 
           panel.grid.major.y = element_line(color = "gray90"),
           axis.text.x = element_text(angle = 30, hjust = 1)
         )
+      
+      # ---- Add significance brackets (if Tukey post-hoc is available) ----
+      if (!is.null(signif_df) && nrow(signif_df) > 0) {
+        signif_df <- signif_df %>%
+          dplyr::filter(p.value < 0.05)   # ✅ keep only significant
+        max_y <- max(stats_df$mean + stats_df$se, na.rm = TRUE)
+        
+        signif_df <- signif_df %>%
+          dplyr::mutate(
+            y_position = seq(
+              from = max_y * 1.05,
+              by   = max_y * 0.05,
+              length.out = n()
+            ),
+            label = dplyr::case_when(
+              p.value < 0.001 ~ "***",
+              p.value < 0.01  ~ "**",
+              p.value < 0.05  ~ "*",
+              TRUE            ~ sprintf("p=%.3f", p.value)
+            ),
+            xmin = group1,
+            xmax = group2,
+            annotations = label
+          )
+        
+        p <- p + ggsignif::geom_signif(
+          data      = signif_df,
+          aes(
+            xmin       = group1,
+            xmax       = group2,
+            annotations = label,
+            y_position = y_position
+          ),
+          manual    = TRUE,
+          tip_length = 0.01,
+          textsize   = 3.8,
+          vjust      = 0.5,
+          color      = "gray30"
+        )
+      }
       
       response_plots[[resp]] <- p
     }
