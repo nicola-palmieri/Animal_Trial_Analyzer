@@ -19,33 +19,37 @@ auto_factor_order <- function(x) {
 
 
 convert_wide_to_long <- function(path, sheet = 1, replicate_col = "Replicate") {
-  
-  # ---- Read first two rows together to preserve blanks ----
-  headers <- read_excel(path, sheet = sheet, n_max = 2, col_names = FALSE)
-  
+  # ---- Read first two rows to capture merged header structure ----
+  headers <- readxl::read_excel(path, sheet = sheet, n_max = 2, col_names = FALSE)
   header1 <- as.character(unlist(headers[1, , drop = TRUE]))
   header2 <- as.character(unlist(headers[2, , drop = TRUE]))
   
-  # ---- Fill blanks forward in header1 ----
+  # ---- Fill blanks forward in first header ----
   header1[header1 == ""] <- NA
   header1 <- zoo::na.locf(header1, na.rm = FALSE)
   header2[is.na(header2) | header2 == ""] <- ""
   
-  # ---- Combine safely ----
+  # ---- Combine headers safely ----
   clean_names <- ifelse(header2 == "", header1, paste0(header1, "_", header2))
   clean_names <- make.unique(clean_names, sep = "_")
   
-  # ---- Read data using combined names ----
-  data <- read_excel(path, sheet = sheet, skip = 2, col_names = clean_names)
-  
-  # ---- Identify ID vs measurement columns ----
-  fixed_cols <- clean_names[1:3]
+  # ---- Detect number of fixed columns ----
+  first_empty <- which(is.na(headers[1, ]) | headers[1, ] == "")[1]
+  if (is.na(first_empty)) {
+    n_fixed <- 0
+  } else {
+    n_fixed <- max(0, first_empty - 2)
+  }
+  fixed_cols <- clean_names[seq_len(n_fixed)]
   measure_cols <- setdiff(clean_names, fixed_cols)
   
-  # ---- Reshape ----
+  # ---- Read data with computed names ----
+  data <- readxl::read_excel(path, sheet = sheet, skip = 2, col_names = clean_names)
+  
+  # ---- Reshape from wide to long then back to tidy ----
   data_long <- data |>
     pivot_longer(
-      cols = all_of(measure_cols),
+      cols = tidyselect::all_of(measure_cols),
       names_to = c("Variable", replicate_col),
       names_pattern = "^(.*)_([^_]*)$",
       values_to = "Value"
