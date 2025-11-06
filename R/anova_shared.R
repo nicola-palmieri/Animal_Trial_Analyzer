@@ -252,18 +252,23 @@ prepare_anova_outputs <- function(model_obj, factor_names) {
       posthoc_details[[factor_nm]] <- list(table = NULL, error = res$error)
     }
   }
-  
+
   if (!is.null(posthoc_combined)) {
     posthoc_combined <- posthoc_combined[, c("Factor", setdiff(names(posthoc_combined), "Factor"))]
+    if ("p.value" %in% names(posthoc_combined)) {
+      posthoc_combined$p.value_raw <- posthoc_combined$p.value
+    }
+
     numeric_cols <- names(posthoc_combined)[sapply(posthoc_combined, is.numeric)]
+    numeric_cols <- setdiff(numeric_cols, "p.value_raw")
     if (length(numeric_cols) > 0) {
       for (col in numeric_cols) {
         posthoc_combined[[col]] <- round(posthoc_combined[[col]], 2)
       }
     }
-    
+
     if ("p.value" %in% names(posthoc_combined)) {
-      raw_posthoc_p <- posthoc_combined$p.value
+      raw_posthoc_p <- posthoc_combined$p.value_raw
       posthoc_significant <- !is.na(raw_posthoc_p) & raw_posthoc_p < 0.05
       formatted_posthoc_p <- format_p_value(raw_posthoc_p)
       posthoc_combined$p.value <- add_significance_marker(formatted_posthoc_p, raw_posthoc_p)
@@ -711,6 +716,7 @@ build_anova_plot_info <- function(data, info, layout_values, line_colors = NULL)
   }
   
   response_plots <- list()
+  summary_stats <- list()
 
   layout_input <- list(
     strata_rows = suppressWarnings(as.numeric(layout_values$strata_rows)),
@@ -830,6 +836,19 @@ build_anova_plot_info <- function(data, info, layout_values, line_colors = NULL)
       
       strata_panel_count <- max(strata_panel_count, length(stratum_plots))
 
+      panel_entries <- lapply(names(stratum_plots), function(stratum_name) {
+        list(
+          title = stratum_name,
+          stratum = stratum_name,
+          data = stratum_plots[[stratum_name]],
+          y_limits = y_limits
+        )
+      })
+      summary_stats[[resp]] <- list(
+        panels = panel_entries,
+        strata_layout = list(nrow = strata_layout$nrow, ncol = strata_layout$ncol)
+      )
+
       strata_plot_list <- lapply(names(stratum_plots), function(stratum_name) {
         build_plot(stratum_plots[[stratum_name]], stratum_name, y_limits)
       })
@@ -862,6 +881,16 @@ build_anova_plot_info <- function(data, info, layout_values, line_colors = NULL)
         y_limits <- NULL
       }
       
+      summary_stats[[resp]] <- list(
+        panels = list(list(
+          title = resp,
+          stratum = NULL,
+          data = stats_df,
+          y_limits = y_limits
+        )),
+        strata_layout = list(nrow = 1L, ncol = 1L)
+      )
+
       response_plots[[resp]] <- build_plot(stats_df, resp, y_limits)
     }
   }
@@ -933,7 +962,8 @@ build_anova_plot_info <- function(data, info, layout_values, line_colors = NULL)
     defaults = list(
       strata = strata_defaults,
       responses = response_defaults
-    )
+    ),
+    summary_stats = summary_stats
   )
 }
 
