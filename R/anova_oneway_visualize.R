@@ -218,7 +218,9 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
 
       y_limits <- NULL
       if (is.finite(y_lower) && is.finite(y_upper)) {
-        span <- y_upper - y_lower
+        # Always include 0 so bars are visible (geom_col draws from 0)
+        low <- min(0, y_lower)
+        span <- y_upper - low
         if (!is.finite(span) || span == 0) {
           span <- ifelse(abs(y_upper) > 0, abs(y_upper), 1)
         }
@@ -226,8 +228,9 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
         if (!is.finite(padding) || padding == 0) {
           padding <- 0.1
         }
-        y_limits <- c(y_lower - padding * 0.25, y_upper + padding)
+        y_limits <- c(low - padding * 0.25, y_upper + padding)
       }
+      
 
       p <- ggplot(stats_df, aes(x = .data[[factor_var]], y = .data$mean)) +
         geom_col(fill = fill_color, color = fill_color, width = 0.65, stat = "identity") +
@@ -240,13 +243,9 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
         )
 
       if (!is.null(annotation_info) && !is.null(annotation_info$data) &&
-          nrow(annotation_info$data) > 0 &&
-          requireNamespace("ggsignif", quietly = TRUE)) {
+          nrow(annotation_info$data) > 0) {
         p <- p + ggsignif::geom_signif(
           data = annotation_info$data,
-          aes(xmin = xmin, xmax = xmax, annotations = annotation, y_position = y_position),
-          inherit.aes = FALSE,
-          manual = TRUE,
           tip_length = 0.01,
           textsize = 4
         )
