@@ -39,8 +39,6 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
         selected = "biplot"
       ),
       hr(),
-      uiOutput(ns("layout_controls")),
-      hr(),
       selectInput(
         ns("pca_color"),
         label = "Color points by:",
@@ -67,7 +65,6 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
         max = 6,
         step = 0.5
       ),
-      add_color_customization_ui(ns, multi_group = TRUE),
       checkboxInput(
         ns("show_loadings"),
         label = "Show loadings",
@@ -78,7 +75,6 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
         label = "Loading arrow scale",
         value = 1.2, min = 0.1, max = 5, step = 0.1
       ),
-      hr(),
       uiOutput(ns("layout_controls")),
       fluidRow(
         column(
@@ -104,6 +100,7 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
           )
         )
       ),
+      add_color_customization_ui(ns, multi_group = TRUE),
       hr(),
       downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;")
     ),
