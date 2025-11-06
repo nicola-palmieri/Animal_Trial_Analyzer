@@ -205,6 +205,8 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
           default_cols = defaults$cols
         )
 
+        layout <- adjust_grid_layout(panel_count, layout)
+
         validation <- validate_grid(panel_count, layout$nrow, layout$ncol)
 
         combined <- NULL

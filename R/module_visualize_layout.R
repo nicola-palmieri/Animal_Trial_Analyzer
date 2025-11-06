@@ -81,6 +81,54 @@ basic_grid_layout <- function(rows = NULL,
   )
 }
 
+adjust_grid_layout <- function(n_items, layout) {
+  if (is.null(layout) || length(layout) == 0) {
+    return(list(nrow = 1L, ncol = 1L))
+  }
+
+  if (is.null(n_items) || length(n_items) == 0 || is.na(n_items)) {
+    n_items <- 1L
+  }
+  n_items <- max(1L, as.integer(n_items))
+
+  rows <- layout$nrow
+  cols <- layout$ncol
+
+  if (is.null(rows) || length(rows) == 0 || is.na(rows)) {
+    rows <- 1L
+  }
+  if (is.null(cols) || length(cols) == 0 || is.na(cols)) {
+    cols <- 1L
+  }
+
+  rows <- max(1L, as.integer(rows))
+  cols <- max(1L, as.integer(cols))
+
+  if (rows * cols <= n_items) {
+    return(list(nrow = rows, ncol = cols))
+  }
+
+  repeat {
+    adjusted <- FALSE
+
+    if (rows > 1L && (rows - 1L) * cols >= n_items) {
+      rows <- rows - 1L
+      adjusted <- TRUE
+    }
+
+    if (cols > 1L && rows * (cols - 1L) >= n_items) {
+      cols <- cols - 1L
+      adjusted <- TRUE
+    }
+
+    if (!adjusted) {
+      break
+    }
+  }
+
+  list(nrow = rows, ncol = cols)
+}
+
 numeric_sync_state <- function(session) {
   state <- session$userData$ta_numeric_sync_state
   if (is.null(state) || !is.environment(state)) {

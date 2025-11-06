@@ -344,6 +344,8 @@ build_descriptive_categorical_plot <- function(df,
     default_cols = defaults$cols
   )
 
+  layout <- adjust_grid_layout(n_panels, layout)
+
   validation <- validate_grid(n_panels, layout$nrow, layout$ncol)
 
   combined <- NULL
