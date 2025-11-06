@@ -14,6 +14,7 @@ visualize_numeric_histograms_ui <- function(id) {
       column(6, numericInput(ns("resp_rows"), "Grid rows",    value = NA, min = 1, max = 10, step = 1)),
       column(6, numericInput(ns("resp_cols"), "Grid columns", value = NA, min = 1, max = 10, step = 1))
     ),
+    add_color_customization_ui(ns, multi_group = TRUE),
     hr(),
     downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;")
   )
@@ -32,6 +33,7 @@ visualize_numeric_histograms_plot_ui <- function(id) {
 
 visualize_numeric_histograms_server <- function(id, filtered_data, summary_info, is_active = NULL) {
   moduleServer(id, function(input, output, session) {
+    ns <- session$ns
 
     resolve_input_value <- function(x) {
       if (is.null(x)) return(NULL)
@@ -56,6 +58,32 @@ visualize_numeric_histograms_server <- function(id, filtered_data, summary_info,
       if (is.null(h) || !is.numeric(h) || is.na(h)) 300 else h
     })
 
+    color_var_reactive <- reactive({
+      info <- summary_info()
+      if (is.null(info)) return(NULL)
+
+      group_var <- resolve_input_value(info$group_var)
+      if (is.null(group_var) || identical(group_var, "") || identical(group_var, "None")) {
+        return(NULL)
+      }
+
+      dat <- filtered_data()
+      if (is.null(dat) || !is.data.frame(dat) || !group_var %in% names(dat)) {
+        return(NULL)
+      }
+
+      group_var
+    })
+
+    custom_colors <- add_color_customization_server(
+      ns = ns,
+      input = input,
+      output = output,
+      data = filtered_data,
+      color_var_reactive = color_var_reactive,
+      multi_group = TRUE
+    )
+
     plot_info <- reactive({
       # --- Validate summary availability ---
       info <- summary_info()
@@ -78,7 +106,8 @@ visualize_numeric_histograms_server <- function(id, filtered_data, summary_info,
         strata_levels = strata_levels,
         use_density = isTRUE(input$use_density),
         nrow_input = input$resp_rows,
-        ncol_input = input$resp_cols
+        ncol_input = input$resp_cols,
+        custom_colors = custom_colors()
       )
       validate(need(!is.null(out), "No numeric variables available for plotting."))
       out
@@ -166,7 +195,8 @@ build_descriptive_numeric_histogram <- function(df,
                                                 strata_levels = NULL,
                                                 use_density = FALSE,
                                                 nrow_input = NULL,
-                                                ncol_input = NULL) {
+                                                ncol_input = NULL,
+                                                custom_colors = NULL) {
   if (is.null(df) || !is.data.frame(df) || nrow(df) == 0) return(NULL)
   
   num_vars <- names(df)[vapply(df, is.numeric, logical(1))]
@@ -204,7 +234,7 @@ build_descriptive_numeric_histogram <- function(df,
     if (!is.null(group_var)) {
       plot_data[[group_var]] <- droplevels(plot_data[[group_var]])
     }
-    
+
     density_mode <- isTRUE(use_density) && length(unique(plot_data[[var]])) > 1
     
     base <- ggplot(plot_data, aes(x = .data[[var]]))
@@ -212,7 +242,7 @@ build_descriptive_numeric_histogram <- function(df,
     
     if (!is.null(group_var)) {
       group_levels <- levels(plot_data[[group_var]])
-      palette <- resolve_palette_for_levels(group_levels)
+      palette <- resolve_palette_for_levels(group_levels, custom = custom_colors)
       if (density_mode) {
         p <- base +
           geom_density(aes(color = .data[[group_var]], fill = .data[[group_var]]), alpha = 0.3) +
@@ -231,7 +261,7 @@ build_descriptive_numeric_histogram <- function(df,
           labs(fill = group_var)
       }
     } else {
-      single_color <- resolve_single_color()
+      single_color <- resolve_single_color(custom_colors)
       if (density_mode) {
         p <- base + geom_density(fill = single_color, color = single_color, alpha = 0.35)
       } else {

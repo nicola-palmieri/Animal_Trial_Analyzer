@@ -31,7 +31,13 @@ render_color_inputs <- function(ns, data, color_var) {
   )
 }
 
-resolve_single_color <- function() {
+resolve_single_color <- function(custom = NULL) {
+  if (!is.null(custom) && length(custom) > 0) {
+    candidate <- unname(custom[[1]])
+    if (!is.null(candidate) && nzchar(candidate)) {
+      return(candidate)
+    }
+  }
   basic_color_palette[1]
 }
 

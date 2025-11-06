@@ -34,6 +34,7 @@ visualize_numeric_boxplots_ui <- function(id) {
         )
       )
     ),
+    add_color_customization_ui(ns, multi_group = TRUE),
     hr(),
     downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;")
   )
@@ -52,6 +53,7 @@ visualize_numeric_boxplots_plot_ui <- function(id) {
 
 visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, is_active = NULL) {
   moduleServer(id, function(input, output, session) {
+    ns <- session$ns
 
     resolve_input_value <- function(x) {
       if (is.null(x)) return(NULL)
@@ -76,6 +78,32 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
       if (is.null(h) || !is.numeric(h) || is.na(h)) 300 else h
     })
 
+    color_var_reactive <- reactive({
+      info <- summary_info()
+      if (is.null(info)) return(NULL)
+
+      group_var <- resolve_input_value(info$group_var)
+      if (is.null(group_var) || identical(group_var, "") || identical(group_var, "None")) {
+        return(NULL)
+      }
+
+      dat <- filtered_data()
+      if (is.null(dat) || !is.data.frame(dat) || !group_var %in% names(dat)) {
+        return(NULL)
+      }
+
+      group_var
+    })
+
+    custom_colors <- add_color_customization_server(
+      ns = ns,
+      input = input,
+      output = output,
+      data = filtered_data,
+      color_var_reactive = color_var_reactive,
+      multi_group = TRUE
+    )
+
     plot_info <- reactive({
       req(module_active())
 
@@ -97,7 +125,8 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
         group_var = group_var,
         show_points = isTRUE(input$show_points),
         nrow_input = input$resp_rows,
-        ncol_input = input$resp_cols
+        ncol_input = input$resp_cols,
+        custom_colors = custom_colors()
       )
 
       validate(need(!is.null(out), "No numeric variables available for plotting."))
@@ -185,7 +214,8 @@ build_descriptive_numeric_boxplot <- function(df,
                                               group_var = NULL,
                                               show_points = TRUE,
                                               nrow_input = NULL,
-                                              ncol_input = NULL) {
+                                              ncol_input = NULL,
+                                              custom_colors = NULL) {
   if (is.null(df) || !is.data.frame(df) || nrow(df) == 0) return(NULL)
   
   num_vars <- names(df)[vapply(df, is.numeric, logical(1))]
@@ -208,7 +238,7 @@ build_descriptive_numeric_boxplot <- function(df,
     
     if (!is.null(group_var)) {
       group_levels <- levels(df[[group_var]])
-      palette <- resolve_palette_for_levels(group_levels)
+      palette <- resolve_palette_for_levels(group_levels, custom = custom_colors)
       p <- ggplot(df, aes(x = .data[[group_var]], y = .data[[var]], fill = .data[[group_var]])) +
         geom_boxplot(outlier.shape = NA, width = 0.6) +
         scale_fill_manual(values = palette) +
@@ -223,12 +253,12 @@ build_descriptive_numeric_boxplot <- function(df,
     } else {
       # ✅ always provide an x aesthetic
       p <- ggplot(df, aes(x = factor(1), y = .data[[var]])) +
-        geom_boxplot(fill = resolve_single_color(), width = 0.3) +
+        geom_boxplot(fill = resolve_single_color(custom_colors), width = 0.3) +
         theme_minimal(base_size = 13) +
         labs(title = var, x = NULL, y = var) +
         theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
       if (isTRUE(show_points)) {
-        p <- p + geom_jitter(color = resolve_single_color(), width = 0.05, alpha = 0.5, size = 1)
+        p <- p + geom_jitter(color = resolve_single_color(custom_colors), width = 0.05, alpha = 0.5, size = 1)
       }
     }
     

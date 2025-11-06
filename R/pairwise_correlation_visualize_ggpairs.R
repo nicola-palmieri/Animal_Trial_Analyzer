@@ -13,6 +13,7 @@ pairwise_correlation_visualize_ggpairs_ui <- function(id) {
       column(6, numericInput(ns("resp_rows"),    "Grid rows",    NA, 1, 10, 1)),
       column(6, numericInput(ns("resp_cols"),    "Grid columns", NA, 1, 10, 1))
     ),
+    add_color_customization_ui(ns, multi_group = TRUE),
     hr(),
     downloadButton(ns("download_plot"), "Download Plot", style = "width: 100%;")
   )
@@ -21,6 +22,7 @@ pairwise_correlation_visualize_ggpairs_ui <- function(id) {
 
 pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, correlation_info) {
   moduleServer(id, function(input, output, session) {
+    ns <- session$ns
 
     resolve_input_value <- function(x) {
       if (is.null(x)) return(NULL)
@@ -41,6 +43,32 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
     plot_height <- reactive({
       sanitize_numeric(input$plot_height, 600, 200, 2000)
     })
+
+    color_var_reactive <- reactive({
+      info <- correlation_info()
+      if (is.null(info)) return(NULL)
+
+      group_var <- resolve_input_value(info$group_var)
+      if (is.null(group_var) || identical(group_var, "") || identical(group_var, "None")) {
+        return(NULL)
+      }
+
+      dat <- filtered_data()
+      if (is.null(dat) || !is.data.frame(dat) || !group_var %in% names(dat)) {
+        return(NULL)
+      }
+
+      group_var
+    })
+
+    custom_colors <- add_color_customization_server(
+      ns = ns,
+      input = input,
+      output = output,
+      data = filtered_data,
+      color_var_reactive = color_var_reactive,
+      multi_group = TRUE
+    )
 
     build_ggpairs_plot <- function(data, color_value, title = NULL) {
       validate(need(is.data.frame(data) && nrow(data) > 0, "No data available for plotting."))
@@ -126,7 +154,8 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
 
       if (is.null(group_var)) {
         plot_data <- data[, selected_vars, drop = FALSE]
-        plot_obj <- build_ggpairs_plot(plot_data, basic_color_palette[1])
+        color_choice <- resolve_single_color(custom_colors())
+        plot_obj <- build_ggpairs_plot(plot_data, color_choice)
         defaults <- compute_default_grid(1L)
         layout <- list(nrow = defaults$rows, ncol = defaults$cols)
         list(
@@ -150,12 +179,7 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
         available_levels <- available_levels[nzchar(available_levels)]
         validate(need(length(available_levels) > 0, "No strata available for plotting."))
 
-        colors <- basic_color_palette[seq_len(min(length(basic_color_palette), length(available_levels)))]
-        if (length(colors) < length(available_levels)) {
-          extra <- rep("#7F7F7F", length(available_levels) - length(colors))
-          colors <- c(colors, extra)
-        }
-        names(colors) <- available_levels
+        colors <- resolve_palette_for_levels(available_levels, custom = custom_colors())
 
         plots <- list()
         for (level in available_levels) {

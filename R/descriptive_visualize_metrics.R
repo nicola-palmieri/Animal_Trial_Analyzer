@@ -11,6 +11,7 @@ metric_panel_ui <- function(id, default_width = 400, default_height = 300,
       column(6, numericInput(ns("plot_width"),  "Subplot width (px)",  default_width, 200, 2000, 50)),
       column(6, numericInput(ns("plot_height"), "Subplot height (px)", default_height, 200, 2000, 50))
     ),
+    add_color_customization_ui(ns, multi_group = TRUE),
     hr(),
     downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;")
   )
@@ -172,20 +173,20 @@ tidy_descriptive_metric <- function(df, prefix) {
 }
 
 
-build_metric_plot <- function(metric_info, y_label, title) {
+build_metric_plot <- function(metric_info, y_label, title, custom_colors = NULL) {
   df <- metric_info$data
   has_group <- isTRUE(metric_info$has_group)
-  
+
   if (has_group) {
     legend_title <- if (!is.null(metric_info$group_label)) metric_info$group_label else "Group"
-    palette <- resolve_palette_for_levels(levels(df$.group))
+    palette <- resolve_palette_for_levels(levels(df$.group), custom = custom_colors)
     p <- ggplot(df, aes(x = variable, y = value, fill = .group)) +
       geom_col(position = position_dodge(width = 0.7), width = 0.65) +
       scale_fill_manual(values = palette) +
       labs(fill = legend_title)
   } else {
     p <- ggplot(df, aes(x = variable, y = value)) +
-      geom_col(width = 0.65, fill = resolve_single_color()) +
+      geom_col(width = 0.65, fill = resolve_single_color(custom_colors)) +
       guides(fill = "none")
   }
   
@@ -202,6 +203,7 @@ build_metric_plot <- function(metric_info, y_label, title) {
 metric_module_server <- function(id, filtered_data, summary_info, metric_key,
                                  y_label, title, filename_prefix, is_active = NULL) {
   moduleServer(id, function(input, output, session) {
+    ns <- session$ns
 
     plot_width <- reactive({
       w <- input$plot_width
@@ -220,6 +222,32 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
         isTRUE(is_active())
       }
     })
+
+    color_var_reactive <- reactive({
+      info <- summary_info()
+      if (is.null(info)) return(NULL)
+
+      group_var <- resolve_metric_input(info$group_var)
+      if (is.null(group_var) || identical(group_var, "") || identical(group_var, "None")) {
+        return(NULL)
+      }
+
+      dat <- filtered_data()
+      if (is.null(dat) || !is.data.frame(dat) || !group_var %in% names(dat)) {
+        return(NULL)
+      }
+
+      group_var
+    })
+
+    custom_colors <- add_color_customization_server(
+      ns = ns,
+      input = input,
+      output = output,
+      data = filtered_data,
+      color_var_reactive = color_var_reactive,
+      multi_group = TRUE
+    )
 
     plot_details <- reactive({
       req(module_active())
@@ -258,7 +286,7 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
       }
 
       list(
-        plot = build_metric_plot(metric_info, y_label, title)
+        plot = build_metric_plot(metric_info, y_label, title, custom_colors = custom_colors())
       )
     })
 
