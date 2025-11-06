@@ -834,10 +834,12 @@ build_anova_plot_info <- function(data, info, layout_values, line_colors = NULL)
         build_plot(stratum_plots[[stratum_name]], stratum_name, y_limits)
       })
 
+      current_layout <- adjust_grid_layout(length(stratum_plots), strata_layout)
+
       combined <- patchwork::wrap_plots(
         plotlist = strata_plot_list,
-        nrow = strata_layout$nrow,
-        ncol = strata_layout$ncol
+        nrow = current_layout$nrow,
+        ncol = current_layout$ncol
       )
 
       title_plot <- ggplot() +
@@ -874,6 +876,10 @@ build_anova_plot_info <- function(data, info, layout_values, line_colors = NULL)
     strata_panel_count <- n_expected_strata
   }
 
+  if (has_strata) {
+    strata_layout <- adjust_grid_layout(max(1L, strata_panel_count), strata_layout)
+  }
+
   response_defaults <- compute_default_grid(length(response_plots))
   response_layout <- basic_grid_layout(
     rows = layout_input$resp_rows,
@@ -881,6 +887,8 @@ build_anova_plot_info <- function(data, info, layout_values, line_colors = NULL)
     default_rows = response_defaults$rows,
     default_cols = response_defaults$cols
   )
+
+  response_layout <- adjust_grid_layout(length(response_plots), response_layout)
 
   strata_validation <- if (has_strata) {
     validate_grid(max(1L, strata_panel_count), strata_layout$nrow, strata_layout$ncol)
