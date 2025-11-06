@@ -67,6 +67,7 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
         max = 6,
         step = 0.5
       ),
+      add_color_customization_ui(ns, multi_group = TRUE),
       checkboxInput(
         ns("show_loadings"),
         label = "Show loadings",
@@ -117,6 +118,7 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
 
 visualize_pca_server <- function(id, filtered_data, model_fit) {
   moduleServer(id, function(input, output, session) {
+    ns <- session$ns
     display_mode <- reactiveVal(NULL)
     # -- Reactives ------------------------------------------------------------
     model_info <- reactive({
@@ -161,6 +163,45 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
       data <- if (!is.null(entry)) entry$data else NULL
       .pca_aesthetic_choices(data)
     })
+
+    color_data <- reactive({
+      entries <- pca_entries()
+      entry <- pick_reference_entry(entries)
+      if (!is.null(entry) && !is.null(entry$data)) {
+        entry$data
+      } else if (!is.null(filtered_data)) {
+        if (is.reactive(filtered_data)) {
+          filtered_data()
+        } else {
+          filtered_data
+        }
+      } else {
+        NULL
+      }
+    })
+
+    color_var_reactive <- reactive({
+      var <- input$pca_color
+      if (is.null(var) || identical(var, "None") || !nzchar(var)) {
+        return(NULL)
+      }
+
+      data <- color_data()
+      if (is.null(data) || !is.data.frame(data) || !var %in% names(data)) {
+        return(NULL)
+      }
+
+      var
+    })
+
+    custom_colors <- add_color_customization_server(
+      ns = ns,
+      input = input,
+      output = output,
+      data = color_data,
+      color_var_reactive = color_var_reactive,
+      multi_group = TRUE
+    )
 
     observeEvent(available_choices(), {
       choices <- available_choices()
@@ -367,7 +408,8 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
           label_var = local_label,
           label_size = label_size,
           show_loadings = show_loadings,
-          loading_scale = loading_scale
+          loading_scale = loading_scale,
+          custom_colors = custom_colors()
         )
 
         if (is_stratified && !is.null(title) && nzchar(title)) {
@@ -501,7 +543,8 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
 
 build_pca_biplot <- function(pca_obj, data, color_var = NULL, shape_var = NULL,
                              label_var = NULL, label_size = 2,
-                             show_loadings = FALSE, loading_scale = 1.2) {
+                             show_loadings = FALSE, loading_scale = 1.2,
+                             custom_colors = NULL) {
   stopifnot(!is.null(pca_obj$x))
   
   scores <- as.data.frame(pca_obj$x[, 1:2])
@@ -540,7 +583,7 @@ build_pca_biplot <- function(pca_obj, data, color_var = NULL, shape_var = NULL,
   if (!is.null(color_var)) aes_mapping <- modifyList(aes_mapping, aes(color = .data[[color_var]]))
   if (!is.null(shape_var)) aes_mapping <- modifyList(aes_mapping, aes(shape = .data[[shape_var]]))
   
-  single_color <- resolve_single_color()
+  single_color <- resolve_single_color(custom_colors)
   g <- ggplot(plot_data, aes_mapping) +
     geom_point(
       size = 3,
@@ -560,7 +603,7 @@ build_pca_biplot <- function(pca_obj, data, color_var = NULL, shape_var = NULL,
     )
   
   if (!is.null(color_var)) {
-    palette <- resolve_palette_for_levels(color_levels)
+    palette <- resolve_palette_for_levels(color_levels, custom = custom_colors)
     g <- g + scale_color_manual(values = palette)
   }
   
