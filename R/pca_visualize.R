@@ -73,7 +73,6 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
         max = 6,
         step = 0.5
       ),
-      add_color_customization_ui(ns, multi_group = TRUE),
       checkboxInput(
         ns("show_loadings"),
         label = "Show loadings",
