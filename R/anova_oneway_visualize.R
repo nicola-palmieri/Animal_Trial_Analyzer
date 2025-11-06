@@ -16,6 +16,11 @@ visualize_oneway_ui <- function(id) {
         choices = c("Mean ± SE" = "mean_se"),
         selected = "mean_se"
       ),
+      checkboxInput(
+        ns("show_barplot"),
+        label = "Show barplot with p-values",
+        value = FALSE
+      ),
       hr(),
       uiOutput(ns("layout_controls")),
       fluidRow(
@@ -74,12 +79,279 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
       )
     })
     
+    parse_posthoc_p <- function(values) {
+      if (is.null(values)) {
+        return(numeric(0))
+      }
+      if (is.numeric(values)) {
+        return(as.numeric(values))
+      }
+      vals <- as.character(values)
+      vals <- gsub("\\*", "", vals, fixed = TRUE)
+      vals <- trimws(vals)
+      vapply(vals, function(v) {
+        if (!nzchar(v)) return(NA_real_)
+        if (substr(v, 1, 1) == "<") {
+          suppressWarnings(as.numeric(sub("^<\\s*", "", v)))
+        } else {
+          suppressWarnings(as.numeric(v))
+        }
+      }, numeric(1))
+    }
+
+    build_significance_annotations <- function(posthoc_entry, factor_name, stats_df) {
+      if (is.null(posthoc_entry) || !is.data.frame(posthoc_entry)) {
+        return(list(data = NULL, ymax = max(stats_df$mean + stats_df$se, na.rm = TRUE)))
+      }
+      if (is.null(factor_name) || !factor_name %in% names(stats_df)) {
+        return(list(data = NULL, ymax = max(stats_df$mean + stats_df$se, na.rm = TRUE)))
+      }
+      if (!"Factor" %in% names(posthoc_entry) || !"contrast" %in% names(posthoc_entry)) {
+        return(list(data = NULL, ymax = max(stats_df$mean + stats_df$se, na.rm = TRUE)))
+      }
+
+      contrast_df <- posthoc_entry[posthoc_entry$Factor == factor_name, , drop = FALSE]
+      if (nrow(contrast_df) == 0 || !"p.value" %in% names(contrast_df)) {
+        return(list(data = NULL, ymax = max(stats_df$mean + stats_df$se, na.rm = TRUE)))
+      }
+
+      raw_p <- parse_posthoc_p(contrast_df$p.value)
+      significant_rows <- which(!is.na(raw_p) & raw_p < 0.05)
+      if (length(significant_rows) == 0) {
+        return(list(data = NULL, ymax = max(stats_df$mean + stats_df$se, na.rm = TRUE)))
+      }
+
+      x_levels <- if (is.factor(stats_df[[factor_name]])) levels(stats_df[[factor_name]]) else unique(as.character(stats_df[[factor_name]]))
+      x_levels <- x_levels[!is.na(x_levels)]
+
+      build_star <- function(p) {
+        if (is.na(p)) return(NA_character_)
+        if (p < 0.001) {
+          "***"
+        } else if (p < 0.01) {
+          "**"
+        } else if (p < 0.05) {
+          "*"
+        } else {
+          NA_character_
+        }
+      }
+
+      used_pairs <- character(0)
+      rows <- lapply(significant_rows, function(idx) {
+        contrast <- as.character(contrast_df$contrast[idx])
+        parts <- trimws(unlist(strsplit(contrast, "-", fixed = TRUE)))
+        if (length(parts) != 2) {
+          parts <- trimws(unlist(strsplit(contrast, " - ", fixed = TRUE)))
+        }
+        if (length(parts) != 2) return(NULL)
+        if (!all(parts %in% x_levels)) return(NULL)
+        annotation <- build_star(raw_p[idx])
+        if (!nzchar(annotation)) return(NULL)
+        key <- paste(sort(parts), collapse = "__")
+        if (key %in% used_pairs) return(NULL)
+        used_pairs <<- c(used_pairs, key)
+        list(group1 = parts[1], group2 = parts[2], annotation = annotation)
+      })
+
+      rows <- Filter(Negate(is.null), rows)
+      if (length(rows) == 0) {
+        return(list(data = NULL, ymax = max(stats_df$mean + stats_df$se, na.rm = TRUE)))
+      }
+
+      base_y <- suppressWarnings(max(stats_df$mean + stats_df$se, na.rm = TRUE))
+      if (!is.finite(base_y)) base_y <- 0
+      pad <- if (base_y == 0) 0.1 else abs(base_y) * 0.1
+
+      annotations_df <- data.frame(
+        xmin = factor(vapply(rows, `[[`, character(1), "group1"), levels = x_levels),
+        xmax = factor(vapply(rows, `[[`, character(1), "group2"), levels = x_levels),
+        annotation = vapply(rows, `[[`, character(1), "annotation"),
+        stringsAsFactors = FALSE
+      )
+
+      if (nrow(annotations_df) == 0) {
+        return(list(data = NULL, ymax = max(base_y, 0)))
+      }
+
+      annotations_df$y_position <- base_y + pad + (seq_len(nrow(annotations_df)) - 1) * pad
+
+      list(
+        data = annotations_df,
+        ymax = max(annotations_df$y_position, na.rm = TRUE) + pad * 0.5
+      )
+    }
+
+    build_barplot_with_significance <- function(info_obj, model_obj, fill_colors) {
+      if (is.null(info_obj$summary_stats) || length(info_obj$summary_stats) == 0) {
+        return(NULL)
+      }
+
+      factor1 <- model_obj$factors$factor1
+      factor2 <- model_obj$factors$factor2
+      posthoc <- model_obj$posthoc %||% list()
+      responses <- names(info_obj$summary_stats)
+
+      if (is.null(factor1) || length(responses) == 0) {
+        return(NULL)
+      }
+
+      color_values <- fill_colors()
+      single_fill <- if (is.null(color_values) || length(color_values) == 0) {
+        resolve_single_color()
+      } else {
+        unname(color_values)[1]
+      }
+
+      build_panel_plot <- function(panel_info, resp_name, stratum_name = NULL) {
+        stats_df <- panel_info$data
+        if (is.null(stats_df) || nrow(stats_df) == 0) return(NULL)
+        stats_df$mean <- as.numeric(stats_df$mean)
+        stats_df$se <- as.numeric(stats_df$se)
+
+        posthoc_entry <- NULL
+        if (is.list(posthoc) && resp_name %in% names(posthoc)) {
+          posthoc_entry <- posthoc[[resp_name]]
+          if (is.list(posthoc_entry) && !is.data.frame(posthoc_entry)) {
+            if (!is.null(stratum_name) && stratum_name %in% names(posthoc_entry)) {
+              posthoc_entry <- posthoc_entry[[stratum_name]]
+            } else {
+              posthoc_entry <- NULL
+            }
+          }
+        }
+
+        annotation_info <- tryCatch(
+          build_significance_annotations(posthoc_entry, factor1, stats_df),
+          error = function(...) list(data = NULL, ymax = max(stats_df$mean + stats_df$se, na.rm = TRUE))
+        )
+
+        y_cap <- suppressWarnings(max(stats_df$mean + stats_df$se, na.rm = TRUE))
+        if (!is.finite(y_cap)) y_cap <- 0
+        if (!is.null(annotation_info$ymax) && is.finite(annotation_info$ymax)) {
+          y_cap <- max(y_cap, annotation_info$ymax)
+        }
+        if (y_cap <= 0) {
+          y_cap <- 1
+        }
+
+        p <- NULL
+        if (is.null(factor2) || !factor2 %in% names(stats_df)) {
+          fill_value <- single_fill
+          p <- ggplot(stats_df, aes(x = !!sym(factor1), y = mean)) +
+            geom_col(fill = fill_value, width = 0.65) +
+            geom_errorbar(aes(ymin = mean - se, ymax = mean + se), width = 0.2)
+        } else {
+          vals <- stats_df[[factor2]]
+          group_levels <- if (is.factor(vals)) levels(vals) else unique(as.character(vals))
+          group_levels <- group_levels[!is.na(group_levels)]
+
+          if (length(group_levels) == 0) {
+            fill_value <- single_fill
+            p <- ggplot(stats_df, aes(x = !!sym(factor1), y = mean)) +
+              geom_col(fill = fill_value, width = 0.65) +
+              geom_errorbar(aes(ymin = mean - se, ymax = mean + se), width = 0.2)
+          } else {
+            palette <- resolve_palette_for_levels(group_levels, custom = color_values)
+            stats_df[[factor2]] <- factor(as.character(stats_df[[factor2]]), levels = group_levels)
+            dodge <- position_dodge(width = 0.7)
+            p <- ggplot(stats_df, aes(x = !!sym(factor1), y = mean, fill = !!sym(factor2))) +
+              geom_col(position = dodge, width = 0.6) +
+              geom_errorbar(aes(ymin = mean - se, ymax = mean + se), width = 0.2, position = dodge) +
+              scale_fill_manual(values = palette) +
+              labs(fill = factor2)
+            annotation_info$data <- NULL
+          }
+        }
+
+        p <- p +
+          scale_y_continuous(limits = c(0, y_cap), expand = expansion(mult = c(0, 0.05))) +
+          labs(x = factor1, y = "Mean ± SE") +
+          theme_minimal(base_size = 14) +
+          theme(
+            panel.grid.minor = element_blank(),
+            panel.grid.major.x = element_blank(),
+            plot.title = element_text(size = 12, face = "bold")
+          ) +
+          ggtitle(panel_info$title)
+
+        if (!is.null(annotation_info$data) && nrow(annotation_info$data) > 0) {
+          p <- p +
+            ggsignif::geom_signif(
+              data = annotation_info$data,
+              aes(xmin = xmin, xmax = xmax, annotations = annotation, y_position = y_position),
+              inherit.aes = FALSE,
+              tip_length = 0.01,
+              textsize = 4
+            )
+        }
+
+        p
+      }
+
+      response_plots <- list()
+      for (resp_name in responses) {
+        resp_summary <- info_obj$summary_stats[[resp_name]]
+        if (is.null(resp_summary) || length(resp_summary$panels) == 0) next
+
+        panel_plots <- lapply(resp_summary$panels, function(panel) {
+          build_panel_plot(panel, resp_name, panel$stratum)
+        })
+        panel_plots <- Filter(Negate(is.null), panel_plots)
+        if (length(panel_plots) == 0) next
+
+        if (info_obj$has_strata) {
+          combined <- patchwork::wrap_plots(
+            plotlist = panel_plots,
+            nrow = resp_summary$strata_layout$nrow,
+            ncol = resp_summary$strata_layout$ncol
+          )
+          title_plot <- ggplot() +
+            theme_void() +
+            ggtitle(resp_name) +
+            theme(
+              plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+              plot.margin = margin(t = 0, r = 0, b = 6, l = 0)
+            )
+          response_plots[[resp_name]] <- title_plot / combined + patchwork::plot_layout(heights = c(0.08, 1))
+        } else {
+          response_plots[[resp_name]] <- panel_plots[[1]]
+        }
+      }
+
+      if (length(response_plots) == 0) {
+        return(NULL)
+      }
+
+      if (length(response_plots) == 1) {
+        return(response_plots[[1]])
+      }
+
+      patchwork::wrap_plots(
+        plotlist = response_plots,
+        nrow = info_obj$layout$responses$nrow,
+        ncol = info_obj$layout$responses$ncol
+      ) &
+        patchwork::plot_layout(guides = "collect")
+    }
+
     plot_obj <- reactive({
       info <- plot_info()
       req(info)
       if (!is.null(info$warning) || is.null(info$plot)) {
         return(NULL)
       }
+
+      if (isTRUE(input$show_barplot)) {
+        model_details <- model_info()
+        if (!is.null(model_details)) {
+          bar_plot <- build_barplot_with_significance(info, model_details, custom_colors)
+          if (!is.null(bar_plot)) {
+            return(bar_plot)
+          }
+        }
+      }
+
       info$plot
     })
     
@@ -137,13 +409,9 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
     
     # ---- Render plot ----
     output$plot <- renderPlot({
-      info <- model_info()
-      req(info, input$plot_type)
-      if (input$plot_type == "mean_se") {
-        plot <- plot_obj()
-        if (is.null(plot)) return(NULL)
-        plot
-      }
+      plot <- plot_obj()
+      req(plot)
+      plot
     },
     width = function() plot_size()$w,
     height = function() plot_size()$h,

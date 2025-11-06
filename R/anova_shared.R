@@ -711,6 +711,7 @@ build_anova_plot_info <- function(data, info, layout_values, line_colors = NULL)
   }
   
   response_plots <- list()
+  summary_stats <- list()
 
   layout_input <- list(
     strata_rows = suppressWarnings(as.numeric(layout_values$strata_rows)),
@@ -830,6 +831,19 @@ build_anova_plot_info <- function(data, info, layout_values, line_colors = NULL)
       
       strata_panel_count <- max(strata_panel_count, length(stratum_plots))
 
+      panel_entries <- lapply(names(stratum_plots), function(stratum_name) {
+        list(
+          title = stratum_name,
+          stratum = stratum_name,
+          data = stratum_plots[[stratum_name]],
+          y_limits = y_limits
+        )
+      })
+      summary_stats[[resp]] <- list(
+        panels = panel_entries,
+        strata_layout = list(nrow = strata_layout$nrow, ncol = strata_layout$ncol)
+      )
+
       strata_plot_list <- lapply(names(stratum_plots), function(stratum_name) {
         build_plot(stratum_plots[[stratum_name]], stratum_name, y_limits)
       })
@@ -862,6 +876,16 @@ build_anova_plot_info <- function(data, info, layout_values, line_colors = NULL)
         y_limits <- NULL
       }
       
+      summary_stats[[resp]] <- list(
+        panels = list(list(
+          title = resp,
+          stratum = NULL,
+          data = stats_df,
+          y_limits = y_limits
+        )),
+        strata_layout = list(nrow = 1L, ncol = 1L)
+      )
+
       response_plots[[resp]] <- build_plot(stats_df, resp, y_limits)
     }
   }
@@ -933,7 +957,8 @@ build_anova_plot_info <- function(data, info, layout_values, line_colors = NULL)
     defaults = list(
       strata = strata_defaults,
       responses = response_defaults
-    )
+    ),
+    summary_stats = summary_stats
   )
 }
 
