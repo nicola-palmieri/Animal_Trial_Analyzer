@@ -73,6 +73,7 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
         max = 6,
         step = 0.5
       ),
+      add_color_customization_ui(ns, multi_group = TRUE),
       checkboxInput(
         ns("show_loadings"),
         label = "Show loadings",
@@ -475,9 +476,13 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
       panel_count <- length(plot_list)
       defaults <- compute_default_grid(panel_count)
 
+      use_custom_layout <- !is.null(facet_var) && panel_count > 1
+      rows_input <- if (use_custom_layout) suppressWarnings(as.numeric(input$grid_rows)) else NA
+      cols_input <- if (use_custom_layout) suppressWarnings(as.numeric(input$grid_cols)) else NA
+
       layout <- basic_grid_layout(
-        rows = suppressWarnings(as.numeric(input$grid_rows)),
-        cols = suppressWarnings(as.numeric(input$grid_cols)),
+        rows = rows_input,
+        cols = cols_input,
         default_rows = defaults$rows,
         default_cols = defaults$cols
       )
