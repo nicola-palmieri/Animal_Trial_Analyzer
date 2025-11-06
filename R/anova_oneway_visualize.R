@@ -174,12 +174,17 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
       xmax_labels <- level_values[positions2]
 
       signif_df <- data.frame(
-        xmin = factor(xmin_labels, levels = level_values),
-        xmax = factor(xmax_labels, levels = level_values),
-        annotation = annotations,
+        xmin = positions1,
+        xmax = positions2,
+        annotations = annotations,
         y_position = y_positions,
         stringsAsFactors = FALSE
       )
+
+      # Provide the original factor labels for downstream consumers that may want
+      # to display or debug the comparisons.
+      signif_df$xmin_label <- factor(xmin_labels, levels = level_values)
+      signif_df$xmax_label <- factor(xmax_labels, levels = level_values)
 
       list(
         data = signif_df,
@@ -246,6 +251,8 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
           nrow(annotation_info$data) > 0) {
         p <- p + ggsignif::geom_signif(
           data = annotation_info$data,
+          manual = TRUE,
+          inherit.aes = FALSE,
           tip_length = 0.01,
           textsize = 4
         )
