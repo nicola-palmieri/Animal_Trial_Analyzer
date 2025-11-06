@@ -8,12 +8,6 @@ pca_ui <- function(id) {
     config = tagList(
       selectInput(ns("vars"), "Numeric variables:", choices = NULL, multiple = TRUE),
       br(),
-      tags$details(
-        tags$summary(strong("Advanced options")),
-        br(),
-        stratification_ui("strat", ns)
-      ),
-      br(),
       fluidRow(
         column(6, actionButton(ns("run_pca"), "Show PCA summary", width = "100%")),
         column(6, downloadButton(ns("download_all"), "Download all results", style = "width: 100%;"))
@@ -36,8 +30,6 @@ pca_server <- function(id, filtered_data) {
       num_vars <- names(df())[sapply(df(), is.numeric)]
       updateSelectInput(session, "vars", choices = num_vars, selected = num_vars)
     })
-
-    strat_info <- stratification_server("strat", df)
 
     run_pca_on_subset <- function(subset_data, selected_vars) {
       if (is.null(subset_data) || nrow(subset_data) == 0) {
@@ -85,56 +77,12 @@ pca_server <- function(id, filtered_data) {
       selected_vars <- intersect(input$vars, numeric_vars)
       validate(need(length(selected_vars) > 1, "Select at least two numeric variables for PCA."))
 
-      strat_details <- strat_info()
-      stratify_var <- strat_details$var
-      strata_levels <- strat_details$levels
-      local_data <- data
-
-      if (!is.null(stratify_var)) {
-        if (is.null(strata_levels) || length(strata_levels) == 0) {
-          values <- local_data[[stratify_var]]
-          values <- values[!is.na(values)]
-          strata_levels <- unique(as.character(values))
-        }
-
-        strata_levels <- strata_levels[nzchar(strata_levels)]
-
-        if (length(strata_levels) == 0) {
-          return(list(
-            group_var = stratify_var,
-            strata_levels = character(0),
-            selected_vars = selected_vars,
-            results = list()
-          ))
-        }
-
-        keep_rows <- !is.na(local_data[[stratify_var]]) &
-          as.character(local_data[[stratify_var]]) %in% strata_levels
-
-        local_data <- local_data[keep_rows, , drop = FALSE]
-        local_data[[stratify_var]] <- factor(
-          as.character(local_data[[stratify_var]]),
-          levels = strata_levels
-        )
-      }
-
-      results <- list()
-
-      if (is.null(stratify_var)) {
-        results[["Overall"]] <- run_pca_on_subset(local_data, selected_vars)
-      } else {
-        for (level in strata_levels) {
-          subset_data <- local_data[as.character(local_data[[stratify_var]]) == level, , drop = FALSE]
-          results[[level]] <- run_pca_on_subset(subset_data, selected_vars)
-        }
-      }
+      result <- run_pca_on_subset(data, selected_vars)
 
       list(
-        group_var = stratify_var,
-        strata_levels = strata_levels,
         selected_vars = selected_vars,
-        results = results,
-        data_used = local_data
+        result = result,
+        data_used = result$data
       )
     })
 
@@ -143,40 +91,26 @@ pca_server <- function(id, filtered_data) {
       results <- pca_result()
       validate(need(!is.null(results), "Run the PCA analysis to view results."))
 
-      entries <- results$results
-      if (is.null(entries) || length(entries) == 0) {
-        cat("No PCA results available.")
+      entry <- results$result
+      if (is.null(entry) || is.null(entry$model)) {
+        message <- if (!is.null(entry$message) && nzchar(entry$message)) {
+          entry$message
+        } else {
+          "Not enough data to compute PCA."
+        }
+        cat(message)
         return(invisible())
       }
 
-      multiple <- length(entries) > 1
-
-      for (name in names(entries)) {
-        entry <- entries[[name]]
-        if (multiple) {
-          cat(sprintf("===== Stratum: %s =====\n", name))
-        }
-
-        if (is.null(entry) || is.null(entry$model)) {
-          message <- if (!is.null(entry$message) && nzchar(entry$message)) {
-            entry$message
-          } else {
-            "Not enough data to compute PCA."
-          }
-          cat(message, "\n\n", sep = "")
-          next
-        }
-
-        model <- entry$model
-        cat("── PCA Summary ──\n")
-        print(summary(model))
-        cat("\n── PCA Loadings (rotation matrix) ──\n")
-        print(round(model$rotation, 3))
-        cat("\n── PCA Explained Variance (%) ──\n")
-        var_exp <- 100 * model$sdev^2 / sum(model$sdev^2)
-        print(round(var_exp, 2))
-        cat("\n")
-      }
+      model <- entry$model
+      cat("── PCA Summary ──\n")
+      print(summary(model))
+      cat("\n── PCA Loadings (rotation matrix) ──\n")
+      print(round(model$rotation, 3))
+      cat("\n── PCA Explained Variance (%) ──\n")
+      var_exp <- 100 * model$sdev^2 / sum(model$sdev^2)
+      print(round(var_exp, 2))
+      cat("\n")
 
       invisible()
     })
@@ -191,40 +125,26 @@ pca_server <- function(id, filtered_data) {
         sink(file)
         on.exit(sink(), add = TRUE)
 
-        entries <- results$results
-        if (is.null(entries) || length(entries) == 0) {
-          cat("No PCA results available.\n")
+        entry <- results$result
+        if (is.null(entry) || is.null(entry$model)) {
+          message <- if (!is.null(entry$message) && nzchar(entry$message)) {
+            entry$message
+          } else {
+            "Not enough data to compute PCA."
+          }
+          cat(message, "\n", sep = "")
           return()
         }
 
-        multiple <- length(entries) > 1
-
-        for (name in names(entries)) {
-          entry <- entries[[name]]
-          if (multiple) {
-            cat(sprintf("===== Stratum: %s =====\n", name))
-          }
-
-          if (is.null(entry) || is.null(entry$model)) {
-            message <- if (!is.null(entry$message) && nzchar(entry$message)) {
-              entry$message
-            } else {
-              "Not enough data to compute PCA."
-            }
-            cat(message, "\n\n", sep = "")
-            next
-          }
-
-          model <- entry$model
-          cat("── PCA Summary ──\n")
-          print(summary(model))
-          cat("\n── PCA Loadings (rotation matrix) ──\n")
-          print(round(model$rotation, 3))
-          cat("\n── PCA Explained Variance (%) ──\n")
-          var_exp <- 100 * model$sdev^2 / sum(model$sdev^2)
-          print(round(var_exp, 2))
-          cat("\n")
-        }
+        model <- entry$model
+        cat("── PCA Summary ──\n")
+        print(summary(model))
+        cat("\n── PCA Loadings (rotation matrix) ──\n")
+        print(round(model$rotation, 3))
+        cat("\n── PCA Explained Variance (%) ──\n")
+        var_exp <- 100 * model$sdev^2 / sum(model$sdev^2)
+        print(round(var_exp, 2))
+        cat("\n")
       }
     )
 
@@ -238,54 +158,36 @@ pca_server <- function(id, filtered_data) {
     model_fit <- reactive({
       details <- pca_result()
       if (is.null(details)) return(NULL)
-      details$results
+      details$result
     })
 
     compiled_tables <- reactive({
       details <- pca_result()
       if (is.null(details)) return(NULL)
-      results <- details$results
-      if (is.null(results) || length(results) == 0) return(NULL)
 
-      loadings_list <- list()
-      variance_list <- list()
-      messages_list <- list()
+      entry <- details$result
+      if (is.null(entry)) return(NULL)
 
-      for (name in names(results)) {
-        entry <- results[[name]]
-        if (is.null(entry)) {
-          loadings_list[[name]] <- NULL
-          variance_list[[name]] <- NULL
-          messages_list[[name]] <- NULL
-          next
-        }
+      messages_list <- if (!is.null(entry$message)) list(PCA = entry$message) else NULL
 
-        if (!is.null(entry$message)) {
-          messages_list[[name]] <- entry$message
-        }
-
-        model <- entry$model
-        if (is.null(model)) {
-          loadings_list[[name]] <- NULL
-          variance_list[[name]] <- NULL
-          next
-        }
-
-        rotation_tbl <- as.data.frame(as.table(model$rotation), stringsAsFactors = FALSE)
-        colnames(rotation_tbl) <- c("Variable", "Component", "Loading")
-        loadings_list[[name]] <- rotation_tbl
-
-        variance_vals <- 100 * model$sdev^2 / sum(model$sdev^2)
-        variance_list[[name]] <- data.frame(
-          Component = paste0("PC", seq_along(variance_vals)),
-          Variance = variance_vals,
-          stringsAsFactors = FALSE
-        )
+      model <- entry$model
+      if (is.null(model)) {
+        return(list(summary = NULL, effects = NULL, messages = messages_list))
       }
 
+      rotation_tbl <- as.data.frame(as.table(model$rotation), stringsAsFactors = FALSE)
+      colnames(rotation_tbl) <- c("Variable", "Component", "Loading")
+
+      variance_vals <- 100 * model$sdev^2 / sum(model$sdev^2)
+      variance_tbl <- data.frame(
+        Component = paste0("PC", seq_along(variance_vals)),
+        Variance = variance_vals,
+        stringsAsFactors = FALSE
+      )
+
       list(
-        summary = loadings_list,
-        effects = variance_list,
+        summary = list(PCA = rotation_tbl),
+        effects = list(PCA = variance_tbl),
         messages = messages_list
       )
     })
@@ -317,9 +219,8 @@ pca_server <- function(id, filtered_data) {
           stats = if (!is.null(df())) list(n = nrow(df()), vars = names(df())) else NULL,
           metadata = list(
             selected_vars = input$vars,
-            group_var = NULL,
-            strata_levels = NULL,
-            messages = NULL
+            messages = NULL,
+            complete_cases = NULL
           ),
           type = "pca",
           data = df,
@@ -335,6 +236,8 @@ pca_server <- function(id, filtered_data) {
       compiled <- compiled_tables()
       messages <- if (!is.null(compiled)) compiled$messages else NULL
 
+      entry <- details$result
+
       list(
         analysis_type = "PCA",
         data_used = data_used,
@@ -345,17 +248,17 @@ pca_server <- function(id, filtered_data) {
         stats = if (!is.null(data_used)) list(n = nrow(data_used), vars = names(data_used)) else NULL,
         metadata = list(
           selected_vars = details$selected_vars,
-          group_var = details$group_var,
-          strata_levels = details$strata_levels,
-          complete_cases = lapply(details$results, `[[`, "data"),
+          group_var = NULL,
+          strata_levels = NULL,
+          complete_cases = if (!is.null(entry)) entry$data else NULL,
           messages = messages
         ),
         type = "pca",
         data = df,
         vars = details$selected_vars,
         selected_vars = details$selected_vars,
-        group_var = details$group_var,
-        strata_levels = details$strata_levels
+        group_var = NULL,
+        strata_levels = NULL
       )
     })
   })
