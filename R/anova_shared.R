@@ -711,6 +711,7 @@ build_anova_plot_info <- function(data, info, layout_values, line_colors = NULL)
   }
   
   response_plots <- list()
+  summary_stats <- list()
 
   layout_input <- list(
     strata_rows = suppressWarnings(as.numeric(layout_values$strata_rows)),
@@ -849,20 +850,30 @@ build_anova_plot_info <- function(data, info, layout_values, line_colors = NULL)
         )
       
       response_plots[[resp]] <- title_plot / combined + plot_layout(heights = c(0.08, 1))
-      
+      summary_stats[[resp]] <- list(
+        data = NULL,
+        strata = stratum_plots,
+        y_limits = y_limits
+      )
+
     } else {
       stats_df <- compute_stats(data, resp)
       if (nrow(stats_df) == 0) {
         next
       }
-      
+
       y_values <- c(stats_df$mean - stats_df$se, stats_df$mean + stats_df$se)
       y_limits <- range(y_values, na.rm = TRUE)
       if (!all(is.finite(y_limits))) {
         y_limits <- NULL
       }
-      
+
       response_plots[[resp]] <- build_plot(stats_df, resp, y_limits)
+      summary_stats[[resp]] <- list(
+        data = stats_df,
+        strata = NULL,
+        y_limits = y_limits
+      )
     }
   }
 
@@ -933,7 +944,8 @@ build_anova_plot_info <- function(data, info, layout_values, line_colors = NULL)
     defaults = list(
       strata = strata_defaults,
       responses = response_defaults
-    )
+    ),
+    summary_stats = summary_stats
   )
 }
 
