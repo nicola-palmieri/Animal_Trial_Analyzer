@@ -11,10 +11,6 @@ metric_panel_ui <- function(id, default_width = 400, default_height = 300,
       column(6, numericInput(ns("plot_width"),  "Subplot width (px)",  default_width, 200, 2000, 50)),
       column(6, numericInput(ns("plot_height"), "Subplot height (px)", default_height, 200, 2000, 50))
     ),
-    fluidRow(
-      column(6, numericInput(ns("resp_rows"), "Grid rows",    value = NA, min = 1, max = 10, step = 1)),
-      column(6, numericInput(ns("resp_cols"), "Grid columns", value = NA, min = 1, max = 10, step = 1))
-    ),
     hr(),
     downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;")
   )
@@ -37,7 +33,6 @@ metric_plot_ui <- function(id) {
   ns <- NS(id)
   div(
     class = "ta-plot-container",
-    uiOutput(ns("grid_warning")),
     plotOutput(ns("plot"), width = "100%", height = "auto")
   )
 }
@@ -177,7 +172,7 @@ tidy_descriptive_metric <- function(df, prefix) {
 }
 
 
-build_metric_plot <- function(metric_info, y_label, title, n_rows, n_cols) {
+build_metric_plot <- function(metric_info, y_label, title) {
   df <- metric_info$data
   has_group <- isTRUE(metric_info$has_group)
   
@@ -262,61 +257,14 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
         metric_info$group_label <- group_label
       }
 
-      panel_count <- max(1L, length(unique(metric_info$data$variable)))
-      defaults <- compute_default_grid(panel_count)
-
-      n_rows <- basic_grid_value(input$resp_rows, default = defaults$rows)
-      n_cols <- basic_grid_value(input$resp_cols, default = defaults$cols)
-
-      validation <- validate_grid(panel_count, n_rows, n_cols)
-
-      plot <- NULL
-      if (isTRUE(validation$valid)) {
-        plot <- build_metric_plot(metric_info, y_label, title, n_rows, n_cols)
-      }
-
       list(
-        plot = plot,
-        layout = list(nrow = n_rows, ncol = n_cols),
-        panels = panel_count,
-        warning = validation$message,
-        defaults = defaults
+        plot = build_metric_plot(metric_info, y_label, title)
       )
     })
 
     plot_size <- reactive({
       req(module_active())
-      details <- plot_details()
-      if (is.null(details$layout)) {
-        list(w = plot_width(), h = plot_height())
-      } else {
-        list(
-          w = plot_width()  * details$layout$ncol,
-          h = plot_height() * details$layout$nrow
-        )
-      }
-    })
-
-    observeEvent(plot_details(), {
-      details <- plot_details()
-      if (is.null(details) || is.null(details$defaults)) return()
-
-      rows <- details$defaults$rows
-      cols <- details$defaults$cols
-      if (is.null(rows) || is.null(cols)) return()
-
-      sync_numeric_input(session, "resp_rows", input$resp_rows, rows)
-      sync_numeric_input(session, "resp_cols", input$resp_cols, cols)
-    }, ignoreNULL = FALSE)
-
-    output$grid_warning <- renderUI({
-      req(module_active())
-      details <- plot_details()
-      if (!is.null(details$warning)) {
-        div(class = "alert alert-warning", details$warning)
-      } else {
-        NULL
-      }
+      list(w = plot_width(), h = plot_height())
     })
 
     output$download_plot <- downloadHandler(
@@ -324,7 +272,6 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
       content = function(file) {
         req(module_active())
         details <- plot_details()
-        req(is.null(details$warning))
         req(details$plot)
         size <- plot_size()
         ggplot2::ggsave(
