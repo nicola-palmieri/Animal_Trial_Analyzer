@@ -64,7 +64,6 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
         selected = "None"
       ),
       uiOutput(ns("layout_controls")),
-      hr(),
       numericInput(
         ns("pca_label_size"),
         label = "Label size:",
@@ -73,7 +72,6 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
         max = 6,
         step = 0.5
       ),
-      add_color_customization_ui(ns, multi_group = TRUE),
       checkboxInput(
         ns("show_loadings"),
         label = "Show loadings",
@@ -108,6 +106,7 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
           )
         )
       ),
+      add_color_customization_ui(ns, multi_group = TRUE),
       hr(),
       downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;")
     ),
@@ -275,7 +274,7 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
       }
 
       if (is.factor(column)) {
-        levels <- levels(stats::droplevels(column))
+        levels <- levels(droplevels(column))
       } else {
         column_chr <- as.character(column)
         column_chr <- column_chr[!is.na(column_chr)]
@@ -406,7 +405,7 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
       if (!is.null(color_var) && color_var %in% names(data)) {
         color_column <- data[[color_var]]
         if (is.factor(color_column)) {
-          color_levels <- levels(stats::droplevels(color_column))
+          color_levels <- levels(droplevels(color_column))
         } else {
           color_chr <- as.character(color_column)
           color_levels <- unique(color_chr[!is.na(color_chr)])
