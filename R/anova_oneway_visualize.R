@@ -246,6 +246,13 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
           nrow(annotation_info$data) > 0) {
         p <- p + ggsignif::geom_signif(
           data = annotation_info$data,
+          mapping = aes(
+            xmin = .data$xmin,
+            xmax = .data$xmax,
+            annotations = .data$annotation,
+            y_position = .data$y_position
+          ),
+          inherit.aes = FALSE,
           tip_length = 0.01,
           textsize = 4
         )
