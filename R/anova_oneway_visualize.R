@@ -149,7 +149,17 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
         plot
         
       } else if (input$plot_type == "barplot_mean_se") {
-        plot_oneway_barplot_meanse(df(), info, custom_colors())
+        plot_oneway_barplot_meanse(
+          df(),
+          info,
+          layout_values = list(
+            strata_rows = input$strata_rows,
+            strata_cols = input$strata_cols,
+            resp_rows   = input$resp_rows,
+            resp_cols   = input$resp_cols
+          ),
+          line_colors = custom_colors()
+        )
       }
     },
     width = function() plot_size()$w,
@@ -179,65 +189,135 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
   })
 }
 
-plot_oneway_barplot_meanse <- function(data, info, line_colors = NULL) {
+plot_oneway_barplot_meanse <- function(data, info, layout_values, line_colors = NULL) {
   factor1 <- info$factors$factor1
   responses <- info$responses
+  has_strata <- !is.null(info$strata) && !is.null(info$strata$var)
+  
+  strat_var <- if (has_strata) info$strata$var else NULL
+  strata_levels <- if (has_strata) info$strata$levels else NULL
+  
+  # --- layout controls from UI ---
+  strata_rows <- suppressWarnings(as.numeric(layout_values$strata_rows))
+  strata_cols <- suppressWarnings(as.numeric(layout_values$strata_cols))
+  resp_rows   <- suppressWarnings(as.numeric(layout_values$resp_rows))
+  resp_cols   <- suppressWarnings(as.numeric(layout_values$resp_cols))
+  
+  factor1 <- info$factors$factor1
+  responses <- info$responses
+  has_strata <- !is.null(info$strata) && !is.null(info$strata$var)
+  
+  strat_var <- if (has_strata) info$strata$var else NULL
+  strata_levels <- if (has_strata) info$strata$levels else NULL
+  
   response_plots <- list()
   
-  # Choose color consistent with lineplot
+  # ---- color consistent with lineplot ----
   fill_color <- if (!is.null(line_colors) && length(line_colors) > 0) {
     unname(line_colors)[1]
   } else {
-    "steelblue"
+    "#3E8FC4"
   }
   
+  # ---- iterate over each response ----
   for (resp in responses) {
-    stats_df <- data %>%
-      dplyr::group_by(.data[[factor1]]) %>%
-      dplyr::summarise(
-        mean = mean(.data[[resp]], na.rm = TRUE),
-        se   = sd(.data[[resp]], na.rm = TRUE) / sqrt(sum(!is.na(.data[[resp]]))),
-        .groups = "drop"
-      )
     
-    p <- ggplot(stats_df, aes(x = !!sym(factor1), y = mean)) +
-      geom_col(
-        fill = fill_color,
-        width = 0.6,
-        alpha = 0.8
-      ) +
-      geom_errorbar(
-        aes(ymin = mean - se, ymax = mean + se),
-        width = 0.15,
-        color = "gray40",
-        linewidth = 0.5
-      ) +
-      theme_minimal(base_size = 14) +
-      labs(
-        x = factor1,
-        y = paste0(resp, " (mean ± SE)"),
-        title = resp
-      ) +
-      theme(
-        plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
-        axis.title.x = element_text(margin = margin(t = 6)),
-        axis.title.y = element_text(margin = margin(r = 6)),
-        panel.grid.minor = element_blank(),
-        panel.grid.major.x = element_blank(),
-        panel.grid.major.y = element_line(color = "gray90"),
-        axis.text.x = element_text(angle = 30, hjust = 1)
-      )
-    
-    response_plots[[resp]] <- p
+    if (has_strata && !is.null(strat_var) && strat_var %in% names(data)) {
+      
+      stratum_plots <- list()
+      for (stratum in strata_levels) {
+        subset_data <- data[data[[strat_var]] == stratum, , drop = FALSE]
+        if (nrow(subset_data) == 0) next
+        
+        stats_df <- subset_data %>%
+          dplyr::group_by(.data[[factor1]]) %>%
+          dplyr::summarise(
+            mean = mean(.data[[resp]], na.rm = TRUE),
+            se   = sd(.data[[resp]], na.rm = TRUE) / sqrt(sum(!is.na(.data[[resp]]))),
+            .groups = "drop"
+          )
+        
+        p <- ggplot(stats_df, aes(x = !!sym(factor1), y = mean)) +
+          geom_col(fill = fill_color, width = 0.6, alpha = 0.8) +
+          geom_errorbar(aes(ymin = mean - se, ymax = mean + se),
+                        width = 0.15, color = "gray40", linewidth = 0.5) +
+          theme_minimal(base_size = 14) +
+          labs(
+            x = factor1,
+            y = paste0(resp, " (mean ± SE)"),
+            title = stratum
+          ) +
+          theme(
+            plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+            axis.title.x = element_text(margin = margin(t = 6)),
+            axis.title.y = element_text(margin = margin(r = 6)),
+            panel.grid.minor = element_blank(),
+            panel.grid.major.x = element_blank(),
+            panel.grid.major.y = element_line(color = "gray90"),
+            axis.text.x = element_text(angle = 30, hjust = 1)
+          )
+        
+        stratum_plots[[stratum]] <- p
+      }
+      
+      # combine stratum plots
+      if (length(stratum_plots) > 0) {
+        ncol <- if (!is.na(strata_cols) && strata_cols > 0) strata_cols else ceiling(sqrt(length(stratum_plots)))
+        nrow <- if (!is.na(strata_rows) && strata_rows > 0) strata_rows else ceiling(length(stratum_plots) / ncol)
+        combined <- patchwork::wrap_plots(plotlist = stratum_plots, ncol = ncol, nrow = nrow)
+
+        
+        title_plot <- ggplot() +
+          theme_void() +
+          ggtitle(resp) +
+          theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5))
+        response_plots[[resp]] <- title_plot / combined + patchwork::plot_layout(heights = c(0.08, 1))
+      }
+      
+    } else {
+      # ---- no stratification ----
+      stats_df <- data %>%
+        dplyr::group_by(.data[[factor1]]) %>%
+        dplyr::summarise(
+          mean = mean(.data[[resp]], na.rm = TRUE),
+          se   = sd(.data[[resp]], na.rm = TRUE) / sqrt(sum(!is.na(.data[[resp]]))),
+          .groups = "drop"
+        )
+      
+      p <- ggplot(stats_df, aes(x = !!sym(factor1), y = mean)) +
+        geom_col(fill = fill_color, width = 0.6, alpha = 0.8) +
+        geom_errorbar(aes(ymin = mean - se, ymax = mean + se),
+                      width = 0.15, color = "gray40", linewidth = 0.5) +
+        theme_minimal(base_size = 14) +
+        labs(
+          x = factor1,
+          y = paste0(resp, " (mean ± SE)"),
+          title = resp
+        ) +
+        theme(
+          plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+          axis.title.x = element_text(margin = margin(t = 6)),
+          axis.title.y = element_text(margin = margin(r = 6)),
+          panel.grid.minor = element_blank(),
+          panel.grid.major.x = element_blank(),
+          panel.grid.major.y = element_line(color = "gray90"),
+          axis.text.x = element_text(angle = 30, hjust = 1)
+        )
+      
+      response_plots[[resp]] <- p
+    }
   }
   
+  # ---- arrange all responses ----
   if (length(response_plots) == 1) {
     response_plots[[1]]
   } else {
-    ncol <- ceiling(sqrt(length(response_plots)))
-    nrow <- ceiling(length(response_plots) / ncol)
+    ncol <- if (!is.na(resp_cols) && resp_cols > 0) resp_cols else ceiling(sqrt(length(response_plots)))
+    nrow <- if (!is.na(resp_rows) && resp_rows > 0) resp_rows else ceiling(length(response_plots) / ncol)
     patchwork::wrap_plots(plotlist = response_plots, ncol = ncol, nrow = nrow)
+    
   }
 }
+
 
 
