@@ -57,6 +57,14 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
         choices = choices,
         selected = "None"
       ),
+      selectInput(
+        ns("facet_var"),
+        label = "Facet by variable:",
+        choices = choices,
+        selected = "None"
+      ),
+      uiOutput(ns("layout_controls")),
+      hr(),
       numericInput(
         ns("pca_label_size"),
         label = "Label size:",
@@ -75,7 +83,6 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
         label = "Loading arrow scale",
         value = 1.2, min = 0.1, max = 5, step = 0.1
       ),
-      uiOutput(ns("layout_controls")),
       fluidRow(
         column(
           width = 6,
@@ -100,7 +107,6 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
           )
         )
       ),
-      add_color_customization_ui(ns, multi_group = TRUE),
       hr(),
       downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;")
     ),
@@ -116,7 +122,6 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
 visualize_pca_server <- function(id, filtered_data, model_fit) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
-    display_mode <- reactiveVal(NULL)
     # -- Reactives ------------------------------------------------------------
     model_info <- reactive({
       info <- model_fit()
@@ -124,11 +129,11 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
       info
     })
 
-    pca_entries <- reactive({
+    pca_entry <- reactive({
       info <- model_info()
-      entries <- info$model
-      validate(need(!is.null(entries) && length(entries) > 0, "PCA model missing."))
-      entries
+      entry <- info$model
+      validate(need(!is.null(entry), "PCA model missing."))
+      entry
     })
 
     validate_choice <- function(value, pool) {
@@ -141,29 +146,13 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
       value
     }
 
-    pick_reference_entry <- function(entries) {
-      if (is.null(entries) || length(entries) == 0) {
-        return(NULL)
-      }
-
-      valid <- entries[vapply(entries, function(x) !is.null(x) && !is.null(x$data) && nrow(x$data) > 0, logical(1))]
-      if (length(valid) > 0) {
-        return(valid[[1]])
-      }
-
-      entries[[1]]
-    }
-
     available_choices <- reactive({
-      entries <- pca_entries()
-      entry <- pick_reference_entry(entries)
-      data <- if (!is.null(entry)) entry$data else NULL
+      data <- color_data()
       .pca_aesthetic_choices(data)
     })
 
     color_data <- reactive({
-      entries <- pca_entries()
-      entry <- pick_reference_entry(entries)
+      entry <- pca_entry()
       if (!is.null(entry) && !is.null(entry$data)) {
         entry$data
       } else if (!is.null(filtered_data)) {
@@ -216,9 +205,21 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
       updateSelectInput(session, "pca_label", choices = choices, selected = select_valid(input$pca_label))
     }, ignoreNULL = FALSE)
 
+    observeEvent(available_choices(), {
+      facet_choices <- available_choices()
+
+      selected <- if (!is.null(input$facet_var) && input$facet_var %in% facet_choices) {
+        input$facet_var
+      } else {
+        "None"
+      }
+
+      updateSelectInput(session, "facet_var", choices = facet_choices, selected = selected)
+    }, ignoreNULL = FALSE)
+
     output$layout_controls <- renderUI({
-      entries <- pca_entries()
-      if (length(entries) <= 1) {
+      facet_info <- facet_selection()
+      if (is.null(facet_info$var) || length(facet_info$levels) <= 1) {
         return(NULL)
       }
 
@@ -229,9 +230,9 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
           column(
             width = 6,
             numericInput(
-              ns("strata_rows"),
+              ns("grid_rows"),
               "Grid rows",
-              value = isolate(if (is.null(input$strata_rows)) NA else input$strata_rows),
+              value = isolate(if (is.null(input$grid_rows)) NA else input$grid_rows),
               min = 1,
               max = 10,
               step = 1
@@ -240,9 +241,9 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
           column(
             width = 6,
             numericInput(
-              ns("strata_cols"),
+              ns("grid_cols"),
               "Grid columns",
-              value = isolate(if (is.null(input$strata_cols)) NA else input$strata_cols),
+              value = isolate(if (is.null(input$grid_cols)) NA else input$grid_cols),
               min = 1,
               max = 10,
               step = 1
@@ -251,64 +252,39 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
         )
       )
     })
+    facet_selection <- reactive({
+      data <- color_data()
+      facet_var <- input$facet_var
 
-    observeEvent(model_fit(), {
-      info <- model_fit()
-      if (is.null(info) || !identical(info$type, "pca")) {
-        prefix <- "Plot"
-        updateNumericInput(
-          session,
-          "plot_width",
-          label = sprintf("%s width (px)", prefix),
-          value = 600
-        )
-        updateNumericInput(
-          session,
-          "plot_height",
-          label = sprintf("%s height (px)", prefix),
-          value = 800
-        )
-        display_mode(NULL)
-        return()
+      if (is.null(data) || !is.data.frame(data) || nrow(data) == 0) {
+        return(list(var = NULL, levels = NULL, column = NULL))
       }
 
-      entries <- info$model
-      if (is.null(entries)) {
-        entries <- list()
+      if (is.null(facet_var) || identical(facet_var, "None") || !nzchar(facet_var)) {
+        return(list(var = NULL, levels = NULL, column = NULL))
       }
 
-      is_stratified <- !is.null(info$group_var) && length(entries) > 1
-      mode_label <- if (is_stratified) "stratified" else "overall"
-      prefix <- if (is_stratified) "Subplot" else "Plot"
+      if (!facet_var %in% names(data)) {
+        return(list(var = NULL, levels = NULL, column = NULL))
+      }
 
-      if (!identical(mode_label, display_mode())) {
-        display_mode(mode_label)
+      column <- data[[facet_var]]
+      if (is.null(column)) {
+        return(list(var = NULL, levels = NULL, column = NULL))
+      }
 
-        updateNumericInput(
-          session,
-          "plot_width",
-          label = sprintf("%s width (px)", prefix),
-          value = if (is_stratified) 400 else 600
-        )
-        updateNumericInput(
-          session,
-          "plot_height",
-          label = sprintf("%s height (px)", prefix),
-          value = if (is_stratified) 300 else 800
-        )
+      if (is.factor(column)) {
+        levels <- levels(stats::droplevels(column))
       } else {
-        updateNumericInput(
-          session,
-          "plot_width",
-          label = sprintf("%s width (px)", prefix)
-        )
-        updateNumericInput(
-          session,
-          "plot_height",
-          label = sprintf("%s height (px)", prefix)
-        )
+        column_chr <- as.character(column)
+        column_chr <- column_chr[!is.na(column_chr)]
+        levels <- unique(column_chr)
       }
-    }, ignoreNULL = FALSE)
+
+      levels <- levels[!is.na(levels)]
+
+      list(var = facet_var, levels = levels, column = column)
+    })
 
     build_message_panel <- function(title, message, show_title = TRUE) {
       base_plot <- ggplot() +
@@ -340,7 +316,7 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
       safe <- gsub("_+", "_", safe)
       safe <- gsub("^_|_$", "", safe)
       if (!nzchar(safe)) {
-        "stratum"
+        "facet"
       } else {
         tolower(safe)
       }
@@ -349,53 +325,124 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
     plot_info <- reactive({
       req(input$plot_type)
       validate(need(input$plot_type == "biplot", "Unsupported plot type."))
-      info_full <- model_info()
-      entries <- pca_entries()
-      validate(need(length(entries) > 0, "No PCA results available."))
 
-      is_stratified <- !is.null(info_full$group_var) && length(entries) > 1
+      entry <- pca_entry()
+
+      if (is.null(entry) || is.null(entry$model)) {
+        message_text <- if (!is.null(entry$message) && nzchar(entry$message)) entry$message else "No PCA results available."
+        message_plot <- build_message_panel(title = NULL, message = message_text, show_title = FALSE)
+        defaults <- compute_default_grid(1L)
+        layout <- basic_grid_layout(rows = 1, cols = 1, default_rows = 1, default_cols = 1)
+        return(list(
+          plot = message_plot,
+          layout = layout,
+          facet_levels = NULL,
+          panels = 1L,
+          warning = NULL,
+          defaults = defaults,
+          facet_var = NULL
+        ))
+      }
+
+      if (is.null(entry$model$x) || nrow(entry$model$x) < 2) {
+        message_plot <- build_message_panel(title = NULL, message = "PCA scores not available.", show_title = FALSE)
+        defaults <- compute_default_grid(1L)
+        layout <- basic_grid_layout(rows = 1, cols = 1, default_rows = 1, default_cols = 1)
+        return(list(
+          plot = message_plot,
+          layout = layout,
+          facet_levels = NULL,
+          panels = 1L,
+          warning = NULL,
+          defaults = defaults,
+          facet_var = NULL
+        ))
+      }
+
+      data <- entry$data
+      if (is.null(data) || nrow(data) == 0) {
+        message_plot <- build_message_panel(title = NULL, message = "PCA data unavailable.", show_title = FALSE)
+        defaults <- compute_default_grid(1L)
+        layout <- basic_grid_layout(rows = 1, cols = 1, default_rows = 1, default_cols = 1)
+        return(list(
+          plot = message_plot,
+          layout = layout,
+          facet_levels = NULL,
+          panels = 1L,
+          warning = NULL,
+          defaults = defaults,
+          facet_var = NULL
+        ))
+      }
 
       choices <- available_choices()
-      color_var <- validate_choice(input$pca_color, choices)
-      shape_var <- validate_choice(input$pca_shape, choices)
-      label_var <- validate_choice(input$pca_label, choices)
+      choice_pool <- unname(choices)
+      color_var <- validate_choice(input$pca_color, choice_pool)
+      shape_var <- validate_choice(input$pca_shape, choice_pool)
+      label_var <- validate_choice(input$pca_label, choice_pool)
       label_size <- ifelse(is.null(input$pca_label_size) || is.na(input$pca_label_size), 2, input$pca_label_size)
       show_loadings <- isTRUE(input$show_loadings)
       loading_scale <- ifelse(is.null(input$loading_scale) || is.na(input$loading_scale), 1.2, input$loading_scale)
 
-      plot_list <- list()
-      strata_names <- names(entries)
-      if (is.null(strata_names) || length(strata_names) == 0) {
-        strata_names <- paste0("Stratum ", seq_along(entries))
+      facet_info <- facet_selection()
+      facet_var <- facet_info$var
+      facet_levels <- facet_info$levels
+      facet_column <- facet_info$column
+
+      subset_list <- list(All = seq_len(nrow(data)))
+      if (!is.null(facet_var) && length(facet_levels) > 0) {
+        subset_list <- list()
+        facet_values <- if (is.factor(facet_column)) as.character(facet_column) else as.character(facet_column)
+        for (level in facet_levels) {
+          idx <- which(!is.na(facet_values) & facet_values == level)
+          subset_list[[level]] <- idx
+        }
+      } else if (!is.null(facet_var)) {
+        subset_list <- list(`No data` = integer())
       }
 
-      for (i in seq_along(entries)) {
-        entry <- entries[[i]]
-        key <- strata_names[[i]]
-        if (!nzchar(key)) {
-          key <- paste0("Stratum ", i)
+      color_levels <- NULL
+      if (!is.null(color_var) && color_var %in% names(data)) {
+        color_column <- data[[color_var]]
+        if (is.factor(color_column)) {
+          color_levels <- levels(stats::droplevels(color_column))
+        } else {
+          color_chr <- as.character(color_column)
+          color_levels <- unique(color_chr[!is.na(color_chr)])
         }
-        title <- if (is_stratified) key else NULL
+      }
 
-        if (is.null(entry)) {
-          plot_list[[key]] <- build_message_panel(title = title, message = "No PCA results available.", show_title = is_stratified)
+      scores <- as.data.frame(entry$model$x[, 1:2, drop = FALSE])
+      names(scores)[1:2] <- c("PC1", "PC2")
+
+      adjust_limits <- function(lims) {
+        if (length(lims) != 2 || any(!is.finite(lims))) {
+          return(c(-1, 1))
+        }
+        if (diff(range(lims)) == 0) {
+          center <- lims[1]
+          width <- if (abs(center) < 1) 1 else abs(center) * 0.1
+          return(c(center - width, center + width))
+        }
+        lims
+      }
+
+      x_limits <- adjust_limits(range(scores$PC1, na.rm = TRUE))
+      y_limits <- adjust_limits(range(scores$PC2, na.rm = TRUE))
+
+      plot_list <- list()
+
+      for (key in names(subset_list)) {
+        idx <- subset_list[[key]]
+
+        if (length(idx) == 0) {
+          plot_list[[key]] <- build_message_panel(title = key, message = "No data available for this facet.", show_title = TRUE)
           next
         }
 
-        if (!is.null(entry$message) && nzchar(entry$message)) {
-          plot_list[[key]] <- build_message_panel(title = title, message = entry$message, show_title = is_stratified)
-          next
-        }
-
-        if (is.null(entry$model) || is.null(entry$model$x) || nrow(entry$model$x) < 2) {
-          plot_list[[key]] <- build_message_panel(title = title, message = "PCA scores not available.", show_title = is_stratified)
-          next
-        }
-
-        data <- entry$data
-        local_color <- if (!is.null(color_var) && !is.null(data) && color_var %in% names(data)) color_var else NULL
-        local_shape <- if (!is.null(shape_var) && !is.null(data) && shape_var %in% names(data)) shape_var else NULL
-        local_label <- if (!is.null(label_var) && !is.null(data) && label_var %in% names(data)) label_var else NULL
+        local_color <- if (!is.null(color_var) && color_var %in% names(data)) color_var else NULL
+        local_shape <- if (!is.null(shape_var) && shape_var %in% names(data)) shape_var else NULL
+        local_label <- if (!is.null(label_var) && label_var %in% names(data)) label_var else NULL
 
         plot_obj <- build_pca_biplot(
           pca_obj = entry$model,
@@ -406,12 +453,16 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
           label_size = label_size,
           show_loadings = show_loadings,
           loading_scale = loading_scale,
-          custom_colors = custom_colors()
+          custom_colors = custom_colors(),
+          subset_rows = idx,
+          color_levels = color_levels,
+          x_limits = x_limits,
+          y_limits = y_limits
         )
 
-        if (is_stratified && !is.null(title) && nzchar(title)) {
+        if (!is.null(facet_var)) {
           plot_obj <- plot_obj +
-            ggtitle(title) +
+            ggtitle(key) +
             theme(plot.title = element_text(size = 14, face = "bold"))
         }
 
@@ -425,8 +476,8 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
       defaults <- compute_default_grid(panel_count)
 
       layout <- basic_grid_layout(
-        rows = suppressWarnings(as.numeric(input$strata_rows)),
-        cols = suppressWarnings(as.numeric(input$strata_cols)),
+        rows = suppressWarnings(as.numeric(input$grid_rows)),
+        cols = suppressWarnings(as.numeric(input$grid_cols)),
         default_rows = defaults$rows,
         default_cols = defaults$cols
       )
@@ -446,10 +497,11 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
       list(
         plot = combined,
         layout = layout,
-        strata_names = names(plot_list),
+        facet_levels = if (!is.null(facet_var)) names(plot_list) else NULL,
         panels = panel_count,
         warning = validation$message,
-        defaults = defaults
+        defaults = defaults,
+        facet_var = facet_var
       )
     })
 
@@ -462,22 +514,26 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
       subplot_w <- ifelse(is.na(width) || width <= 0, 400, width)
       subplot_h <- ifelse(is.na(height) || height <= 0, 300, height)
 
+      ncol <- if (!is.null(layout) && !is.null(layout$ncol)) max(1, layout$ncol) else 1
+      nrow <- if (!is.null(layout) && !is.null(layout$nrow)) max(1, layout$nrow) else 1
+
       list(
-        w = subplot_w * max(1, layout$ncol),
-        h = subplot_h * max(1, layout$nrow)
+        w = subplot_w * ncol,
+        h = subplot_h * nrow
       )
     })
 
     observeEvent(plot_info(), {
       info <- plot_info()
       if (is.null(info) || is.null(info$defaults)) return()
+      if (is.null(info$facet_var) || info$panels <= 1) return()
 
       rows <- info$defaults$rows
       cols <- info$defaults$cols
       if (is.null(rows) || is.null(cols)) return()
 
-      sync_numeric_input(session, "strata_rows", input$strata_rows, rows)
-      sync_numeric_input(session, "strata_cols", input$strata_cols, cols)
+      sync_numeric_input(session, "grid_rows", input$grid_rows, rows)
+      sync_numeric_input(session, "grid_cols", input$grid_cols, cols)
     }, ignoreNULL = FALSE)
 
     output$plot_warning <- renderUI({
@@ -509,11 +565,11 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
     output$download_plot <- downloadHandler(
       filename = function() {
         info <- plot_info()
-        strata <- info$strata_names
-        suffix <- if (length(strata) == 1) {
-          paste0("_", sanitize_suffix(strata))
+        facet_var <- info$facet_var
+        suffix <- if (!is.null(facet_var)) {
+          paste0("_facet_", sanitize_suffix(facet_var))
         } else {
-          "_all_strata"
+          "_global"
         }
         paste0("pca_biplot", suffix, "_", Sys.Date(), ".png")
       },
@@ -541,16 +597,27 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
 build_pca_biplot <- function(pca_obj, data, color_var = NULL, shape_var = NULL,
                              label_var = NULL, label_size = 2,
                              show_loadings = FALSE, loading_scale = 1.2,
-                             custom_colors = NULL) {
+                             custom_colors = NULL, subset_rows = NULL,
+                             color_levels = NULL, x_limits = NULL,
+                             y_limits = NULL) {
   stopifnot(!is.null(pca_obj$x))
-  
+
   scores <- as.data.frame(pca_obj$x[, 1:2])
   names(scores)[1:2] <- c("PC1", "PC2")
-  
+
+  if (!is.null(subset_rows)) {
+    subset_rows <- unique(subset_rows)
+    subset_rows <- subset_rows[subset_rows >= 1 & subset_rows <= nrow(scores)]
+    scores <- scores[subset_rows, , drop = FALSE]
+    if (!is.null(data)) {
+      data <- data[subset_rows, , drop = FALSE]
+    }
+  }
+
   var_exp <- 100 * (pca_obj$sdev^2 / sum(pca_obj$sdev^2))
   x_lab <- sprintf("PC1 (%.1f%%)", var_exp[1])
   y_lab <- sprintf("PC2 (%.1f%%)", var_exp[2])
-  
+
   if (!is.null(data) && nrow(data) == nrow(scores)) {
     plot_data <- cbind(scores, data)
   } else {
@@ -569,10 +636,15 @@ build_pca_biplot <- function(pca_obj, data, color_var = NULL, shape_var = NULL,
     label_var <- NULL
   }
   
-  color_levels <- NULL
   if (!is.null(color_var) && !is.null(plot_data[[color_var]])) {
-    color_levels <- if (is.factor(plot_data[[color_var]])) levels(plot_data[[color_var]]) else unique(as.character(plot_data[[color_var]]))
-    color_levels <- color_levels[!is.na(color_levels)]
+    if (is.null(color_levels)) {
+      color_levels <- if (is.factor(plot_data[[color_var]])) {
+        levels(plot_data[[color_var]])
+      } else {
+        unique(as.character(plot_data[[color_var]]))
+      }
+    }
+    color_levels <- unique(color_levels[!is.na(color_levels)])
     plot_data[[color_var]] <- factor(as.character(plot_data[[color_var]]), levels = color_levels)
   }
   
@@ -600,10 +672,14 @@ build_pca_biplot <- function(pca_obj, data, color_var = NULL, shape_var = NULL,
     )
   
   if (!is.null(color_var)) {
-    palette <- resolve_palette_for_levels(color_levels, custom = custom_colors)
+    palette <- resolve_palette_for_levels(levels(plot_data[[color_var]]), custom = custom_colors)
     g <- g + scale_color_manual(values = palette)
   }
   
+  if (!is.null(x_limits) || !is.null(y_limits)) {
+    g <- g + coord_cartesian(xlim = x_limits, ylim = y_limits)
+  }
+
   if (!is.null(label_var)) {
     g <- g + ggrepel::geom_text_repel(
       aes(label = label_value),
@@ -624,8 +700,8 @@ build_pca_biplot <- function(pca_obj, data, color_var = NULL, shape_var = NULL,
     R$variable <- rownames(pca_obj$rotation)
     
     # scale arrows to score space
-    rx <- diff(range(scores$PC1, na.rm = TRUE))
-    ry <- diff(range(scores$PC2, na.rm = TRUE))
+    rx <- diff(range(pca_obj$x[, 1], na.rm = TRUE))
+    ry <- diff(range(pca_obj$x[, 2], na.rm = TRUE))
     sx <- ifelse(is.finite(rx) && rx > 0, rx, 1)
     sy <- ifelse(is.finite(ry) && ry > 0, ry, 1)
     
