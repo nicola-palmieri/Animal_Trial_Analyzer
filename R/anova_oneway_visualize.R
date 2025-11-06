@@ -13,8 +13,11 @@ visualize_oneway_ui <- function(id) {
       selectInput(
         ns("plot_type"),
         label = "Select visualization type:",
-        choices = c("Mean ± SE" = "mean_se"),
-        selected = "mean_se"
+        choices = c(
+          "Lineplots (mean ± SE)" = "lineplot_mean_se",
+          "Barplots (mean ± SE)"  = "barplot_mean_se"
+        ),
+        selected = "lineplot_mean_se"
       ),
       hr(),
       uiOutput(ns("layout_controls")),
@@ -139,10 +142,14 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
     output$plot <- renderPlot({
       info <- model_info()
       req(info, input$plot_type)
-      if (input$plot_type == "mean_se") {
-        plot <- plot_obj()
+      
+      if (input$plot_type == "lineplot_mean_se") {
+        plot <- plot_obj()              # existing lineplot logic
         if (is.null(plot)) return(NULL)
         plot
+        
+      } else if (input$plot_type == "barplot_mean_se") {
+        plot_oneway_barplot_meanse(df(), info, custom_colors())
       }
     },
     width = function() plot_size()$w,
@@ -171,3 +178,66 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
     )
   })
 }
+
+plot_oneway_barplot_meanse <- function(data, info, line_colors = NULL) {
+  factor1 <- info$factors$factor1
+  responses <- info$responses
+  response_plots <- list()
+  
+  # Choose color consistent with lineplot
+  fill_color <- if (!is.null(line_colors) && length(line_colors) > 0) {
+    unname(line_colors)[1]
+  } else {
+    "steelblue"
+  }
+  
+  for (resp in responses) {
+    stats_df <- data %>%
+      dplyr::group_by(.data[[factor1]]) %>%
+      dplyr::summarise(
+        mean = mean(.data[[resp]], na.rm = TRUE),
+        se   = sd(.data[[resp]], na.rm = TRUE) / sqrt(sum(!is.na(.data[[resp]]))),
+        .groups = "drop"
+      )
+    
+    p <- ggplot(stats_df, aes(x = !!sym(factor1), y = mean)) +
+      geom_col(
+        fill = fill_color,
+        width = 0.6,
+        alpha = 0.8
+      ) +
+      geom_errorbar(
+        aes(ymin = mean - se, ymax = mean + se),
+        width = 0.15,
+        color = "gray40",
+        linewidth = 0.5
+      ) +
+      theme_minimal(base_size = 14) +
+      labs(
+        x = factor1,
+        y = paste0(resp, " (mean ± SE)"),
+        title = resp
+      ) +
+      theme(
+        plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+        axis.title.x = element_text(margin = margin(t = 6)),
+        axis.title.y = element_text(margin = margin(r = 6)),
+        panel.grid.minor = element_blank(),
+        panel.grid.major.x = element_blank(),
+        panel.grid.major.y = element_line(color = "gray90"),
+        axis.text.x = element_text(angle = 30, hjust = 1)
+      )
+    
+    response_plots[[resp]] <- p
+  }
+  
+  if (length(response_plots) == 1) {
+    response_plots[[1]]
+  } else {
+    ncol <- ceiling(sqrt(length(response_plots)))
+    nrow <- ceiling(length(response_plots) / ncol)
+    patchwork::wrap_plots(plotlist = response_plots, ncol = ncol, nrow = nrow)
+  }
+}
+
+
