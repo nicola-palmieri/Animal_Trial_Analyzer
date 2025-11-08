@@ -14,7 +14,7 @@ visualize_descriptive_ui <- function(id) {
         ns("plot_type"),
         label = "Select visualization type:",
         choices = c(
-          "Categorical distributions" = "categorical",
+          "Categorical barplots" = "categorical",
           "Numeric boxplots"          = "boxplots",
           "Numeric histograms"        = "histograms",
           "CV (%)"                    = "cv",
