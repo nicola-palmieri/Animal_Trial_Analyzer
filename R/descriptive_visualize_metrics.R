@@ -137,6 +137,8 @@ prepare_metric_data <- function(data, numeric_vars, group_var, strata_levels, me
     return(NULL)
   }
 
+  tidy$data$variable <- factor(tidy$data$variable, levels = numeric_vars)
+
   if (!is.null(group_var) && !is.null(strata_levels) && length(strata_levels) > 0) {
     tidy$data$.group <- factor(as.character(tidy$data$.group), levels = strata_levels)
   }
@@ -285,7 +287,8 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
 
       numeric_vars <- names(dat)[vapply(dat, is.numeric, logical(1))]
       if (!is.null(selected_vars) && length(selected_vars) > 0) {
-        numeric_vars <- intersect(numeric_vars, selected_vars)
+        # Preserve the order specified in the UI while filtering to numeric columns.
+        numeric_vars <- selected_vars[selected_vars %in% numeric_vars]
       }
       validate(need(length(numeric_vars) > 0, "No numeric variables available for plotting."))
 
