@@ -68,18 +68,6 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
       last_plot_type(input$plot_type)
     }, ignoreInit = TRUE)
 
-    observeEvent(model_info(), {
-      selected <- isolate(last_plot_type())
-      if (is.null(selected)) {
-        return()
-      }
-
-      current <- isolate(input$plot_type)
-      if (!identical(current, selected)) {
-        updateSelectInput(session, "plot_type", selected = selected)
-      }
-    }, ignoreNULL = TRUE)
-
     cached_results <- reactiveValues(plots = list())
 
     compute_empty_result <- function(message = NULL) {
