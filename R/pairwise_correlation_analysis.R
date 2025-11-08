@@ -9,7 +9,6 @@ ggpairs_ui <- function(id) {
       selectInput(ns("vars"), "Numeric variables:", choices = NULL, multiple = TRUE),
       tags$details(
         tags$summary(strong("Advanced options")),
-        br(),
         stratification_ui("strat", ns)
       ),
       br(),

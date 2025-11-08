@@ -9,7 +9,6 @@ pca_ui <- function(id) {
       selectInput(ns("vars"), "Numeric variables:", choices = NULL, multiple = TRUE),
       tags$details(
         tags$summary(strong("Advanced options")),
-        br(),
         helpText(paste(
           "Stratify by is not available for PCA because the principal components are computed on the full numeric matrix.",
           "Splitting the data by groups would produce different coordinate systems, making the loadings and scores incomparable across groups."

@@ -11,7 +11,6 @@ two_way_anova_ui <- function(id) {
       uiOutput(ns("level_order_2")),
       tags$details(
         tags$summary(strong("Advanced options")),
-        br(),
         stratification_ui("strat", ns)
       ),
       br(),

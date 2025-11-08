@@ -71,7 +71,6 @@ build_anova_layout_controls <- function(ns, input, info) {
   }
   
   tagList(
-    h4("Layout controls"),
     strata_inputs,
     response_inputs
   )

@@ -9,7 +9,6 @@ descriptive_ui <- function(id) {
       uiOutput(ns("inputs")),
       tags$details(
         tags$summary(strong("Advanced options")),
-        br(),
         stratification_ui("strat", ns)
       ),
       br(),
