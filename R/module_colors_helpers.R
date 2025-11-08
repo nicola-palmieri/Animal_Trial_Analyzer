@@ -50,17 +50,6 @@ resolve_palette_for_levels <- function(levels, custom = NULL) {
   palette_size <- length(basic_color_palette)
   n_levels <- length(unique_levels)
 
-  if (n_levels > palette_size) {
-    stop(
-      sprintf(
-        "Palette can assign at most %d groups but received %d levels.",
-        palette_size,
-        n_levels
-      ),
-      call. = FALSE
-    )
-  }
-
   if (!is.null(custom) && length(custom) > 0) {
     if (!is.null(names(custom))) {
       ordered <- custom[unique_levels]
@@ -72,5 +61,12 @@ resolve_palette_for_levels <- function(levels, custom = NULL) {
     }
   }
 
-  stats::setNames(basic_color_palette[seq_len(n_levels)], unique_levels)
+  if (n_levels <= palette_size) {
+    palette <- basic_color_palette[seq_len(n_levels)]
+  } else {
+    repeats <- ceiling(n_levels / palette_size)
+    palette <- rep(basic_color_palette, repeats)[seq_len(n_levels)]
+  }
+
+  stats::setNames(palette, unique_levels)
 }
