@@ -1056,7 +1056,10 @@ build_bar_plot_panel <- function(stats_df,
                                  factor2,
                                  line_colors,
                                  base_fill,
-                                 signif_df = NULL) {
+                                 signif_df = NULL,
+                                 show_value_labels = FALSE) {
+  format_numeric_labels <- scales::label_number(accuracy = 0.01, trim = TRUE)
+
   if (is.null(factor2) || !factor2 %in% names(stats_df)) {
     plot_obj <- ggplot(stats_df, aes(x = !!sym(factor1), y = mean)) +
       geom_col(fill = base_fill, width = 0.6, alpha = 0.8) +
@@ -1081,6 +1084,27 @@ build_bar_plot_panel <- function(stats_df,
         panel.grid.major.y = element_line(color = "gray90"),
         axis.text.x = element_text(angle = 30, hjust = 1)
       )
+
+    if (isTRUE(show_value_labels)) {
+      label_df <- stats_df |>
+        dplyr::mutate(
+          .se = dplyr::coalesce(se, 0),
+          label_text = format_numeric_labels(mean),
+          label_y = ifelse(mean >= 0, mean + .se, mean - .se),
+          label_vjust = ifelse(mean >= 0, -0.4, 1.2)
+        )
+
+      plot_obj <- plot_obj +
+        geom_text(
+          data = label_df,
+          aes(x = !!sym(factor1), y = label_y, label = label_text, vjust = label_vjust),
+          color = "gray20",
+          size = 3.8,
+          fontface = "bold",
+          inherit.aes = FALSE
+        ) +
+        scale_y_continuous(expand = expansion(mult = c(0.05, 0.12)))
+    }
 
     if (!is.null(signif_df) && nrow(signif_df) > 0) {
       signif_df <- signif_df |>
@@ -1171,7 +1195,35 @@ build_bar_plot_panel <- function(stats_df,
       axis.text.x = element_text(angle = 30, hjust = 1)
     ) +
     scale_fill_manual(values = palette)
-  
+
+  if (isTRUE(show_value_labels)) {
+    label_df <- stats_df |>
+      dplyr::mutate(
+        .se = dplyr::coalesce(se, 0),
+        label_text = format_numeric_labels(mean),
+        label_y = ifelse(mean >= 0, mean + .se, mean - .se),
+        label_vjust = ifelse(mean >= 0, -0.4, 1.2)
+      )
+
+    plot_obj <- plot_obj +
+      geom_text(
+        data = label_df,
+        aes(
+          x = !!sym(factor1),
+          y = label_y,
+          label = label_text,
+          vjust = label_vjust,
+          fill = NULL
+        ),
+        position = dodge,
+        color = "gray20",
+        size = 3.6,
+        fontface = "bold",
+        inherit.aes = FALSE
+      ) +
+      scale_y_continuous(expand = expansion(mult = c(0.05, 0.12)))
+  }
+
   if (!is.null(signif_df) && nrow(signif_df) > 0) {
     signif_df <- signif_df |>
       dplyr::filter(p.value < 0.05)
@@ -1370,7 +1422,12 @@ prepare_barplot_significance <- function(posthoc_entry, factor1, factor2, stats_
   signif_df
 }
 
-plot_anova_barplot_meanse <- function(data, info, layout_values = list(), line_colors = NULL, posthoc_all = NULL) {
+plot_anova_barplot_meanse <- function(data,
+                                      info,
+                                      layout_values = list(),
+                                      line_colors = NULL,
+                                      posthoc_all = NULL,
+                                      show_value_labels = FALSE) {
   context <- initialize_anova_plot_context(data, info, layout_values)
   data <- context$data
   factor1 <- context$factor1
@@ -1424,7 +1481,8 @@ plot_anova_barplot_meanse <- function(data, info, layout_values = list(), line_c
           factor2 = factor2,
           line_colors = line_colors,
           base_fill = base_fill,
-          signif_df = signif_df
+          signif_df = signif_df,
+          show_value_labels = show_value_labels
         )
       }
 
@@ -1464,7 +1522,8 @@ plot_anova_barplot_meanse <- function(data, info, layout_values = list(), line_c
         factor2 = factor2,
         line_colors = line_colors,
         base_fill = base_fill,
-        signif_df = signif_df
+        signif_df = signif_df,
+        show_value_labels = show_value_labels
       )
     }
   }

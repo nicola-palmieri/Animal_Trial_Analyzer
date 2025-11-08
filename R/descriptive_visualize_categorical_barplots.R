@@ -6,6 +6,7 @@ visualize_categorical_barplots_ui <- function(id) {
   ns <- NS(id)
   tagList(
     checkboxInput(ns("show_proportions"), "Show proportions instead of counts", FALSE),
+    checkboxInput(ns("show_value_labels"), "Show value labels on bars", FALSE),
     fluidRow(
       column(6, numericInput(ns("plot_width"),  "Subplot width (px)",  400, 200, 2000, 50)),
       column(6, numericInput(ns("plot_height"), "Subplot height (px)", 300, 200, 2000, 50))
@@ -123,6 +124,7 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
         summary_info(),
         filtered_data(),
         input$show_proportions,
+        input$show_value_labels,
         custom_colors()
       ),
       {
@@ -161,7 +163,8 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
         show_proportions = isTRUE(input$show_proportions),
         nrow_input = input$resp_rows,
         ncol_input = input$resp_cols,
-        fill_colors = custom_colors()
+        fill_colors = custom_colors(),
+        show_value_labels = isTRUE(input$show_value_labels)
       )
       validate(need(!is.null(out), "No categorical variables available for plotting."))
       out
@@ -268,7 +271,8 @@ build_descriptive_categorical_plot <- function(df,
                                                show_proportions = FALSE,
                                                nrow_input = NULL,
                                                ncol_input = NULL,
-                                               fill_colors = NULL) {
+                                               fill_colors = NULL,
+                                               show_value_labels = FALSE) {
   if (is.null(df) || !is.data.frame(df) || nrow(df) == 0) return(NULL)
   
   factor_vars <- names(df)[vapply(df, function(x) {
@@ -320,7 +324,7 @@ build_descriptive_categorical_plot <- function(df,
       var_data[[group_col]] <- droplevels(var_data[[group_col]])
       count_df <- dplyr::count(var_data, .data[[var]], .data[[group_col]], name = "count")
       if (nrow(count_df) == 0) return(NULL)
-      
+
       if (isTRUE(show_proportions)) {
         count_df <- count_df |>
           dplyr::group_by(.data[[group_col]]) |>
@@ -331,55 +335,130 @@ build_descriptive_categorical_plot <- function(df,
       } else {
         count_df <- dplyr::mutate(count_df, value = .data$count)
       }
-      
+
       count_df[[var]] <- factor(as.character(count_df[[var]]), levels = level_order)
       group_levels <- levels(droplevels(var_data[[group_col]]))
       count_df[[group_col]] <- factor(as.character(count_df[[group_col]]), levels = group_levels)
-      
+
       palette <- resolve_palette_for_levels(group_levels, custom = fill_colors)
-      
+      group_dodge <- position_dodge(width = 0.75)
+
       p <- ggplot(count_df, aes(x = .data[[var]], y = .data$value, fill = .data[[group_col]])) +
-        geom_col(position = position_dodge(width = 0.75), width = 0.65) +
+        geom_col(position = group_dodge, width = 0.65) +
         scale_fill_manual(values = palette) +
         theme_minimal(base_size = 13) +
         labs(title = var, x = NULL, y = y_label, fill = group_col) +
         theme(axis.text.x = element_text(angle = 45, hjust = 1))
-      
-      if (isTRUE(show_proportions)) {
-        p <- p + scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0, 1))
+
+      if (isTRUE(show_value_labels)) {
+        label_formatter <- if (isTRUE(show_proportions)) {
+          scales::label_percent(accuracy = 0.1, trim = TRUE)
+        } else {
+          scales::label_comma(accuracy = 1, trim = TRUE)
+        }
+
+        label_df <- count_df |>
+          dplyr::mutate(
+            label_text = label_formatter(value),
+            label_y = value,
+            label_vjust = ifelse(value >= 0, -0.4, 1.2)
+          )
+
+        p <- p +
+          geom_text(
+            data = label_df,
+            aes(
+              x = .data[[var]],
+              y = label_y,
+              label = label_text,
+              vjust = label_vjust,
+              group = .data[[group_col]]
+            ),
+            position = group_dodge,
+            color = "gray20",
+            size = 3.5,
+            fontface = "bold",
+            inherit.aes = FALSE
+          )
       }
-      
+
+      if (isTRUE(show_proportions)) {
+        scale_args <- list(labels = scales::percent_format(accuracy = 1))
+        if (isTRUE(show_value_labels)) {
+          scale_args$limits <- c(0, NA)
+          scale_args$expand <- expansion(mult = c(0.02, 0.12))
+        } else {
+          scale_args$limits <- c(0, 1)
+        }
+        p <- p + do.call(scale_y_continuous, scale_args)
+      } else if (isTRUE(show_value_labels)) {
+        p <- p + scale_y_continuous(limits = c(0, NA), expand = expansion(mult = c(0.05, 0.12)))
+      }
+
       p
     } else {
       count_df <- dplyr::count(var_data, .data[[var]], name = "count")
       if (nrow(count_df) == 0) return(NULL)
-      
+
       total <- sum(count_df$count, na.rm = TRUE)
       if (isTRUE(show_proportions) && total > 0) {
         count_df$value <- count_df$count / total
       } else {
         count_df$value <- count_df$count
       }
-      
+
       count_df[[var]] <- factor(as.character(count_df[[var]]), levels = level_order)
-      
+
       single_fill <- if (!is.null(fill_colors) && length(fill_colors) > 0) {
         fill_colors[1]
       } else {
         resolve_single_color()
       }
-      
+
       p <- ggplot(count_df, aes(x = .data[[var]], y = .data$value)) +
         geom_col(fill = single_fill, width = 0.65) +
         theme_minimal(base_size = 13) +
         labs(title = var, x = NULL, y = y_label) +
         theme(axis.text.x = element_text(angle = 45, hjust = 1))
-      
-      
-      if (isTRUE(show_proportions)) {
-        p <- p + scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0, 1))
+
+      if (isTRUE(show_value_labels)) {
+        label_formatter <- if (isTRUE(show_proportions)) {
+          scales::label_percent(accuracy = 0.1, trim = TRUE)
+        } else {
+          scales::label_comma(accuracy = 1, trim = TRUE)
+        }
+
+        label_df <- count_df |>
+          dplyr::mutate(
+            label_text = label_formatter(value),
+            label_y = value,
+            label_vjust = ifelse(value >= 0, -0.4, 1.2)
+          )
+
+        p <- p +
+          geom_text(
+            data = label_df,
+            aes(x = .data[[var]], y = label_y, label = label_text, vjust = label_vjust),
+            color = "gray20",
+            size = 3.5,
+            fontface = "bold",
+            inherit.aes = FALSE
+          )
       }
-      
+
+      if (isTRUE(show_proportions)) {
+        scale_args <- list(labels = scales::percent_format(accuracy = 1))
+        if (isTRUE(show_value_labels)) {
+          scale_args$limits <- c(0, NA)
+          scale_args$expand <- expansion(mult = c(0.02, 0.12))
+        } else {
+          scale_args$limits <- c(0, 1)
+        }
+        p <- p + do.call(scale_y_continuous, scale_args)
+      } else if (isTRUE(show_value_labels)) {
+        p <- p + scale_y_continuous(limits = c(0, NA), expand = expansion(mult = c(0.05, 0.12)))
+      }
+
       p
     }
   })

@@ -21,6 +21,14 @@ visualize_oneway_ui <- function(id) {
       ),
       hr(),
       uiOutput(ns("layout_controls")),
+      conditionalPanel(
+        condition = sprintf("input['%s'] === 'barplot_mean_se'", ns("plot_type")),
+        checkboxInput(
+          ns("show_bar_labels"),
+          "Show value labels on bars",
+          value = FALSE
+        )
+      ),
       fluidRow(
         column(6, numericInput(ns("plot_width"), "Subplot width (px)", value = 400, min = 200, max = 1200, step = 50)),
         column(6, numericInput(ns("plot_height"), "Subplot height (px)", value = 300, min = 200, max = 1200, step = 50))
@@ -126,7 +134,8 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
           info,
           layout_values = layout_inputs,
           line_colors = colors,
-          posthoc_all = posthoc_data
+          posthoc_all = posthoc_data,
+          show_value_labels = isTRUE(input$show_bar_labels)
         )
       )
 
@@ -141,7 +150,8 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
         input$strata_cols,
         input$resp_rows,
         input$resp_cols,
-        custom_colors()
+        custom_colors(),
+        input$show_bar_labels
       ),
       {
         info <- model_info()
