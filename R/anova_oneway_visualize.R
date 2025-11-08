@@ -42,9 +42,9 @@ visualize_oneway_ui <- function(id) {
 visualize_oneway_server <- function(id, filtered_data, model_info) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
-    
+
     df <- reactive(filtered_data())
-    # ---- Plug in color customization module (single-color mode) ----
+
     custom_colors <- add_color_customization_server(
       ns = ns,
       input = input,
@@ -53,8 +53,7 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
       color_var_reactive = reactive(NULL),
       multi_group = FALSE
     )
-    
-    # ---- Build plot info ----
+
     last_plot_type <- reactiveVal("lineplot_mean_se")
     restoring_plot_type <- reactiveVal(FALSE)
 
@@ -76,93 +75,173 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
       last_plot_type(input$plot_type)
     }, ignoreNULL = FALSE)
 
-    plot_info <- reactive({
-      info <- model_info()
-      plot_type <- last_plot_type()
-      req(info, plot_type)
-      validate(
-        need(info$type == "oneway_anova", "No one-way ANOVA results available for plotting.")
+    cached_results <- reactiveValues(plots = list())
+
+    compute_empty_result <- function(message = NULL) {
+      list(
+        plot = NULL,
+        warning = message,
+        layout = NULL,
+        defaults = NULL
       )
+    }
 
-      data <- df()
-      layout_inputs <- list(
-        strata_rows = input$strata_rows,
-        strata_cols = input$strata_cols,
-        resp_rows = input$resp_rows,
-        resp_cols = input$resp_cols
-      )
+    compute_all_plots <- function(data, info, layout_inputs, colors) {
+      if (is.null(info)) {
+        return(list())
+      }
+      if (!identical(info$type, "oneway_anova")) {
+        msg <- "No one-way ANOVA results available for plotting."
+        return(list(
+          lineplot_mean_se = compute_empty_result(msg),
+          barplot_mean_se = compute_empty_result(msg)
+        ))
+      }
 
-      colors <- custom_colors()
+      if (is.null(data) || (!is.null(data) && nrow(data) == 0)) {
+        msg <- "No data available for plotting."
+        return(list(
+          lineplot_mean_se = compute_empty_result(msg),
+          barplot_mean_se = compute_empty_result(msg)
+        ))
+      }
 
-      if (identical(plot_type, "barplot_mean_se")) {
-        posthoc_all <- compile_anova_results(info)$posthoc
-        plot_anova_barplot_meanse(
-          data,
-          info,
-          layout_values = layout_inputs,
-          line_colors = colors,
-          posthoc_all = posthoc_all
-        )
-      } else {
+      safe_plot <- function(expr) {
+        tryCatch({
+          result <- expr
+          if (is.null(result)) {
+            compute_empty_result("Unable to generate plot.")
+          } else {
+            result
+          }
+        }, error = function(e) {
+          compute_empty_result(e$message)
+        })
+      }
+
+      results <- list()
+
+      results$lineplot_mean_se <- safe_plot(
         plot_anova_lineplot_meanse(
           data,
           info,
           layout_inputs,
           line_colors = colors
         )
-      }
+      )
+
+      posthoc_data <- tryCatch(
+        compile_anova_results(info)$posthoc,
+        error = function(e) NULL
+      )
+
+      results$barplot_mean_se <- safe_plot(
+        plot_anova_barplot_meanse(
+          data,
+          info,
+          layout_values = layout_inputs,
+          line_colors = colors,
+          posthoc_all = posthoc_data
+        )
+      )
+
+      results
+    }
+
+    observeEvent(
+      list(
+        model_info(),
+        df(),
+        input$strata_rows,
+        input$strata_cols,
+        input$resp_rows,
+        input$resp_cols,
+        custom_colors()
+      ),
+      {
+        info <- model_info()
+        data <- df()
+        layout_inputs <- list(
+          strata_rows = input$strata_rows,
+          strata_cols = input$strata_cols,
+          resp_rows = input$resp_rows,
+          resp_cols = input$resp_cols
+        )
+
+        cached_results$plots <- compute_all_plots(data, info, layout_inputs, custom_colors())
+      },
+      ignoreNULL = FALSE
+    )
+
+    results <- reactive(cached_results$plots)
+
+    current_result <- reactive({
+      res <- results()
+      res[[input$plot_type]]
     })
 
     plot_obj <- reactive({
-      info <- plot_info()
-      req(info)
-      if (!is.null(info$warning) || is.null(info$plot)) {
+      info <- current_result()
+      if (is.null(info) || !is.null(info$warning) || is.null(info$plot)) {
         return(NULL)
       }
       info$plot
     })
 
     plot_size <- reactive({
-      info <- plot_info()
-      req(info)
-      s <- info$layout
-      strata_rows <- if (!is.null(s$strata$rows)) s$strata$rows else 1
-      strata_cols <- if (!is.null(s$strata$cols)) s$strata$cols else 1
-      resp_rows <- if (!is.null(s$responses$rows)) s$responses$rows else 1
-      resp_cols <- if (!is.null(s$responses$cols)) s$responses$cols else 1
+      res <- current_result()
+      layout <- if (!is.null(res)) res$layout else NULL
+      strata_layout <- if (!is.null(layout) && !is.null(layout$strata)) layout$strata else list()
+      response_layout <- if (!is.null(layout) && !is.null(layout$responses)) layout$responses else list()
+      strata_rows <- if (!is.null(strata_layout$rows)) strata_layout$rows else 1
+      strata_cols <- if (!is.null(strata_layout$cols)) strata_layout$cols else 1
+      resp_rows <- if (!is.null(response_layout$rows)) response_layout$rows else 1
+      resp_cols <- if (!is.null(response_layout$cols)) response_layout$cols else 1
       list(
         w = input$plot_width * strata_cols * resp_cols,
         h = input$plot_height * strata_rows * resp_rows
       )
     })
 
-    observeEvent(plot_info(), {
-      info <- plot_info()
-      if (is.null(info) || is.null(info$defaults) || is.null(info$layout)) {
+    observeEvent(results(), {
+      res_list <- results()
+      if (length(res_list) == 0) {
         return()
       }
 
-      if (!is.null(info$defaults$strata)) {
-        defaults <- info$defaults$strata
-        rows <- defaults$rows
-        cols <- defaults$cols
+      first_valid <- NULL
+      for (item in res_list) {
+        if (!is.null(item$defaults) && !is.null(item$layout)) {
+          first_valid <- item
+          break
+        }
+      }
+
+      if (is.null(first_valid)) {
+        return()
+      }
+
+      defaults <- first_valid$defaults
+
+      if (!is.null(defaults$strata)) {
+        rows <- defaults$strata$rows
+        cols <- defaults$strata$cols
         if (!is.null(rows) && !is.null(cols)) {
           sync_numeric_input(session, "strata_rows", input$strata_rows, rows)
           sync_numeric_input(session, "strata_cols", input$strata_cols, cols)
         }
       }
 
-      if (!is.null(info$defaults$responses)) {
-        defaults <- info$defaults$responses
-        rows <- defaults$rows
-        cols <- defaults$cols
+      if (!is.null(defaults$responses)) {
+        rows <- defaults$responses$rows
+        cols <- defaults$responses$cols
         if (!is.null(rows) && !is.null(cols)) {
           sync_numeric_input(session, "resp_rows", input$resp_rows, rows)
           sync_numeric_input(session, "resp_cols", input$resp_cols, cols)
         }
       }
     }, ignoreNULL = FALSE)
-    
+
     output$layout_controls <- renderUI({
       info <- model_info()
       req(info)
@@ -170,43 +249,42 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
     })
 
     output$plot_warning <- renderUI({
-      info <- plot_info()
-      if (is.null(info)) {
+      info <- current_result()
+      if (is.null(info) || is.null(info$warning)) {
         return(NULL)
       }
-      if (!is.null(info$warning)) {
-        div(class = "alert alert-warning", HTML(info$warning))
-      } else {
-        NULL
-      }
+      div(class = "alert alert-warning", HTML(info$warning))
     })
-    
-    # ---- Render plot ----
-    output$plot <- renderPlot({
-      plot <- plot_obj()
-      if (is.null(plot)) return(NULL)
-      plot
-    },
-    width = function() plot_size()$w,
-    height = function() plot_size()$h,
-    res = 96)
-    
-    # ---- Download handler ----
+
+    output$plot <- renderPlot(
+      {
+        plot <- plot_obj()
+        if (is.null(plot)) {
+          return(NULL)
+        }
+        plot
+      },
+      width = function() plot_size()$w,
+      height = function() plot_size()$h,
+      res = 96
+    )
+
     output$download_plot <- downloadHandler(
       filename = function() paste0("anova_plot_", Sys.Date(), ".png"),
       content = function(file) {
-        info <- plot_info()
-        req(info)
-        req(is.null(info$warning))
+        res <- current_result()
+        req(res)
+        req(is.null(res$warning))
         plot <- plot_obj()
         req(plot)
+        size <- plot_size()
         ggsave(
           filename = file,
           plot = plot,
           device = "png",
           dpi = 300,
-          width = plot_size()$w / 96,
-          height = plot_size()$h / 96,
+          width = size$w / 96,
+          height = size$h / 96,
           units = "in",
           limitsize = FALSE
         )
