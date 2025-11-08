@@ -45,7 +45,7 @@ stratification_server <- function(id, data) {
     # ---- UI: order/levels selector ----
     output$strata_order_ui <- renderUI({
       req(input$stratify_var)
-      if (input$stratify_var == STRAT_NONE_LABEL) return(NULL)
+      if (input$stratify_var == "None") return(NULL)
       d <- req(df())
       
       values <- d[[input$stratify_var]]
@@ -70,7 +70,7 @@ stratification_server <- function(id, data) {
     # ---- Unified reactive output ----
     reactive({
       list(
-        var = if (identical(input$stratify_var, STRAT_NONE_LABEL)) NULL else input$stratify_var,
+        var = if (identical(input$stratify_var, "None")) NULL else input$stratify_var,
         levels = input$strata_order
       )
     })
