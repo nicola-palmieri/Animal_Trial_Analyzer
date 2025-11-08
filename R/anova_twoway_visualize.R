@@ -60,9 +60,31 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
       multi_group = TRUE
     )
 
+    last_plot_type <- reactiveVal("lineplot_mean_se")
+    restoring_plot_type <- reactiveVal(FALSE)
+
+    observeEvent(model_info(), {
+      restoring_plot_type(TRUE)
+      selected <- isolate(last_plot_type())
+      if (!is.null(selected)) {
+        updateSelectInput(session, "plot_type", selected = selected)
+      }
+      session$onFlushed(function() {
+        restoring_plot_type(FALSE)
+      }, once = TRUE)
+    }, ignoreNULL = FALSE)
+
+    observeEvent(input$plot_type, {
+      if (isTRUE(restoring_plot_type())) {
+        return()
+      }
+      last_plot_type(input$plot_type)
+    }, ignoreNULL = FALSE)
+
     plot_info <- reactive({
       info <- model_info()
-      req(info, input$plot_type)
+      plot_type <- last_plot_type()
+      req(info, plot_type)
       validate(
         need(info$type == "twoway_anova", "No two-way ANOVA results available for plotting.")
       )
@@ -80,7 +102,7 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
         line_colors <- NULL
       }
 
-      if (identical(input$plot_type, "barplot_mean_se")) {
+      if (identical(plot_type, "barplot_mean_se")) {
         posthoc_all <- compile_anova_results(info)$posthoc
         plot_anova_barplot_meanse(
           data,
