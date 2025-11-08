@@ -1086,31 +1086,41 @@ build_bar_plot_panel <- function(stats_df,
       signif_df <- signif_df |>
         dplyr::filter(p.value < 0.05)
       if (nrow(signif_df) > 0) {
-        max_y <- max(stats_df$mean + stats_df$se, na.rm = TRUE)
+        max_y <- suppressWarnings(max(stats_df$mean + stats_df$se, na.rm = TRUE))
+        if (!is.finite(max_y)) {
+          max_y <- 0
+        }
+        step <- if (isTRUE(all.equal(max_y, 0))) 0.1 else abs(max_y) * 0.08
+        start <- max_y + step
         signif_df <- signif_df |>
           dplyr::mutate(
             y_position = seq(
-              from = max_y * 1.05,
-              by = max_y * 0.05,
-              length.out = n()
+              from = start,
+              by = step,
+              length.out = dplyr::n()
             ),
             label = dplyr::case_when(
               p.value < 0.001 ~ "***",
               p.value < 0.01 ~ "**",
               p.value < 0.05 ~ "*",
               TRUE ~ sprintf("p=%.3f", p.value)
-            )
+            ),
+            xmin = group1,
+            xmax = group2,
+            .group_id = seq_len(dplyr::n())
           )
 
         plot_obj <- plot_obj + ggsignif::geom_signif(
           data = signif_df,
           aes(
-            xmin = group1,
-            xmax = group2,
+            xmin = xmin,
+            xmax = xmax,
             annotations = label,
-            y_position = y_position
+            y_position = y_position,
+            group = .group_id
           ),
           manual = TRUE,
+          inherit.aes = FALSE,
           tip_length = 0.01,
           textsize = 3.8,
           vjust = 0.5,
@@ -1131,7 +1141,7 @@ build_bar_plot_panel <- function(stats_df,
   palette <- resolve_palette_for_levels(group_levels, custom = line_colors)
   dodge <- position_dodge(width = 0.7)
 
-  ggplot(stats_df, aes(
+  plot_obj <- ggplot(stats_df, aes(
     x = !!sym(factor1),
     y = mean,
     fill = !!sym(factor2)
@@ -1161,6 +1171,199 @@ build_bar_plot_panel <- function(stats_df,
       axis.text.x = element_text(angle = 30, hjust = 1)
     ) +
     scale_fill_manual(values = palette)
+  
+  if (!is.null(signif_df) && nrow(signif_df) > 0) {
+    signif_df <- signif_df |>
+      dplyr::filter(p.value < 0.05)
+
+    if (nrow(signif_df) > 0) {
+      if (!factor2 %in% names(signif_df)) {
+        signif_df[[factor2]] <- "__overall__"
+      }
+
+      lookup <- stats_df |>
+        dplyr::mutate(
+          .factor1 = as.character(.data[[factor1]]),
+          .factor2 = as.character(.data[[factor2]]),
+          .x_index = as.numeric(.data[[factor1]]),
+          .group_index = as.numeric(.data[[factor2]]),
+          .ymax = mean + se
+        )
+
+      n_groups <- length(group_levels)
+      lookup <- lookup |>
+        dplyr::mutate(
+          .x_offset = dodge$width * ((.group_index - 0.5) / max(1, n_groups) - 0.5),
+          .xpos = .x_index + .x_offset
+        )
+
+      signif_split <- split(signif_df, signif_df[[factor2]])
+      annotations <- lapply(names(signif_split), function(level_name) {
+        subset_df <- signif_split[[level_name]]
+        if (nrow(subset_df) == 0) {
+          return(NULL)
+        }
+
+        level_lookup <- lookup
+        if (!identical(level_name, "__overall__") && !is.na(level_name)) {
+          level_lookup <- dplyr::filter(level_lookup, .factor2 == level_name)
+        }
+
+        if (nrow(level_lookup) == 0) {
+          return(NULL)
+        }
+
+        base_max <- suppressWarnings(max(level_lookup$.ymax, na.rm = TRUE))
+        if (!is.finite(base_max)) {
+          base_max <- suppressWarnings(max(lookup$.ymax, na.rm = TRUE))
+        }
+        if (!is.finite(base_max)) {
+          base_max <- 0
+        }
+
+        step <- if (isTRUE(all.equal(base_max, 0))) 0.1 else abs(base_max) * 0.08
+        start <- base_max + step
+
+        subset_df <- subset_df |>
+          dplyr::mutate(
+            label = dplyr::case_when(
+              p.value < 0.001 ~ "***",
+              p.value < 0.01 ~ "**",
+              p.value < 0.05 ~ "*",
+              TRUE ~ sprintf("p=%.3f", p.value)
+            ),
+            xmin = vapply(group1, function(g) {
+              vals <- level_lookup$.xpos[level_lookup$.factor1 == g]
+              if (length(vals) == 0) NA_real_ else vals[1]
+            }, numeric(1)),
+            xmax = vapply(group2, function(g) {
+              vals <- level_lookup$.xpos[level_lookup$.factor1 == g]
+              if (length(vals) == 0) NA_real_ else vals[1]
+            }, numeric(1)),
+            y_position = seq(
+              from = start,
+              by = step,
+              length.out = dplyr::n()
+            ),
+            .group_id = seq_len(dplyr::n())
+          )
+
+        subset_df
+      })
+
+      annotations <- annotations[!vapply(annotations, is.null, logical(1))]
+
+      if (length(annotations) > 0) {
+        annotations <- dplyr::bind_rows(annotations)
+        annotations <- annotations |>
+          dplyr::filter(!is.na(xmin), !is.na(xmax))
+        if (nrow(annotations) > 0) {
+          annotations <- annotations |>
+            dplyr::mutate(.group_id = seq_len(dplyr::n()))
+        }
+
+        if (nrow(annotations) > 0) {
+          plot_obj <- plot_obj + ggsignif::geom_signif(
+            data = annotations,
+            aes(
+              xmin = xmin,
+              xmax = xmax,
+              annotations = label,
+              y_position = y_position,
+              group = .group_id
+            ),
+            manual = TRUE,
+            inherit.aes = FALSE,
+            tip_length = 0.01,
+            textsize = 3.8,
+            vjust = 0.5,
+            color = "gray30"
+          )
+        }
+      }
+    }
+  }
+
+  plot_obj
+}
+
+prepare_barplot_significance <- function(posthoc_entry, factor1, factor2, stats_df) {
+  if (is.null(posthoc_entry)) {
+    return(NULL)
+  }
+
+  if (is.list(posthoc_entry) && !is.data.frame(posthoc_entry)) {
+    if (!is.null(posthoc_entry$table)) {
+      return(prepare_barplot_significance(posthoc_entry$table, factor1, factor2, stats_df))
+    }
+
+    if (!is.null(factor1) && !is.null(posthoc_entry[[factor1]])) {
+      return(prepare_barplot_significance(posthoc_entry[[factor1]], factor1, factor2, stats_df))
+    }
+
+    nested <- lapply(posthoc_entry, function(x) {
+      prepare_barplot_significance(x, factor1, factor2, stats_df)
+    })
+    nested <- nested[!vapply(nested, is.null, logical(1))]
+    if (length(nested) == 0) {
+      return(NULL)
+    }
+
+    combined <- dplyr::bind_rows(nested)
+    if (nrow(combined) == 0) {
+      return(NULL)
+    }
+    return(combined)
+  }
+
+  if (!is.data.frame(posthoc_entry)) {
+    return(NULL)
+  }
+
+  df <- posthoc_entry
+  if ("Factor" %in% names(df) && !is.null(factor1)) {
+    df <- df[df$Factor %in% c(factor1, paste(factor1, factor2, sep = ":")), , drop = FALSE]
+  }
+
+  if (nrow(df) == 0) {
+    return(NULL)
+  }
+
+  factor2_levels <- NULL
+  if (!is.null(factor2) && factor2 %in% names(stats_df)) {
+    factor2_levels <- levels(stats_df[[factor2]])
+    if (is.null(factor2_levels)) {
+      factor2_levels <- unique(as.character(stats_df[[factor2]]))
+    }
+  }
+
+  if (!is.null(factor2) && factor2 %in% names(df)) {
+    split_df <- split(df, df[[factor2]])
+    annotations <- lapply(names(split_df), function(level_name) {
+      subset_df <- split_df[[level_name]]
+      signif_tbl <- extract_tukey_for_signif(subset_df)
+      if (is.null(signif_tbl) || nrow(signif_tbl) == 0) {
+        return(NULL)
+      }
+      signif_tbl[[factor2]] <- level_name
+      signif_tbl
+    })
+    annotations <- annotations[!vapply(annotations, is.null, logical(1))]
+    if (length(annotations) == 0) {
+      return(NULL)
+    }
+    combined <- dplyr::bind_rows(annotations)
+    if (!is.null(factor2_levels) && factor2 %in% names(combined)) {
+      combined[[factor2]] <- factor(combined[[factor2]], levels = factor2_levels)
+    }
+    return(combined)
+  }
+
+  signif_df <- extract_tukey_for_signif(df)
+  if (!is.null(signif_df) && nrow(signif_df) > 0 && !is.null(factor2)) {
+    signif_df[[factor2]] <- "__overall__"
+  }
+  signif_df
 }
 
 plot_anova_barplot_meanse <- function(data, info, layout_values = list(), line_colors = NULL, posthoc_all = NULL) {
@@ -1199,11 +1402,16 @@ plot_anova_barplot_meanse <- function(data, info, layout_values = list(), line_c
         }
 
         stats_df <- apply_anova_factor_levels(stats_df, factor1, factor2, context$order1, context$order2)
-        signif_df <- NULL
-        if (is.null(factor2) && !is.null(posthoc_all) &&
-            !is.null(posthoc_all[[resp]]) && !is.null(posthoc_all[[resp]][[stratum]])) {
-          signif_df <- extract_tukey_for_signif(posthoc_all[[resp]][[stratum]])
+        posthoc_entry <- NULL
+        if (!is.null(posthoc_all) && !is.null(posthoc_all[[resp]])) {
+          resp_posthoc <- posthoc_all[[resp]]
+          if (is.list(resp_posthoc) && !is.data.frame(resp_posthoc)) {
+            posthoc_entry <- resp_posthoc[[stratum]]
+          } else {
+            posthoc_entry <- resp_posthoc
+          }
         }
+        signif_df <- prepare_barplot_significance(posthoc_entry, factor1, factor2, stats_df)
 
         stratum_plots[[stratum]] <- build_bar_plot_panel(
           stats_df = stats_df,
@@ -1239,10 +1447,11 @@ plot_anova_barplot_meanse <- function(data, info, layout_values = list(), line_c
       }
 
       stats_df <- apply_anova_factor_levels(stats_df, factor1, factor2, context$order1, context$order2)
-      signif_df <- NULL
-      if (is.null(factor2) && !is.null(posthoc_all) && !is.null(posthoc_all[[resp]])) {
-        signif_df <- extract_tukey_for_signif(posthoc_all[[resp]])
+      posthoc_entry <- NULL
+      if (!is.null(posthoc_all) && !is.null(posthoc_all[[resp]])) {
+        posthoc_entry <- posthoc_all[[resp]]
       }
+      signif_df <- prepare_barplot_significance(posthoc_entry, factor1, factor2, stats_df)
 
       response_plots[[resp]] <- build_bar_plot_panel(
         stats_df = stats_df,
