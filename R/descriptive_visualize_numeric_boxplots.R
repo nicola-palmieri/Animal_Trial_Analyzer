@@ -29,7 +29,7 @@ visualize_numeric_boxplots_ui <- function(id) {
           "Grid columns",
           value = NA,
           min = 1,
-          max = 10,
+          max = 100,
           step = 1
         )
       )
@@ -300,13 +300,17 @@ build_descriptive_numeric_boxplot <- function(df,
   if (length(plots) == 0) return(NULL)
   
   n_panels <- length(plots)
-  defaults <- compute_default_grid(n_panels)
+  defaults <- list(
+    rows = 1L,
+    cols = max(1L, as.integer(n_panels))
+  )
 
   layout <- basic_grid_layout(
     rows = suppressWarnings(as.numeric(nrow_input)),
     cols = suppressWarnings(as.numeric(ncol_input)),
     default_rows = defaults$rows,
-    default_cols = defaults$cols
+    default_cols = defaults$cols,
+    max_cols = max(100L, as.integer(defaults$cols))
   )
 
   layout <- adjust_grid_layout(n_panels, layout)
