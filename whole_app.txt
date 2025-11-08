@@ -7058,38 +7058,6 @@ write_lm_docx <- function(model, file, subtitle = NULL) {
   print(doc, target = file)
 }
 
-# ===============================================================
-# 🧾 Helper: format regression table in journal style
-# ===============================================================
-format_regression_table <- function(df, bold_p = TRUE) {
-  
-  ft <- flextable(df)
-  ft <- fontsize(ft, part = "all", size = 10)
-  ft <- bold(ft, part = "header", bold = TRUE)
-  ft <- color(ft, part = "header", color = "black")
-  ft <- align(ft, align = "center", part = "all")
-  ft <- border_remove(ft)
-  
-  black <- fp_border(color = "black", width = 1)
-  ft <- border(ft, part = "header", border.top = black)
-  ft <- border(ft, part = "header", border.bottom = black)
-  if (nrow(df) > 0) {
-    ft <- border(ft, i = nrow(df), part = "body", border.bottom = black)
-  }
-
-  if (bold_p && "Pr(>F)" %in% names(df)) {
-    sig_rows <- which(df[["Pr(>F)"]] < 0.05)
-    if (length(sig_rows) > 0) ft <- bold(ft, i = sig_rows, j = "Pr(>F)", bold = TRUE)
-  }
-  if (bold_p && "Pr(>|t|)" %in% names(df)) {
-    sig_rows <- which(df[["Pr(>|t|)"]] < 0.05)
-    if (length(sig_rows) > 0) ft <- bold(ft, i = sig_rows, j = "Pr(>|t|)", bold = TRUE)
-  }
-
-  ft <- set_table_properties(ft, layout = "autofit", width = 0.9)
-  ft <- padding(ft, padding.top = 2, padding.bottom = 2, padding.left = 2, padding.right = 2)
-  ft
-}# ===============================================================
 # 🔁 Multi-Response Selector Module
 # ===============================================================
 
