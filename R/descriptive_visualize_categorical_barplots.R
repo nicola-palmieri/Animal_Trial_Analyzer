@@ -104,10 +104,18 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
 
     cached_plot_info <- reactiveVal(NULL)
     cache_ready <- reactiveVal(FALSE)
+    skip_auto_invalidations <- reactiveVal(0L)
 
     invalidate_cache <- function() {
+      remaining <- skip_auto_invalidations()
+      if (remaining > 0L) {
+        skip_auto_invalidations(remaining - 1L)
+        return(invisible(FALSE))
+      }
+
       cached_plot_info(NULL)
       cache_ready(FALSE)
+      invisible(TRUE)
     }
 
     observeEvent(
@@ -115,8 +123,6 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
         summary_info(),
         filtered_data(),
         input$show_proportions,
-        input$resp_rows,
-        input$resp_cols,
         custom_colors()
       ),
       {
@@ -124,6 +130,14 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
       },
       ignoreNULL = FALSE
     )
+
+    observeEvent(input$resp_rows, {
+      invalidate_cache()
+    }, ignoreNULL = FALSE)
+
+    observeEvent(input$resp_cols, {
+      invalidate_cache()
+    }, ignoreNULL = FALSE)
 
     compute_plot_info <- function() {
       info <- summary_info()
@@ -184,8 +198,17 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
       cols <- info$defaults$cols
       if (is.null(rows) || is.null(cols)) return()
 
-      sync_numeric_input(session, "resp_rows", input$resp_rows, rows)
-      sync_numeric_input(session, "resp_cols", input$resp_cols, cols)
+      updates <- 0L
+      if (isTRUE(sync_numeric_input(session, "resp_rows", input$resp_rows, rows))) {
+        updates <- updates + 1L
+      }
+      if (isTRUE(sync_numeric_input(session, "resp_cols", input$resp_cols, cols))) {
+        updates <- updates + 1L
+      }
+
+      if (updates > 0L) {
+        skip_auto_invalidations(skip_auto_invalidations() + updates)
+      }
     }, ignoreNULL = FALSE)
 
     output$grid_warning <- renderUI({

@@ -14,9 +14,17 @@ visualize_server <- function(id, filtered_data, model_fit) {
     # -----------------------------------------------------------
     # 1️⃣ Reactive model info
     # -----------------------------------------------------------
+    model_info_or_null <- reactive({
+      tryCatch(
+        model_fit(),
+        shiny.silent.stop = function(e) NULL
+      )
+    })
+
     model_info <- reactive({
-      req(model_fit())
-      model_fit()
+      info <- model_info_or_null()
+      req(info)
+      info
     })
     
     # -----------------------------------------------------------
@@ -45,6 +53,28 @@ visualize_server <- function(id, filtered_data, model_fit) {
     # 4️⃣ Dynamic UI loading (lazy initialization)
     # -----------------------------------------------------------
     output$dynamic_ui <- renderUI({
+      info <- model_info_or_null()
+
+      if (is.null(info)) {
+        return(
+          div(
+            class = "empty-state card bg-light border-0 shadow-sm text-center my-5",
+            div(
+              class = "card-body py-5 px-4",
+              div(
+                class = "empty-state-icon text-primary mb-3",
+                HTML("&#128221;")
+              ),
+              h4(class = "mb-2", "No analysis selected yet"),
+              p(
+                class = "text-muted mb-0",
+                "Run an analysis in the Analyze tab to unlock tailored visualizations for your results."
+              )
+            )
+          )
+        )
+      }
+
       type <- analysis_type()
       switch(
         type,
