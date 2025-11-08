@@ -5,43 +5,64 @@
 visualize_numeric_boxplots_ui <- function(id) {
   ns <- NS(id)
   tagList(
-    checkboxInput(ns("show_points"), "Show individual data points", TRUE),
-    checkboxInput(ns("show_outliers"), "Highlight boxplot outliers", FALSE),
+    with_help_tooltip(
+      checkboxInput(ns("show_points"), "Show individual data points", TRUE),
+      "Help: Add the raw observations on top of each boxplot."
+    ),
+    with_help_tooltip(
+      checkboxInput(ns("show_outliers"), "Highlight boxplot outliers", FALSE),
+      "Help: Highlight points that fall outside the typical range."
+    ),
     conditionalPanel(
       condition = sprintf("input['%s']", ns("show_outliers")),
       uiOutput(ns("outlier_label_ui"))
     ),
     fluidRow(
-      column(6, numericInput(ns("plot_width"),  "Subplot width (px)",  200, 200, 2000, 50)),
-      column(6, numericInput(ns("plot_height"), "Subplot height (px)", 800, 200, 2000, 50))
+      column(6, with_help_tooltip(
+        numericInput(ns("plot_width"),  "Subplot width (px)",  200, 200, 2000, 50),
+        "Help: Control how wide each boxplot panel should be."
+      )),
+      column(6, with_help_tooltip(
+        numericInput(ns("plot_height"), "Subplot height (px)", 800, 200, 2000, 50),
+        "Help: Control how tall each boxplot panel should be."
+      ))
     ),
     fluidRow(
       column(
         6,
-        numericInput(
-          ns("resp_rows"),
-          "Grid rows",
-          value = NA,
-          min = 1,
-          max = 10,
-          step = 1
+        with_help_tooltip(
+          numericInput(
+            ns("resp_rows"),
+            "Grid rows",
+            value = NA,
+            min = 1,
+            max = 10,
+            step = 1
+          ),
+          "Help: Choose how many rows of plots to display when multiple charts are shown."
         )
       ),
       column(
         6,
-        numericInput(
-          ns("resp_cols"),
-          "Grid columns",
-          value = NA,
-          min = 1,
-          max = 100,
-          step = 1
+        with_help_tooltip(
+          numericInput(
+            ns("resp_cols"),
+            "Grid columns",
+            value = NA,
+            min = 1,
+            max = 100,
+            step = 1
+          ),
+          "Help: Choose how many columns of plots to display when multiple charts are shown."
         )
       )
     ),
     add_color_customization_ui(ns, multi_group = TRUE),
     hr(),
-    downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;")
+    with_help_tooltip(
+      downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;"),
+      "Help: Save the boxplots as an image file."
+    )
   )
 }
 
@@ -126,11 +147,14 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
         current <- ""
       }
 
-      selectInput(
-        ns("outlier_label"),
-        label = "Label outliers by:",
-        choices = c("None" = "", stats::setNames(cat_cols, cat_cols)),
-        selected = current
+      with_help_tooltip(
+        selectInput(
+          ns("outlier_label"),
+          label = "Label outliers by:",
+          choices = c("None" = "", stats::setNames(cat_cols, cat_cols)),
+          selected = current
+        ),
+        "Help: Choose a column to annotate the highlighted outliers."
       )
     })
 

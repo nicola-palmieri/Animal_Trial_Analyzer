@@ -5,10 +5,13 @@
 multi_response_ui <- function(id) {
   ns <- NS(id)
   tagList(
-    checkboxInput(
-      ns("multi_resp"),
-      "Allow multiple response variables",
-      value = FALSE
+    with_help_tooltip(
+      checkboxInput(
+        ns("multi_resp"),
+        "Allow multiple response variables",
+        value = FALSE
+      ),
+      "Help: Tick this to analyse several response variables one after another."
     ),
     uiOutput(ns("response_ui"))
   )
@@ -30,15 +33,18 @@ multi_response_server <- function(id, data) {
       num_vars <- names(d)[sapply(d, is.numeric)]
       validate(need(length(num_vars) > 0, "No numeric variables available."))
       
-      selectInput(
-        ns("response"),
-        label = if (isTRUE(input$multi_resp))
-          "Response variables (numeric):"
-        else
-          "Response variable (numeric):",
-        choices = num_vars,
-        selected = num_vars[1],
-        multiple = isTRUE(input$multi_resp)
+      with_help_tooltip(
+        selectInput(
+          ns("response"),
+          label = if (isTRUE(input$multi_resp))
+            "Response variables (numeric):"
+          else
+            "Response variable (numeric):",
+          choices = num_vars,
+          selected = num_vars[1],
+          multiple = isTRUE(input$multi_resp)
+        ),
+        "Help: Choose the numeric outcomes the model should process."
       )
     })
     

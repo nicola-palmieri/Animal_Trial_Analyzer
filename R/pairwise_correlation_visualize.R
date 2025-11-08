@@ -10,11 +10,14 @@ visualize_ggpairs_ui <- function(id) {
       h4("Step 4 — Visualize pairwise correlation"),
       p("Visualize pairwise relationships and correlation coefficients among numeric variables."),
       hr(),
-      selectInput(
-        ns("plot_type"),
-        label = "Select visualization type:",
-        choices = c("Pairwise scatterplot matrix" = "GGPairs"),
-        selected = "GGPairs"
+      with_help_tooltip(
+        selectInput(
+          ns("plot_type"),
+          label = "Select visualization type:",
+          choices = c("Pairwise scatterplot matrix" = "GGPairs"),
+          selected = "GGPairs"
+        ),
+        "Help: Choose how to visualise the pairwise relationships between variables."
       ),
       hr(),
       uiOutput(ns("sub_controls"))

@@ -14,13 +14,25 @@ reg_detect_types <- function(df) {
 
 reg_variable_selectors_ui <- function(ns, types, allow_random = FALSE) {
   out <- list(
-    selectInput(ns("dep"), "Response variable (numeric):", choices = types$num),
-    selectInput(ns("fixed"), "Categorical predictors:", choices = types$fac, multiple = TRUE),
-    selectInput(ns("covar"), "Numeric predictors:", choices = types$num, multiple = TRUE)
+    with_help_tooltip(
+      selectInput(ns("dep"), "Response variable (numeric):", choices = types$num),
+      "Help: Pick the numeric outcome you want the model to explain."
+    ),
+    with_help_tooltip(
+      selectInput(ns("fixed"), "Categorical predictors:", choices = types$fac, multiple = TRUE),
+      "Help: Select group variables that might influence the response."
+    ),
+    with_help_tooltip(
+      selectInput(ns("covar"), "Numeric predictors:", choices = types$num, multiple = TRUE),
+      "Help: Select numeric predictors that could explain changes in the response."
+    )
   )
   if (allow_random) {
     out <- c(out, list(
-      selectInput(ns("random"), "Random effect (categorical):", choices = types$fac, selected = NULL)
+      with_help_tooltip(
+        selectInput(ns("random"), "Random effect (categorical):", choices = types$fac, selected = NULL),
+        "Help: Choose a grouping factor for random intercepts when using mixed models."
+      )
     ))
   }
   do.call(tagList, out)
@@ -33,10 +45,13 @@ reg_interactions_ui <- function(ns, fixed, fac_vars) {
   pairs <- combn(cats_only, 2, simplify = FALSE)
   pair_labels <- vapply(pairs, function(p) paste(p, collapse = " × "), character(1))
   pair_values <- vapply(pairs, function(p) paste(p, collapse = ":"), character(1))
-  checkboxGroupInput(
-    ns("interactions"),
-    label = "Select 2-way interactions (optional):",
-    choices = stats::setNames(pair_values, pair_labels)
+  with_help_tooltip(
+    checkboxGroupInput(
+      ns("interactions"),
+      label = "Select 2-way interactions (optional):",
+      choices = stats::setNames(pair_values, pair_labels)
+    ),
+    "Help: Tick pairs of factors to let the model test if their joint effect matters."
   )
 }
 

@@ -15,8 +15,14 @@ two_way_anova_ui <- function(id) {
       ),
       br(),
       fluidRow(
-        column(6, actionButton(ns("run"), "Show results", width = "100%")),
-        column(6, downloadButton(ns("download_all"), "Download all results", style = "width: 100%;"))
+        column(6, with_help_tooltip(
+          actionButton(ns("run"), "Show results", width = "100%"),
+          "Help: Fit the two-way ANOVA with the selected factors and responses."
+        )),
+        column(6, with_help_tooltip(
+          downloadButton(ns("download_all"), "Download all results", style = "width: 100%;"),
+          "Help: Save all ANOVA tables, post-hoc results, and diagnostics to disk."
+        ))
       )
     ),
     results = tagList(
@@ -46,17 +52,23 @@ two_way_anova_server <- function(id, filtered_data) {
 
       tagList(
         multi_response_ui(ns("response")),
-        selectInput(
-          ns("factor1"),
-          "Categorical predictor 1 (x-axis):",
-          choices = cat_cols,
-          selected = if (length(cat_cols) > 0) cat_cols[1] else NULL
+        with_help_tooltip(
+          selectInput(
+            ns("factor1"),
+            "Categorical predictor 1 (x-axis):",
+            choices = cat_cols,
+            selected = if (length(cat_cols) > 0) cat_cols[1] else NULL
+          ),
+          "Help: Select the factor for the x-axis groups in the interaction plot."
         ),
-        selectInput(
-          ns("factor2"),
-          "Categorical predictor 2 (lines):",
-          choices = cat_cols,
-          selected = if (length(cat_cols) > 1) cat_cols[2] else NULL
+        with_help_tooltip(
+          selectInput(
+            ns("factor2"),
+            "Categorical predictor 2 (lines):",
+            choices = cat_cols,
+            selected = if (length(cat_cols) > 1) cat_cols[2] else NULL
+          ),
+          "Help: Select the factor for the lines in the interaction plot."
         )
       )
     })
@@ -69,24 +81,30 @@ two_way_anova_server <- function(id, filtered_data) {
     output$level_order_1 <- renderUI({
       req(df(), input$factor1)
       levels1 <- unique(as.character(df()[[input$factor1]]))
-      selectInput(
-        ns("order1"),
-        paste("Order of levels (first = reference):", input$factor1, "(x-axis)"),
-        choices = levels1,
-        selected = levels1,
-        multiple = TRUE
+      with_help_tooltip(
+        selectInput(
+          ns("order1"),
+          paste("Order of levels (first = reference):", input$factor1, "(x-axis)"),
+          choices = levels1,
+          selected = levels1,
+          multiple = TRUE
+        ),
+        sprintf("Help: Arrange the levels of %s for the x-axis; the first level is the reference.", input$factor1)
       )
     })
     
     output$level_order_2 <- renderUI({
       req(df(), input$factor2)
       levels2 <- unique(as.character(df()[[input$factor2]]))
-      selectInput(
-        ns("order2"),
-        paste("Order of levels (first = reference):", input$factor2, "(lines)"),
-        choices = levels2,
-        selected = levels2,
-        multiple = TRUE
+      with_help_tooltip(
+        selectInput(
+          ns("order2"),
+          paste("Order of levels (first = reference):", input$factor2, "(lines)"),
+          choices = levels2,
+          selected = levels2,
+          multiple = TRUE
+        ),
+        sprintf("Help: Arrange the levels of %s for the line colours; the first level is the reference.", input$factor2)
       )
     })
     

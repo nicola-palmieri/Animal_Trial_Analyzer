@@ -23,8 +23,14 @@ regression_ui <- function(id, engine = c("lm", "lmm"), allow_multi_response = FA
       uiOutput(ns("formula_preview")),
       br(),
       fluidRow(
-        column(6, actionButton(ns("run"), "Show results", width = "100%")),
-        column(6, downloadButton(ns("download_model"), "Download all results", style = "width: 100%;"))
+        column(6, with_help_tooltip(
+          actionButton(ns("run"), "Show results", width = "100%"),
+          "Help: Fit the model using the chosen predictors and options."
+        )),
+        column(6, with_help_tooltip(
+          downloadButton(ns("download_model"), "Download all results", style = "width: 100%;"),
+          "Help: Export the model outputs, tables, and summaries to your computer."
+        ))
       )
     ),
     results = tagList(
@@ -47,7 +53,10 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
       output$response_ui <- renderUI({
         req(data())
         types <- reg_detect_types(data())
-        selectInput(ns("dep"), "Response variable (numeric):", choices = types$num)
+        with_help_tooltip(
+          selectInput(ns("dep"), "Response variable (numeric):", choices = types$num),
+          "Help: Choose the outcome that the model should predict."
+        )
       })
 
       selected_responses <- reactive({
@@ -59,11 +68,14 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
     output$fixed_selector <- renderUI({
       req(data())
       types <- reg_detect_types(data())
-      selectInput(
-        ns("fixed"),
-        "Categorical predictors:",
-        choices = types$fac,
-        multiple = TRUE
+      with_help_tooltip(
+        selectInput(
+          ns("fixed"),
+          "Categorical predictors:",
+          choices = types$fac,
+          multiple = TRUE
+        ),
+        "Help: Pick factor variables that might explain differences in the response."
       )
     })
 
@@ -84,12 +96,15 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
             values <- values[!is.na(values)]
             lvls <- unique(as.character(values))
           }
-          selectInput(
-            ns(paste0("order_", var)),
-            paste("Order of levels (first = reference):", var),
-            choices = lvls,
-            selected = lvls,
-            multiple = TRUE
+          with_help_tooltip(
+            selectInput(
+              ns(paste0("order_", var)),
+              paste("Order of levels (first = reference):", var),
+              choices = lvls,
+              selected = lvls,
+              multiple = TRUE
+            ),
+            sprintf("Help: Arrange the levels of %s; the first level becomes the model reference.", var)
           )
         })
       )
@@ -98,11 +113,14 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
     output$covar_selector <- renderUI({
       req(data())
       types <- reg_detect_types(data())
-      selectInput(
-        ns("covar"),
-        "Numeric predictors:",
-        choices = types$num,
-        multiple = TRUE
+      with_help_tooltip(
+        selectInput(
+          ns("covar"),
+          "Numeric predictors:",
+          choices = types$num,
+          multiple = TRUE
+        ),
+        "Help: Pick numeric predictors that could help explain the response."
       )
     })
 
@@ -110,11 +128,14 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
       output$random_selector <- renderUI({
         req(data())
         types <- reg_detect_types(data())
-        selectInput(
-          ns("random"),
-          "Random effect (categorical):",
-          choices = types$fac,
-          selected = NULL
+        with_help_tooltip(
+          selectInput(
+            ns("random"),
+            "Random effect (categorical):",
+            choices = types$fac,
+            selected = NULL
+          ),
+          "Help: Choose a grouping factor for random intercepts in the mixed model."
         )
       })
     }
@@ -294,7 +315,10 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
             column(6, plotOutput(ns(paste0("qq_", idx))))
           ),
           br(),
-          downloadButton(ns(paste0("download_", idx)), "Download results", style = "width: 100%;")
+          with_help_tooltip(
+            downloadButton(ns(paste0("download_", idx)), "Download results", style = "width: 100%;"),
+            "Help: Save the model summary and diagnostics for this response."
+          )
         )
       } else {
           stratum_tabs <- lapply(seq_along(strata), function(j) {
@@ -311,7 +335,10 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
                   column(6, plotOutput(ns(paste0("qq_", idx, "_", j))))
                 ),
                 br(),
-                downloadButton(ns(paste0("download_", idx, "_", j)), "Download results", style = "width: 100%;")
+                with_help_tooltip(
+                  downloadButton(ns(paste0("download_", idx, "_", j)), "Download results", style = "width: 100%;"),
+                  "Help: Save the model summary and diagnostics for this stratum."
+                )
               )
             } else {
               tags$pre(format_safe_error_message("Model fitting failed", stratum$error))

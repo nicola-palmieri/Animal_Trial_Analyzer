@@ -6,15 +6,24 @@ ggpairs_ui <- function(id) {
   ns <- NS(id)
   list(
     config = tagList(
-      selectInput(ns("vars"), "Numeric variables:", choices = NULL, multiple = TRUE),
+      with_help_tooltip(
+        selectInput(ns("vars"), "Numeric variables:", choices = NULL, multiple = TRUE),
+        "Help: Choose which numeric columns to include in the correlation matrix."
+      ),
       tags$details(
         tags$summary(strong("Advanced options")),
         stratification_ui("strat", ns)
       ),
       br(),
       fluidRow(
-        column(6, actionButton(ns("run"), "Show correlation matrix", width = "100%")),
-        column(6, downloadButton(ns("download_model"), "Download all results", style = "width: 100%;"))
+        column(6, with_help_tooltip(
+          actionButton(ns("run"), "Show correlation matrix", width = "100%"),
+          "Help: Calculate the correlation coefficients for the selected variables."
+        )),
+        column(6, with_help_tooltip(
+          downloadButton(ns("download_model"), "Download all results", style = "width: 100%;"),
+          "Help: Export the correlation matrices and any messages to a text file."
+        ))
       )
     ),
     results = tagList(

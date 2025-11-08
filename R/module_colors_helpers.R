@@ -19,12 +19,15 @@ render_color_inputs <- function(ns, data, color_var) {
       tags$div(
         style = "margin-bottom: 8px;",
         tags$label(lvls[i], style = "display:block; margin-bottom: 4px;"),
-        color_dropdown_input(
-          ns,
-          id = paste0("col_", color_var, "_", i),
-          palette = basic_color_palette,
-          ncol = 4,
-          selected = selected
+        with_help_tooltip(
+          color_dropdown_input(
+            ns,
+            id = paste0("col_", color_var, "_", i),
+            palette = basic_color_palette,
+            ncol = 4,
+            selected = selected
+          ),
+          sprintf("Help: Pick the colour that will represent %s in the plot.", lvls[i])
         )
       )
     })

@@ -32,83 +32,116 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
       h4("Step 4 — Visualize principal component analysis (PCA)"),
       p("Visualize multivariate structure using a PCA biplot."),
       hr(),
-      selectInput(
-        ns("plot_type"),
-        label = "Select visualization type:",
-        choices = c("PCA biplot" = "biplot"),
-        selected = "biplot"
+      with_help_tooltip(
+        selectInput(
+          ns("plot_type"),
+          label = "Select visualization type:",
+          choices = c("PCA biplot" = "biplot"),
+          selected = "biplot"
+        ),
+        "Help: Pick how the PCA results should be displayed."
       ),
       hr(),
-      selectInput(
-        ns("pca_color"),
-        label = "Color points by:",
-        choices = choices,
-        selected = "None"
+      with_help_tooltip(
+        selectInput(
+          ns("pca_color"),
+          label = "Color points by:",
+          choices = choices,
+          selected = "None"
+        ),
+        "Help: Colour the samples using a grouping variable to spot patterns."
       ),
-      selectInput(
-        ns("pca_shape"),
-        label = "Shape points by:",
-        choices = choices,
-        selected = "None"
+      with_help_tooltip(
+        selectInput(
+          ns("pca_shape"),
+          label = "Shape points by:",
+          choices = choices,
+          selected = "None"
+        ),
+        "Help: Change the point shapes using a grouping variable for extra contrast."
       ),
-      selectInput(
-        ns("pca_label"),
-        label = "Label points by:",
-        choices = choices,
-        selected = "None"
+      with_help_tooltip(
+        selectInput(
+          ns("pca_label"),
+          label = "Label points by:",
+          choices = choices,
+          selected = "None"
+        ),
+        "Help: Add text labels from a column to identify each sample."
       ),
-      selectInput(
-        ns("facet_var"),
-        label = "Facet by variable:",
-        choices = choices,
-        selected = "None"
+      with_help_tooltip(
+        selectInput(
+          ns("facet_var"),
+          label = "Facet by variable:",
+          choices = choices,
+          selected = "None"
+        ),
+        "Help: Split the plot into small multiples based on a grouping variable."
       ),
       uiOutput(ns("layout_controls")),
-      numericInput(
-        ns("pca_label_size"),
-        label = "Label size:",
-        value = 2,
-        min = 0.5,
-        max = 6,
-        step = 0.5
+      with_help_tooltip(
+        numericInput(
+          ns("pca_label_size"),
+          label = "Label size:",
+          value = 2,
+          min = 0.5,
+          max = 6,
+          step = 0.5
+        ),
+        "Help: Control how large the point labels appear on the plot."
       ),
-      checkboxInput(
-        ns("show_loadings"),
-        label = "Show loadings",
-        value = FALSE
+      with_help_tooltip(
+        checkboxInput(
+          ns("show_loadings"),
+          label = "Show loadings",
+          value = FALSE
+        ),
+        "Help: Display arrows that show how each original variable contributes to the components."
       ),
-      numericInput(
-        ns("loading_scale"),
-        label = "Loading arrow scale",
-        value = 1.2, min = 0.1, max = 5, step = 0.1
+      with_help_tooltip(
+        numericInput(
+          ns("loading_scale"),
+          label = "Loading arrow scale",
+          value = 1.2, min = 0.1, max = 5, step = 0.1
+        ),
+        "Help: Stretch or shrink the loading arrows to make them easier to read."
       ),
       fluidRow(
         column(
           width = 6,
-          numericInput(
-            ns("plot_width"),
-            label = "Plot width (px)",
-            value = 800,
-            min = 200,
-            max = 2000,
-            step = 50
+          with_help_tooltip(
+            numericInput(
+              ns("plot_width"),
+              label = "Plot width (px)",
+              value = 800,
+              min = 200,
+              max = 2000,
+              step = 50
+            ),
+            "Help: Set the width of the PCA plot in pixels."
           )
         ),
         column(
           width = 6,
-          numericInput(
-            ns("plot_height"),
-            label = "Plot height (px)",
-            value = 600,
-            min = 200,
-            max = 2000,
-            step = 50
+          with_help_tooltip(
+            numericInput(
+              ns("plot_height"),
+              label = "Plot height (px)",
+              value = 600,
+              min = 200,
+              max = 2000,
+              step = 50
+            ),
+            "Help: Set the height of the PCA plot in pixels."
           )
         )
       ),
       add_color_customization_ui(ns, multi_group = TRUE),
       hr(),
-      downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;")
+      with_help_tooltip(
+        downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;"),
+        "Help: Save the PCA figure as an image file."
+      )
     ),
     mainPanel(
       width = 8,
@@ -228,24 +261,30 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
         fluidRow(
           column(
             width = 6,
-            numericInput(
-              ns("grid_rows"),
-              "Grid rows",
-              value = isolate(if (is.null(input$grid_rows)) NA else input$grid_rows),
-              min = 1,
-              max = 10,
-              step = 1
+            with_help_tooltip(
+              numericInput(
+                ns("grid_rows"),
+                "Grid rows",
+                value = isolate(if (is.null(input$grid_rows)) NA else input$grid_rows),
+                min = 1,
+                max = 10,
+                step = 1
+              ),
+              "Help: Decide how many rows of panels to show when faceting the PCA plot."
             )
           ),
           column(
             width = 6,
-            numericInput(
-              ns("grid_cols"),
-              "Grid columns",
-              value = isolate(if (is.null(input$grid_cols)) NA else input$grid_cols),
-              min = 1,
-              max = 10,
-              step = 1
+            with_help_tooltip(
+              numericInput(
+                ns("grid_cols"),
+                "Grid columns",
+                value = isolate(if (is.null(input$grid_cols)) NA else input$grid_cols),
+                min = 1,
+                max = 10,
+                step = 1
+              ),
+              "Help: Decide how many columns of panels to show when faceting the PCA plot."
             )
           )
         )
