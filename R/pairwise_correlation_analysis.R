@@ -7,7 +7,6 @@ ggpairs_ui <- function(id) {
   list(
     config = tagList(
       selectInput(ns("vars"), "Numeric variables:", choices = NULL, multiple = TRUE),
-      br(),
       tags$details(
         tags$summary(strong("Advanced options")),
         br(),
