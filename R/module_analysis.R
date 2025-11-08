@@ -8,7 +8,7 @@ analysis_ui <- function(id) {
     sidebarPanel(
       width = 4,
       h4("Step 3 — Analyze results"),
-      p("Select the statistical approach that fits your trial design, then inspect the summaries on the right."),
+      p("Select an analysis type to explore your data, then inspect the summaries on the right."),
       hr(),
       
       # --- CSS: expand dropdown height for better visibility ---

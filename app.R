@@ -30,7 +30,7 @@ for (f in list.files("R", full.names = TRUE, pattern = "\\.R$")) source(f)
 # UI
 # ---------------------------------------------------------------
 ui <- navbarPage(
-  title = "📊 Table Analyzer",
+  title = tagList(icon("table"), "Table Analyzer"),
   id = "main_nav",
   theme = bs_theme(bootswatch = "flatly"),
   
@@ -52,20 +52,20 @@ ui <- navbarPage(
     "))
   ),
   
-  tabPanel(
-    "1️⃣ Upload",
+    tabPanel(
+    title = tagList(icon("upload"), " Upload"),
     fluidPage(upload_ui("upload"))
   ),
   tabPanel(
-    "2️⃣ Filter",
+    title = tagList(icon("filter"), " Filter"),
     fluidPage(filter_ui("filter"))
   ),
   tabPanel(
-    "3️⃣ Analyze",
+    title = tagList(icon("chart-line"), " Analyze"),
     fluidPage(analysis_ui("analysis"))
   ),
   tabPanel(
-    "4️⃣ Visualize",
+    title = tagList(icon("chart-area"), " Visualize"),
     fluidPage(visualize_ui("visualize"))
   ),
 )
