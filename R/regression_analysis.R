@@ -305,20 +305,17 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
               tagList(
                 verbatimTextOutput(ns(paste0("summary_", idx, "_", j))),
                 br(),
-              h5("Diagnostics"),
-              fluidRow(
-                column(6, plotOutput(ns(paste0("resid_", idx, "_", j)))),
-                column(6, plotOutput(ns(paste0("qq_", idx, "_", j))))
-              ),
-              br(),
-              downloadButton(ns(paste0("download_", idx, "_", j)), "Download results", style = "width: 100%;")
-            )
-          } else {
-            div(
-              class = "alert alert-warning",
-              if (!is.null(stratum$error)) stratum$error else "Model fitting failed."
-            )
-          }
+                h5("Diagnostics"),
+                fluidRow(
+                  column(6, plotOutput(ns(paste0("resid_", idx, "_", j)))),
+                  column(6, plotOutput(ns(paste0("qq_", idx, "_", j))))
+                ),
+                br(),
+                downloadButton(ns(paste0("download_", idx, "_", j)), "Download results", style = "width: 100%;")
+              )
+            } else {
+              tags$pre(format_safe_error_message("Model fitting failed", stratum$error))
+            }
 
           tabPanel(title = label, content)
         })
@@ -340,19 +337,19 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
 
       error_block <- NULL
       if (!is.null(error_resps) && length(error_resps) > 0) {
-        error_items <- lapply(error_resps, function(resp) {
+        error_block <- lapply(error_resps, function(resp) {
           err <- mod$errors[[resp]]
-          tags$li(tags$strong(resp), ": ", if (!is.null(err)) err else "Model fitting failed.")
+          tags$pre(
+            format_safe_error_message(
+              paste("Model fitting failed for", resp),
+              if (!is.null(err)) err else ""
+            )
+          )
         })
-        error_block <- div(
-          class = "alert alert-warning",
-          strong("Error:"),
-          tags$ul(error_items)
-        )
       }
 
       if (is.null(success_resps) || length(success_resps) == 0) {
-        if (!is.null(error_block)) return(tagList(error_block))
+        if (!is.null(error_block)) return(do.call(tagList, error_block))
         return(NULL)
       }
 
@@ -374,10 +371,8 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
         panels[[1]]
       }
 
-      tagList(
-        if (!is.null(error_block)) error_block,
-        results_block
-      )
+      elements <- c(if (!is.null(error_block)) error_block, list(results_block))
+      do.call(tagList, elements)
     })
 
     observeEvent(models(), {

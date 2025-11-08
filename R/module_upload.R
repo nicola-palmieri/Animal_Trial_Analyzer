@@ -63,7 +63,7 @@ upload_server <- function(id) {
         processed <- safe_preprocess_uploaded_table(data)
         if (!is.null(processed$error)) {
           output$validation_msg <- renderText(
-            paste("❌ Error preparing example dataset:", conditionMessage(processed$error))
+            format_safe_error_message("Error preparing example dataset", processed$error)
           )
           return()
         }
@@ -145,10 +145,7 @@ upload_server <- function(id) {
 
         if (!is.null(safe_result$error)) {
           output$validation_msg <- renderText(
-            paste(
-              "❌ Error converting wide format:",
-              conditionMessage(safe_result$error)
-            )
+            format_safe_error_message("Error converting wide format", safe_result$error)
           )
           return()
         }
@@ -174,7 +171,7 @@ upload_server <- function(id) {
       processed <- safe_preprocess_uploaded_table(data)
       if (!is.null(processed$error)) {
         output$validation_msg <- renderText(
-          paste("❌ Error preparing data:", conditionMessage(processed$error))
+          format_safe_error_message("Error preparing data", processed$error)
         )
         return()
       }

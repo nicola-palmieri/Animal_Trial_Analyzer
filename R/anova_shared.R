@@ -422,14 +422,14 @@ print_anova_summary_and_posthoc <- function(model_entry, factors) {
   }
 
   if (!is.null(model_entry$error)) {
-    cat("Model fitting failed:\n", model_entry$error, "\n", sep = "")
+    cat(format_safe_error_message("Model fitting failed", model_entry$error), "\n", sep = "")
     return(invisible(NULL))
   }
 
   model_obj <- model_entry$model
   results <- prepare_anova_outputs(model_obj, factors)
   if (!is.null(results$error)) {
-    cat("ANOVA computation failed:\n", results$error, "\n", sep = "")
+    cat(format_safe_error_message("ANOVA computation failed", results$error), "\n", sep = "")
     return(invisible(NULL))
   }
   if (is.null(results$anova_object)) {
@@ -444,7 +444,15 @@ print_anova_summary_and_posthoc <- function(model_entry, factors) {
     for (factor_nm in names(results$posthoc_details)) {
       details <- results$posthoc_details[[factor_nm]]
       if (!is.null(details$error)) {
-        cat("\nPost-hoc Tukey comparisons for", factor_nm, "failed:", details$error, "\n")
+        cat(
+          "\n",
+          format_safe_error_message(
+            paste("Post-hoc Tukey comparisons for", factor_nm, "failed"),
+            details$error
+          ),
+          "\n",
+          sep = ""
+        )
       } else if (!is.null(details$table)) {
         cat("\nPost-hoc Tukey comparisons for", factor_nm, ":\n")
         print(details$table)
