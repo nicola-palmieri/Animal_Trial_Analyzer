@@ -275,7 +275,7 @@ pca_server <- function(id, filtered_data) {
 
     posthoc_results <- reactive(NULL)
 
-    reactive({
+    analysis_result <- reactive({
       details <- pca_result()
       if (is.null(details)) {
         return(list(
@@ -368,5 +368,7 @@ pca_server <- function(id, filtered_data) {
         class = "compact stripe"
       )
     })
+
+    analysis_result
   })
 }
