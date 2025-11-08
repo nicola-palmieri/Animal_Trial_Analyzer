@@ -17,7 +17,6 @@ regression_ui <- function(id, engine = c("lm", "lmm"), allow_multi_response = FA
       uiOutput(ns("interaction_select")),
       tags$details(
         tags$summary(strong("Advanced options")),
-        br(),
         stratification_ui("strat", ns)
       ),
       hr(),
