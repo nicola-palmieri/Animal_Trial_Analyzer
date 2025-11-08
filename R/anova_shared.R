@@ -1177,8 +1177,8 @@ build_bar_plot_panel <- function(stats_df,
       dplyr::filter(p.value < 0.05)
 
     if (nrow(signif_df) > 0) {
-      if (!factor2 %in% names(signif_df)) {
-        signif_df[[factor2]] <- "__overall__"
+      if (!factor1 %in% names(signif_df)) {
+        signif_df[[factor1]] <- "__overall__"
       }
 
       lookup <- stats_df |>
@@ -1197,7 +1197,7 @@ build_bar_plot_panel <- function(stats_df,
           .xpos = .x_index + .x_offset
         )
 
-      signif_split <- split(signif_df, signif_df[[factor2]])
+      signif_split <- split(signif_df, signif_df[[factor1]])
       annotations <- lapply(names(signif_split), function(level_name) {
         subset_df <- signif_split[[level_name]]
         if (nrow(subset_df) == 0) {
@@ -1206,7 +1206,7 @@ build_bar_plot_panel <- function(stats_df,
 
         level_lookup <- lookup
         if (!identical(level_name, "__overall__") && !is.na(level_name)) {
-          level_lookup <- dplyr::filter(level_lookup, .factor2 == level_name)
+          level_lookup <- dplyr::filter(level_lookup, .factor1 == level_name)
         }
 
         if (nrow(level_lookup) == 0) {
@@ -1233,11 +1233,11 @@ build_bar_plot_panel <- function(stats_df,
               TRUE ~ sprintf("p=%.3f", p.value)
             ),
             xmin = vapply(group1, function(g) {
-              vals <- level_lookup$.xpos[level_lookup$.factor1 == g]
+              vals <- level_lookup$.xpos[level_lookup$.factor2 == g]
               if (length(vals) == 0) NA_real_ else vals[1]
             }, numeric(1)),
             xmax = vapply(group2, function(g) {
-              vals <- level_lookup$.xpos[level_lookup$.factor1 == g]
+              vals <- level_lookup$.xpos[level_lookup$.factor2 == g]
               if (length(vals) == 0) NA_real_ else vals[1]
             }, numeric(1)),
             y_position = seq(
@@ -1321,31 +1321,35 @@ prepare_barplot_significance <- function(posthoc_entry, factor1, factor2, stats_
   }
 
   df <- posthoc_entry
-  if ("Factor" %in% names(df) && !is.null(factor1)) {
-    df <- df[df$Factor %in% c(factor1, paste(factor1, factor2, sep = ":")), , drop = FALSE]
+  if ("Factor" %in% names(df) && !is.null(factor2)) {
+    df <- df[df$Factor %in% c(
+      factor2,
+      paste(factor1, factor2, sep = ":"),
+      paste(factor2, factor1, sep = ":")
+    ), , drop = FALSE]
   }
 
   if (nrow(df) == 0) {
     return(NULL)
   }
 
-  factor2_levels <- NULL
-  if (!is.null(factor2) && factor2 %in% names(stats_df)) {
-    factor2_levels <- levels(stats_df[[factor2]])
-    if (is.null(factor2_levels)) {
-      factor2_levels <- unique(as.character(stats_df[[factor2]]))
+  factor1_levels <- NULL
+  if (!is.null(factor1) && factor1 %in% names(stats_df)) {
+    factor1_levels <- levels(stats_df[[factor1]])
+    if (is.null(factor1_levels)) {
+      factor1_levels <- unique(as.character(stats_df[[factor1]]))
     }
   }
 
-  if (!is.null(factor2) && factor2 %in% names(df)) {
-    split_df <- split(df, df[[factor2]])
+  if (!is.null(factor1) && factor1 %in% names(df)) {
+    split_df <- split(df, df[[factor1]])
     annotations <- lapply(names(split_df), function(level_name) {
       subset_df <- split_df[[level_name]]
       signif_tbl <- extract_tukey_for_signif(subset_df)
       if (is.null(signif_tbl) || nrow(signif_tbl) == 0) {
         return(NULL)
       }
-      signif_tbl[[factor2]] <- level_name
+      signif_tbl[[factor1]] <- level_name
       signif_tbl
     })
     annotations <- annotations[!vapply(annotations, is.null, logical(1))]
@@ -1353,15 +1357,15 @@ prepare_barplot_significance <- function(posthoc_entry, factor1, factor2, stats_
       return(NULL)
     }
     combined <- dplyr::bind_rows(annotations)
-    if (!is.null(factor2_levels) && factor2 %in% names(combined)) {
-      combined[[factor2]] <- factor(combined[[factor2]], levels = factor2_levels)
+    if (!is.null(factor1_levels) && factor1 %in% names(combined)) {
+      combined[[factor1]] <- factor(combined[[factor1]], levels = factor1_levels)
     }
     return(combined)
   }
 
   signif_df <- extract_tukey_for_signif(df)
-  if (!is.null(signif_df) && nrow(signif_df) > 0 && !is.null(factor2)) {
-    signif_df[[factor2]] <- "__overall__"
+  if (!is.null(signif_df) && nrow(signif_df) > 0 && !is.null(factor1)) {
+    signif_df[[factor1]] <- "__overall__"
   }
   signif_df
 }
