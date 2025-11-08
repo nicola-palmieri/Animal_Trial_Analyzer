@@ -225,7 +225,6 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
 
       ns <- session$ns
       tagList(
-        h4("Layout controls"),
         fluidRow(
           column(
             width = 6,
