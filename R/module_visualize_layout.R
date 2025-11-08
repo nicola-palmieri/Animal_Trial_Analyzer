@@ -138,6 +138,28 @@ numeric_sync_state <- function(session) {
   state
 }
 
+mark_pending_numeric_update <- function(session, input_id) {
+  state <- numeric_sync_state(session)
+  key <- paste0("pending_", input_id)
+  assign(key, TRUE, envir = state)
+}
+
+consume_pending_numeric_update <- function(session, input_id) {
+  state <- numeric_sync_state(session)
+  key <- paste0("pending_", input_id)
+  if (!exists(key, envir = state, inherits = FALSE)) {
+    return(FALSE)
+  }
+
+  pending <- get(key, envir = state, inherits = FALSE)
+  if (isTRUE(pending)) {
+    assign(key, FALSE, envir = state)
+    return(TRUE)
+  }
+
+  FALSE
+}
+
 sync_numeric_input <- function(session, input_id, current_value, target_value) {
   if (is.null(target_value) || length(target_value) == 0) {
     return(invisible(FALSE))
@@ -162,6 +184,7 @@ sync_numeric_input <- function(session, input_id, current_value, target_value) {
 
   if (missing_current) {
     assign(key, list(value = target_int, auto = TRUE), envir = state)
+    mark_pending_numeric_update(session, input_id)
     session$onFlushed(function() {
       updateNumericInput(session, input_id, value = target_int)
     }, once = TRUE)
@@ -175,6 +198,7 @@ sync_numeric_input <- function(session, input_id, current_value, target_value) {
 
   if (isTRUE(entry$auto) && !identical(current_int, target_int)) {
     assign(key, list(value = target_int, auto = TRUE), envir = state)
+    mark_pending_numeric_update(session, input_id)
     session$onFlushed(function() {
       updateNumericInput(session, input_id, value = target_int)
     }, once = TRUE)
