@@ -1212,7 +1212,8 @@ build_bar_plot_panel <- function(stats_df,
           y = label_y,
           label = label_text,
           vjust = label_vjust,
-          fill = NULL
+          fill = NULL,
+          group = !!sym(factor2)
         ),
         position = dodge,
         color = "gray20",
