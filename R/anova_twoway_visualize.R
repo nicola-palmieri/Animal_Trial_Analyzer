@@ -98,9 +98,13 @@ visualize_twoway_server <- function(id, filtered_data, model_fit) {
       info <- plot_info()
       req(info)
       s <- info$layout
+      strata_rows <- if (!is.null(s$strata$rows)) s$strata$rows else 1
+      strata_cols <- if (!is.null(s$strata$cols)) s$strata$cols else 1
+      resp_rows <- if (!is.null(s$responses$rows)) s$responses$rows else 1
+      resp_cols <- if (!is.null(s$responses$cols)) s$responses$cols else 1
       list(
-        w = input$plot_width  * s$strata$cols   * s$responses$ncol,
-        h = input$plot_height * s$strata$rows   * s$responses$nrow
+        w = input$plot_width  * strata_cols * resp_cols,
+        h = input$plot_height * strata_rows * resp_rows
       )
     })
 
@@ -139,6 +143,9 @@ visualize_twoway_server <- function(id, filtered_data, model_fit) {
 
     output$plot_warning <- renderUI({
       info <- plot_info()
+      if (is.null(info)) {
+        return(NULL)
+      }
       if (!is.null(info$warning)) {
         div(class = "alert alert-warning", HTML(info$warning))
       } else {
@@ -165,6 +172,7 @@ visualize_twoway_server <- function(id, filtered_data, model_fit) {
       filename = function() paste0(input$plot_type, "_twoway_anova_plot_", Sys.Date(), ".png"),
       content = function(file) {
         info <- plot_info()
+        req(info)
         req(is.null(info$warning))
         plot <- plot_obj()
         req(plot)

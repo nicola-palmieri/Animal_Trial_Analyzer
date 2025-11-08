@@ -925,18 +925,14 @@ build_anova_plot_info <- function(data, info, layout_values, line_colors = NULL)
     plot = final_plot,
     layout = list(
       strata = list(
-        rows = strata_layout$nrow,
-        cols = strata_layout$ncol,
-        panels = max(1L, strata_panel_count)
+        rows = if (has_strata) strata_layout$nrow else 1L,
+        cols = if (has_strata) strata_layout$ncol else 1L
       ),
       responses = list(
-        nrow = response_layout$nrow,
-        ncol = response_layout$ncol,
-        panels = length(response_plots)
+        rows = response_layout$nrow,
+        cols = response_layout$ncol
       )
     ),
-    has_strata = has_strata,
-    n_responses = length(response_plots),
     warning = warning_text,
     defaults = list(
       strata = strata_defaults,
