@@ -58,3 +58,5 @@ convert_wide_to_long <- function(path, sheet = 1, replicate_col = "Replicate") {
   
   as_tibble(data_long)
 }
+
+safe_convert_wide_to_long <- purrr::safely(convert_wide_to_long)

@@ -128,20 +128,23 @@ upload_server <- function(id) {
       
       if (input$data_source == "wide") {
         # ⚙️ Wide format conversion with error handling
-        data <- tryCatch(
-          convert_wide_to_long(
-            path,
-            sheet = input$sheet,
-            replicate_col = "Replicate"
-          ),
-          error = function(e) {
-            output$validation_msg <- renderText(
-              paste("❌ Error converting wide format:", conditionMessage(e))
-            )
-            NULL
-          }
+        safe_result <- safe_convert_wide_to_long(
+          path,
+          sheet = input$sheet,
+          replicate_col = "Replicate"
         )
-        if (is.null(data)) return()
+
+        if (!is.null(safe_result$error)) {
+          output$validation_msg <- renderText(
+            paste(
+              "❌ Error converting wide format:",
+              conditionMessage(safe_result$error)
+            )
+          )
+          return()
+        }
+
+        data <- safe_result$result
         output$validation_msg <- renderText("✅ Wide format reshaped successfully.")
       } else {
         # 🧾 Simple long format load
