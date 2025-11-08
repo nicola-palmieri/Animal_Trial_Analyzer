@@ -33,11 +33,41 @@ ggpairs_server <- function(id, data_reactive) {
     strat_info <- stratification_server("strat", df)
 
     # ---- Update variable selector ----
-    observe({
-      req(df())
-      num_vars <- names(df())[sapply(df(), is.numeric)]
-      updateSelectInput(session, "vars", choices = num_vars, selected = num_vars)
-    })
+    selection_initialized <- reactiveVal(FALSE)
+    last_selected <- reactiveVal(NULL)
+
+    observeEvent(input$vars, {
+      last_selected(input$vars %||% character())
+    }, ignoreNULL = FALSE)
+
+    repopulate_numeric_selector <- function() {
+      data <- isolate(df())
+      if (is.null(data)) return()
+
+      num_vars <- names(data)[vapply(data, is.numeric, logical(1))]
+      current_input <- isolate(input$vars)
+      previous <- current_input
+      if (is.null(previous)) {
+        previous <- last_selected()
+      }
+      previous <- intersect(previous %||% character(), num_vars)
+
+      selected <- previous
+      if (!selection_initialized() && length(num_vars) > 0) {
+        selected <- if (length(previous) > 0) previous else num_vars
+        selection_initialized(TRUE)
+      }
+
+      updateSelectInput(session, "vars", choices = num_vars, selected = selected)
+    }
+
+    observeEvent(df(), {
+      repopulate_numeric_selector()
+    }, ignoreNULL = FALSE)
+
+    session$onFlushed(function() {
+      repopulate_numeric_selector()
+    }, once = FALSE)
 
     build_ggpairs_object <- function(data) {
       GGally::ggpairs(
