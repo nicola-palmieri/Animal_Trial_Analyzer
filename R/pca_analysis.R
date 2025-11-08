@@ -7,6 +7,14 @@ pca_ui <- function(id) {
   list(
     config = tagList(
       selectInput(ns("vars"), "Numeric variables:", choices = NULL, multiple = TRUE),
+      tags$details(
+        tags$summary(strong("Advanced options")),
+        br(),
+        helpText(paste(
+          "Stratify by is not available for PCA because the principal components are computed on the full numeric matrix.",
+          "Splitting the data by groups would produce different coordinate systems, making the loadings and scores incomparable across groups."
+        ))
+      ),
       br(),
       fluidRow(
         column(6, actionButton(ns("run_pca"), "Show PCA summary", width = "100%")),
@@ -15,7 +23,8 @@ pca_ui <- function(id) {
     ),
     results = tagList(
       h5("PCA summary and loadings"),
-      verbatimTextOutput(ns("summary"))
+      verbatimTextOutput(ns("summary")),
+      uiOutput(ns("excluded_rows_section"))
     )
   )
 }
@@ -40,12 +49,30 @@ pca_server <- function(id, filtered_data) {
       complete_idx <- stats::complete.cases(numeric_subset)
       numeric_subset <- numeric_subset[complete_idx, , drop = FALSE]
       plot_data <- subset_data[complete_idx, , drop = FALSE]
+      original_n <- nrow(subset_data)
+      used_n <- nrow(plot_data)
+      excluded_n <- original_n - used_n
+
+      excluded_rows <- subset_data[!complete_idx, , drop = FALSE]
+      if (excluded_n > 0) {
+        excluded_rows <- cbind(
+          data.frame(`Row #` = seq_len(nrow(subset_data))[!complete_idx], check.names = FALSE),
+          excluded_rows
+        )
+        rownames(excluded_rows) <- NULL
+      } else {
+        excluded_rows <- NULL
+      }
 
       if (nrow(numeric_subset) < 2) {
         return(list(
           model = NULL,
           data = plot_data,
-          message = "Not enough complete observations to compute PCA."
+          message = "Not enough complete observations to compute PCA.",
+          original_n = original_n,
+          used_n = used_n,
+          excluded_n = excluded_n,
+          excluded_rows = excluded_rows
         ))
       }
 
@@ -59,11 +86,23 @@ pca_server <- function(id, filtered_data) {
         return(list(
           model = NULL,
           data = plot_data,
-          message = conditionMessage(model$error)
+          message = conditionMessage(model$error),
+          original_n = original_n,
+          used_n = used_n,
+          excluded_n = excluded_n,
+          excluded_rows = excluded_rows
         ))
       }
 
-      list(model = model$result, data = plot_data, message = NULL)
+      list(
+        model = model$result,
+        data = plot_data,
+        message = NULL,
+        original_n = original_n,
+        used_n = used_n,
+        excluded_n = excluded_n,
+        excluded_rows = excluded_rows
+      )
     }
 
     # Run PCA
@@ -93,16 +132,34 @@ pca_server <- function(id, filtered_data) {
 
       entry <- results$result
       if (is.null(entry) || is.null(entry$model)) {
-        message <- if (!is.null(entry$message) && nzchar(entry$message)) {
-          entry$message
+        if (!is.null(entry)) {
+          used_n <- if (!is.null(entry$used_n)) entry$used_n else 0
+          original_n <- if (!is.null(entry$original_n)) entry$original_n else 0
+          excluded_n <- if (!is.null(entry$excluded_n)) entry$excluded_n else 0
+          cat(sprintf(
+            "Rows used for PCA: %d of %d (excluded %d due to missing values in the selected variables).\n\n",
+            used_n,
+            original_n,
+            excluded_n
+          ))
+        }
+
+        if (!is.null(entry) && !is.null(entry$message) && nzchar(entry$message)) {
+          message <- entry$message
         } else {
-          "Not enough data to compute PCA."
+          message <- "Not enough data to compute PCA."
         }
         cat(message)
         return(invisible())
       }
 
       model <- entry$model
+      cat(sprintf(
+        "Rows used for PCA: %d of %d (excluded %d due to missing values in the selected variables).\n\n",
+        entry$used_n,
+        entry$original_n,
+        entry$excluded_n
+      ))
       cat("── PCA Summary ──\n")
       print(summary(model))
       cat("\n── PCA Loadings (rotation matrix) ──\n")
@@ -126,11 +183,23 @@ pca_server <- function(id, filtered_data) {
         on.exit(sink(), add = TRUE)
 
         entry <- results$result
+        if (!is.null(entry)) {
+          used_n <- if (!is.null(entry$used_n)) entry$used_n else 0
+          original_n <- if (!is.null(entry$original_n)) entry$original_n else 0
+          excluded_n <- if (!is.null(entry$excluded_n)) entry$excluded_n else 0
+          cat(sprintf(
+            "Rows used for PCA: %d of %d (excluded %d due to missing values in the selected variables).\n\n",
+            used_n,
+            original_n,
+            excluded_n
+          ))
+        }
+
         if (is.null(entry) || is.null(entry$model)) {
-          message <- if (!is.null(entry$message) && nzchar(entry$message)) {
-            entry$message
+          if (!is.null(entry) && !is.null(entry$message) && nzchar(entry$message)) {
+            message <- entry$message
           } else {
-            "Not enough data to compute PCA."
+            message <- "Not enough data to compute PCA."
           }
           cat(message, "\n", sep = "")
           return()
@@ -219,8 +288,13 @@ pca_server <- function(id, filtered_data) {
           stats = if (!is.null(df())) list(n = nrow(df()), vars = names(df())) else NULL,
           metadata = list(
             selected_vars = input$vars,
+            group_var = NULL,
+            strata_levels = NULL,
             messages = NULL,
-            complete_cases = NULL
+            complete_cases = NULL,
+            excluded_rows = NULL,
+            excluded_n = NULL,
+            original_n = NULL
           ),
           type = "pca",
           data = df,
@@ -251,6 +325,9 @@ pca_server <- function(id, filtered_data) {
           group_var = NULL,
           strata_levels = NULL,
           complete_cases = if (!is.null(entry)) entry$data else NULL,
+          excluded_rows = if (!is.null(entry)) entry$excluded_rows else NULL,
+          excluded_n = if (!is.null(entry)) entry$excluded_n else NULL,
+          original_n = if (!is.null(entry)) entry$original_n else NULL,
           messages = messages
         ),
         type = "pca",
@@ -259,6 +336,36 @@ pca_server <- function(id, filtered_data) {
         selected_vars = details$selected_vars,
         group_var = NULL,
         strata_levels = NULL
+      )
+    })
+
+    output$excluded_rows_section <- renderUI({
+      results <- pca_result()
+      req(results)
+
+      entry <- results$result
+      if (is.null(entry) || is.null(entry$excluded_n) || entry$excluded_n == 0) {
+        return(tags$p("No rows were excluded when computing the PCA."))
+      }
+
+      tagList(
+        h5(sprintf("Excluded rows (%d)", entry$excluded_n)),
+        DT::DTOutput(ns("excluded_table"))
+      )
+    })
+
+    output$excluded_table <- DT::renderDT({
+      results <- pca_result()
+      req(results)
+
+      entry <- results$result
+      req(entry$excluded_rows)
+
+      DT::datatable(
+        entry$excluded_rows,
+        options = list(scrollX = TRUE, pageLength = 5),
+        rownames = FALSE,
+        class = "compact stripe"
       )
     })
   })
