@@ -73,12 +73,6 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
 
       df <- data()
       fac_vars <- input$fixed
-<<<<<<< HEAD
-=======
-      if (engine == "lmm" && !is.null(input$random) && nzchar(input$random)) {
-        fac_vars <- setdiff(fac_vars, input$random)
-      }
->>>>>>> c97083324109e6e9b8dab241fc9dec9eed0e4c05
 
       if (length(fac_vars) == 0) return(NULL)
 
