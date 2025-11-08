@@ -27,15 +27,16 @@ analysis_ui <- function(id) {
           " " = "",
           "Descriptive" = c("Descriptive Statistics" = "Descriptive Statistics"),
           "Univariate" = c(
-            "One-way ANOVA" = "One-way ANOVA",
-            "Two-way ANOVA" = "Two-way ANOVA",
-            "Linear Model (LM)" = "Linear Model (LM)",
-            "Linear Mixed Model (LMM)" = "Linear Mixed Model (LMM)"
-          ),
-          "Multivariate" = c(
-            "Pairwise Correlation" = "Pairwise Correlation",
-            "Principal Component Analysis (PCA)" = "PCA"
-          )
+          "One-way ANOVA" = "One-way ANOVA",
+          "Two-way ANOVA" = "Two-way ANOVA",
+          "Linear Model (LM)" = "Linear Model (LM)",
+          "Linear Mixed Model (LMM)" = "Linear Mixed Model (LMM)",
+          "Longitudinal (time × treatment)" = "Longitudinal"
+        ),
+        "Multivariate" = c(
+          "Pairwise Correlation" = "Pairwise Correlation",
+          "Principal Component Analysis (PCA)" = "PCA"
+        )
         ),
         selected = ""
       ),
@@ -65,6 +66,7 @@ analysis_server <- function(id, filtered_data) {
       "Two-way ANOVA"          = list(id = "anova2", ui = two_way_anova_ui, server = two_way_anova_server, type = "anova2"),
       "Linear Model (LM)"      = list(id = "lm",     ui = lm_ui, server = lm_server, type = "lm"),
       "Linear Mixed Model (LMM)" = list(id = "lmm",  ui = lmm_ui, server = lmm_server, type = "lmm"),
+      "Longitudinal"            = list(id = "longitudinal", ui = longitudinal_ui, server = longitudinal_server, type = "longitudinal"),
       "Pairwise Correlation"   = list(id = "pairs",  ui = ggpairs_ui, server = ggpairs_server, type = "pairs"),
       "PCA"                    = list(id = "pca",    ui = pca_ui, server = pca_server, type = "pca")
     )
