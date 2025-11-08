@@ -6,6 +6,11 @@ visualize_numeric_boxplots_ui <- function(id) {
   ns <- NS(id)
   tagList(
     checkboxInput(ns("show_points"), "Show individual data points", TRUE),
+    checkboxInput(ns("show_outliers"), "Highlight boxplot outliers", FALSE),
+    conditionalPanel(
+      condition = sprintf("input['%s']", ns("show_outliers")),
+      uiOutput(ns("outlier_label_ui"))
+    ),
     fluidRow(
       column(6, numericInput(ns("plot_width"),  "Subplot width (px)",  200, 200, 2000, 50)),
       column(6, numericInput(ns("plot_height"), "Subplot height (px)", 800, 200, 2000, 50))
@@ -104,6 +109,31 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
       multi_group = TRUE
     )
 
+    output$outlier_label_ui <- renderUI({
+      dat <- filtered_data()
+      cat_cols <- character(0)
+      if (!is.null(dat) && is.data.frame(dat)) {
+        cat_cols <- names(dat)[vapply(
+          dat,
+          function(x) is.character(x) || is.factor(x) || is.logical(x),
+          logical(1)
+        )]
+        cat_cols <- sort(unique(cat_cols))
+      }
+
+      current <- isolate(input$outlier_label)
+      if (is.null(current) || !nzchar(current) || !current %in% cat_cols) {
+        current <- ""
+      }
+
+      selectInput(
+        ns("outlier_label"),
+        label = "Label outliers by:",
+        choices = c("None" = "", stats::setNames(cat_cols, cat_cols)),
+        selected = current
+      )
+    })
+
     cached_plot_info <- reactiveVal(NULL)
     cache_ready <- reactiveVal(FALSE)
     skip_auto_invalidations <- reactiveVal(0L)
@@ -125,6 +155,10 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
         summary_info(),
         filtered_data(),
         input$show_points,
+        input$show_outliers,
+        input$outlier_label,
+        input$resp_rows,
+        input$resp_cols,
         custom_colors()
       ),
       {
@@ -159,6 +193,8 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
         selected_vars = selected_vars,
         group_var = group_var,
         show_points = isTRUE(input$show_points),
+        show_outliers = isTRUE(input$show_outliers),
+        outlier_label_var = validate_outlier_label(input$outlier_label),
         nrow_input = input$resp_rows,
         ncol_input = input$resp_cols,
         custom_colors = custom_colors()
@@ -266,11 +302,13 @@ build_descriptive_numeric_boxplot <- function(df,
                                               selected_vars = NULL,
                                               group_var = NULL,
                                               show_points = TRUE,
+                                              show_outliers = FALSE,
+                                              outlier_label_var = NULL,
                                               nrow_input = NULL,
                                               ncol_input = NULL,
                                               custom_colors = NULL) {
   if (is.null(df) || !is.data.frame(df) || nrow(df) == 0) return(NULL)
-  
+
   num_vars <- names(df)[vapply(df, is.numeric, logical(1))]
   if (!is.null(selected_vars) && length(selected_vars) > 0) {
     num_vars <- intersect(num_vars, selected_vars)
@@ -298,10 +336,48 @@ build_descriptive_numeric_boxplot <- function(df,
         theme_minimal(base_size = 13) +
         labs(title = var, x = NULL, y = var) +
         theme(axis.text.x = element_text(angle = 45, hjust = 1))
+      added_color_scale <- FALSE
       if (isTRUE(show_points)) {
         p <- p +
           geom_jitter(aes(color = .data[[group_var]]), width = 0.2, alpha = 0.5, size = 1) +
           scale_color_manual(values = palette, guide = "none")
+        added_color_scale <- TRUE
+      }
+
+      if (isTRUE(show_outliers)) {
+        outliers <- prepare_boxplot_outliers(
+          data = df,
+          value_col = var,
+          group_col = group_var,
+          label_col = outlier_label_var
+        )
+        if (!is.null(outliers) && nrow(outliers) > 0) {
+          p <- p + geom_point(
+            data = outliers,
+            aes(x = x, y = y, color = group),
+            inherit.aes = FALSE,
+            size = 2.5,
+            show.legend = FALSE
+          )
+          if (!added_color_scale) {
+            p <- p + scale_color_manual(values = palette, guide = "none")
+            added_color_scale <- TRUE
+          }
+          label_data <- outliers[!is.na(outliers$label) & nzchar(outliers$label), , drop = FALSE]
+          if (nrow(label_data) > 0) {
+            p <- p + ggrepel::geom_text_repel(
+              data = label_data,
+              aes(x = x, y = y, label = label, color = group),
+              inherit.aes = FALSE,
+              size = 3,
+              max.overlaps = Inf,
+              min.segment.length = 0,
+              box.padding = 0.3,
+              point.padding = 0.2,
+              show.legend = FALSE
+            )
+          }
+        }
       }
     } else {
       # ✅ always provide an x aesthetic
@@ -313,8 +389,41 @@ build_descriptive_numeric_boxplot <- function(df,
       if (isTRUE(show_points)) {
         p <- p + geom_jitter(color = resolve_single_color(custom_colors), width = 0.05, alpha = 0.5, size = 1)
       }
+      if (isTRUE(show_outliers)) {
+        outliers <- prepare_boxplot_outliers(
+          data = df,
+          value_col = var,
+          label_col = outlier_label_var
+        )
+        if (!is.null(outliers) && nrow(outliers) > 0) {
+          single_color <- resolve_single_color(custom_colors)
+          p <- p + geom_point(
+            data = outliers,
+            aes(x = x, y = y),
+            inherit.aes = FALSE,
+            color = single_color,
+            size = 2.5,
+            show.legend = FALSE
+          )
+          label_data <- outliers[!is.na(outliers$label) & nzchar(outliers$label), , drop = FALSE]
+          if (nrow(label_data) > 0) {
+            p <- p + ggrepel::geom_text_repel(
+              data = label_data,
+              aes(x = x, y = y, label = label),
+              inherit.aes = FALSE,
+              size = 3,
+              color = single_color,
+              max.overlaps = Inf,
+              min.segment.length = 0,
+              box.padding = 0.3,
+              point.padding = 0.2,
+              show.legend = FALSE
+            )
+          }
+        }
+      }
     }
-    
+
     if (inherits(p, "gg")) p else NULL
   })
   
@@ -356,3 +465,97 @@ build_descriptive_numeric_boxplot <- function(df,
     defaults = defaults
   )
 }
+
+
+validate_outlier_label <- function(label_input) {
+  if (is.null(label_input) || !nzchar(label_input)) {
+    return(NULL)
+  }
+  label_input
+}
+
+
+prepare_boxplot_outliers <- function(data,
+                                     value_col,
+                                     group_col = NULL,
+                                     label_col = NULL) {
+  if (is.null(data) || !is.data.frame(data) || !value_col %in% names(data)) {
+    return(NULL)
+  }
+
+  clean_labels <- function(values) {
+    if (is.null(values)) return(rep(NA_character_, length.out = 0))
+    out <- as.character(values)
+    out[is.na(out) | trimws(out) == ""] <- NA_character_
+    out
+  }
+
+  if (!is.null(group_col) && group_col %in% names(data)) {
+    grouped <- data
+    grouped[[group_col]] <- droplevels(as.factor(grouped[[group_col]]))
+    group_levels <- levels(grouped[[group_col]])
+
+    out_list <- lapply(group_levels, function(lvl) {
+      subset <- grouped[grouped[[group_col]] == lvl, , drop = FALSE]
+      values <- subset[[value_col]]
+      values <- values[!is.na(values)]
+      if (length(values) == 0) return(NULL)
+      stats <- stats::quantile(values, probs = c(0.25, 0.75), na.rm = TRUE, names = FALSE)
+      if (anyNA(stats)) return(NULL)
+      iqr <- stats[2] - stats[1]
+      lower <- stats[1] - 1.5 * iqr
+      upper <- stats[2] + 1.5 * iqr
+      idx <- which(subset[[value_col]] < lower | subset[[value_col]] > upper)
+      if (length(idx) == 0) return(NULL)
+
+      labels <- if (!is.null(label_col) && label_col %in% names(subset)) {
+        clean_labels(subset[[label_col]][idx])
+      } else {
+        rep(NA_character_, length(idx))
+      }
+
+      data.frame(
+        x = factor(rep(lvl, length(idx)), levels = group_levels),
+        y = subset[[value_col]][idx],
+        group = factor(rep(lvl, length(idx)), levels = group_levels),
+        label = labels,
+        stringsAsFactors = FALSE
+      )
+    })
+
+    out_list <- Filter(Negate(is.null), out_list)
+    if (length(out_list) == 0) {
+      return(NULL)
+    }
+    outliers <- do.call(rbind, out_list)
+    rownames(outliers) <- NULL
+    return(outliers)
+  }
+
+  values <- data[[value_col]]
+  values <- values[!is.na(values)]
+  if (length(values) == 0) return(NULL)
+  stats <- stats::quantile(values, probs = c(0.25, 0.75), na.rm = TRUE, names = FALSE)
+  if (anyNA(stats)) return(NULL)
+  iqr <- stats[2] - stats[1]
+  lower <- stats[1] - 1.5 * iqr
+  upper <- stats[2] + 1.5 * iqr
+  idx <- which(data[[value_col]] < lower | data[[value_col]] > upper)
+  if (length(idx) == 0) return(NULL)
+
+  labels <- if (!is.null(label_col) && label_col %in% names(data)) {
+    clean_values <- clean_labels(data[[label_col]][idx])
+    clean_values
+  } else {
+    rep(NA_character_, length(idx))
+  }
+
+  data.frame(
+    x = factor(rep(1, length(idx))),
+    y = data[[value_col]][idx],
+    group = NA,
+    label = labels,
+    stringsAsFactors = FALSE
+  )
+}
+
