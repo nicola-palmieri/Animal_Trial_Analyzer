@@ -2,9 +2,6 @@
 # 🧭 Stratification helpers (shared across analysis modules)
 # ===============================================================
 
-STRAT_CHOOSE_LABEL <- "Stratify by:"
-STRAT_NONE_LABEL <- "None"
-STRAT_ORDER_LABEL <- "Order of levels:"
 MAX_STRATIFICATION_LEVELS <- 10
 
 stratification_ui <- function(id, ns = NULL) {
@@ -39,9 +36,9 @@ stratification_server <- function(id, data) {
       cat_cols <- names(d)[vapply(d, function(x) is.factor(x) || is.character(x), logical(1))]
       selectInput(
         ns("stratify_var"),
-        STRAT_CHOOSE_LABEL,
-        choices = c(STRAT_NONE_LABEL, cat_cols),
-        selected = STRAT_NONE_LABEL
+        "Stratify by:",
+        choices = c("None", cat_cols),
+        selected = "None"
       )
     })
     
@@ -63,7 +60,7 @@ stratification_server <- function(id, data) {
       
       selectInput(
         ns("strata_order"),
-        STRAT_ORDER_LABEL,
+        "Order of levels:",
         choices = available_levels,
         selected = available_levels,
         multiple = TRUE
