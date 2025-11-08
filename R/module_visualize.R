@@ -83,6 +83,7 @@ visualize_server <- function(id, filtered_data, model_fit) {
         "pairs"          = visualize_ggpairs_ui(ns("ggpairs")),
         "pca"            = visualize_pca_ui(ns("pca"), filtered_data()),
         "descriptive"    = visualize_descriptive_ui(ns("descriptive")),
+        "longitudinal"   = visualize_longitudinal_ui(ns("longitudinal")),
         div(
           class = "empty-state card bg-light border-0 shadow-sm text-center my-5",
           div(
@@ -127,8 +128,12 @@ visualize_server <- function(id, filtered_data, model_fit) {
         ensure_vis_server("descriptive", function() {
           visualize_descriptive_server("descriptive", filtered_data, model_info)
         })
+      } else if (type == "longitudinal") {
+        ensure_vis_server("longitudinal", function() {
+          visualize_longitudinal_server("longitudinal", filtered_data, model_info)
+        })
       }
     }, ignoreInit = FALSE)
-    
+
   })
 }

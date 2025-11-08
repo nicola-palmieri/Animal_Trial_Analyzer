@@ -14,10 +14,11 @@ Table Analyzer is a modular R/Shiny application that walks researchers from raw 
   - Choose any subset of columns, then refine rows with auto-generated range sliders (numeric), checkboxes (logical), or multi-select pickers (categorical).
   - The filtered preview updates live and feeds downstream modules.
 - **Analysis hub**
-  - Modules: Descriptive statistics, One-way ANOVA, Two-way ANOVA, Linear Model (LM), Linear Mixed Model (LMM), Pairwise Correlation, and Principal Component Analysis (PCA).
-  - ANOVA, LM, and LMM modules accept multiple responses but fit them as independent models (no multivariate ANOVA); each run reports formulas, tidy summaries, Type-III ANOVA tables, downloadable `.docx` reports (LM/LMM) with formatted coefficients, random-effects variance, and ICC, plus optional per-analysis stratification.
+  - Modules: Descriptive statistics, One-way ANOVA, Two-way ANOVA, Linear Model (LM), Linear Mixed Model (LMM), **Longitudinal (LMM/GEE)**, Pairwise Correlation, and Principal Component Analysis (PCA).
+  - ANOVA, LM, LMM, and Longitudinal modules accept multiple responses but fit them as independent models (no multivariate ANOVA); each run reports formulas, tidy summaries, Type-III ANOVA tables, downloadable `.docx` reports (LM/LMM) with formatted coefficients, random-effects variance, and ICC, plus optional per-analysis stratification.
+  - The longitudinal module auto-detects time, treatment, and subject identifiers, then streamlines model setup with a single click for mixed-effects or generalized estimating equations.
 - **Visualization gallery**
-  - Dedicated panels mirror the active analysis: descriptive dashboards, PCA biplots with optional loadings, correlation pair grids (`GGally::ggpairs`), and ANOVA effect plots.
+  - Dedicated panels mirror the active analysis: descriptive dashboards, PCA biplots with optional loadings, correlation pair grids (`GGally::ggpairs`), ANOVA effect plots, and longitudinal line + point interval charts with stratified faceting controls.
   - Built-in color palettes can be customized per grouping level.
 - **Reproducibility first**
   - Model formulas and factor level orders are always explicit.
@@ -35,9 +36,10 @@ Table Analyzer is a modular R/Shiny application that walks researchers from raw 
    - Pick the columns you care about and adjust numeric ranges or factor selections to create the analysis-ready subset.
 3. **Analyze** (Tab “3️⃣ Analyze”)
    - Choose a module and configure responses, predictors, covariates, interactions, stratification, and (for LMM) random intercepts.
-   - Click **Show results** to run the model; export everything with **Download all results**.
+   - The **Longitudinal** option automatically suggests time, treatment, and subject columns and lets you toggle between mixed-effects (random intercept/slope) and GEE configurations.
+   - Click **Show results** to run the model; export everything with **Download all results** or the longitudinal `.rds` bundle.
 4. **Visualize** (Tab “4️⃣ Visualize”)
-   - Explore plots tailored to the active analysis, including multi-panel layouts for stratified fits and customizable color themes.
+   - Explore plots tailored to the active analysis, including multi-panel layouts for stratified fits and customizable color themes. Longitudinal fits surface time × treatment interval plots with facet controls for strata.
 
 ---
 
@@ -48,7 +50,8 @@ Table Analyzer is a modular R/Shiny application that walks researchers from raw 
 install.packages(c(
   "shiny", "bslib", "dplyr", "tidyr", "ggplot2", "patchwork",
   "DT", "GGally", "skimr", "emmeans", "lmerTest", "car",
-  "flextable", "officer", "zoo", "shinyjqui", "janitor"
+  "geepack", "flextable", "officer", "zoo", "shinyjqui",
+  "janitor", "testthat", "tibble"
   # Optional: ggrepel for PCA loadings labels
 ))
 
@@ -83,6 +86,10 @@ The app auto-sources all modules from the `R/` directory, bumps the upload size 
 - Wide-format ingestion is safeguarded by unit tests in `tests/test_convert_wide_to_long.R`. Run them with:
   ```bash
   Rscript tests/test_convert_wide_to_long.R
+  ```
+- Longitudinal model heuristics and formula builders are covered in `tests/testthat/test-longitudinal-module.R`:
+  ```bash
+  Rscript tests/testthat.R
   ```
 - Helper scripts in `dev/` illustrate layout prototypes and can be sourced during development, but are not required for production use.
 
