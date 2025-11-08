@@ -34,11 +34,14 @@ stratification_server <- function(id, data) {
     output$stratify_var_ui <- renderUI({
       d <- req(df())
       cat_cols <- names(d)[vapply(d, function(x) is.factor(x) || is.character(x), logical(1))]
-      selectInput(
-        ns("stratify_var"),
-        "Stratify by:",
-        choices = c("None", cat_cols),
-        selected = "None"
+      with_help_tooltip(
+        selectInput(
+          ns("stratify_var"),
+          "Stratify by:",
+          choices = c("None", cat_cols),
+          selected = "None"
+        ),
+        "Help: Pick a categorical variable if you want separate summaries for each group."
       )
     })
     
@@ -58,12 +61,15 @@ stratification_server <- function(id, data) {
                     sprintf("'%s' has too many levels (%d > %d).",
                             input$stratify_var, n_levels, MAX_STRATIFICATION_LEVELS)))
       
-      selectInput(
-        ns("strata_order"),
-        "Order of levels:",
-        choices = available_levels,
-        selected = available_levels,
-        multiple = TRUE
+      with_help_tooltip(
+        selectInput(
+          ns("strata_order"),
+          "Order of levels:",
+          choices = available_levels,
+          selected = available_levels,
+          multiple = TRUE
+        ),
+        "Help: Decide which group levels to include and in what order they should appear."
       )
     })
     

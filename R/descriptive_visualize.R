@@ -10,18 +10,21 @@ visualize_descriptive_ui <- function(id) {
       h4("Step 5 — Visualize descriptive statistics"),
       p("Explore distributions, variability, and normality across variables."),
       hr(),
-      selectInput(
-        ns("plot_type"),
-        label = "Select visualization type:",
-        choices = c(
-          "Categorical barplots" = "categorical",
-          "Numeric boxplots"          = "boxplots",
-          "Numeric histograms"        = "histograms",
-          "CV (%)"                    = "cv",
-          "Outlier counts"            = "outliers",
-          "Missingness (%)"           = "missing"
+      with_help_tooltip(
+        selectInput(
+          ns("plot_type"),
+          label = "Select visualization type:",
+          choices = c(
+            "Categorical barplots" = "categorical",
+            "Numeric boxplots"          = "boxplots",
+            "Numeric histograms"        = "histograms",
+            "CV (%)"                    = "cv",
+            "Outlier counts"            = "outliers",
+            "Missingness (%)"           = "missing"
+          ),
+          selected = "categorical"
         ),
-        selected = "categorical"
+        "Help: Choose the descriptive chart that best answers your question."
       ),
       hr(),
       uiOutput(ns("sub_controls"))  # controls from active submodule

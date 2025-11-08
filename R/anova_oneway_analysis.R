@@ -14,8 +14,14 @@ one_way_anova_ui <- function(id) {
       ),
       br(),
       fluidRow(
-        column(6, actionButton(ns("run"), "Show results", width = "100%")),
-        column(6, downloadButton(ns("download_all"), "Download all results", style = "width: 100%;"))
+        column(6, with_help_tooltip(
+          actionButton(ns("run"), "Show results", width = "100%"),
+          "Help: Run the ANOVA using the selected response and group variable."
+        )),
+        column(6, with_help_tooltip(
+          downloadButton(ns("download_all"), "Download all results", style = "width: 100%;"),
+          "Help: Export the ANOVA summaries, post-hoc tests, and diagnostics."
+        ))
       )
     ),
     results = tagList(
@@ -45,11 +51,14 @@ one_way_anova_server <- function(id, filtered_data) {
 
       tagList(
         multi_response_ui(ns("response")),
-        selectInput(
-          ns("group"),
-          "Categorical predictor:",
-          choices = cat_cols,
-          selected = if (length(cat_cols) > 0) cat_cols[1] else NULL
+        with_help_tooltip(
+          selectInput(
+            ns("group"),
+            "Categorical predictor:",
+            choices = cat_cols,
+            selected = if (length(cat_cols) > 0) cat_cols[1] else NULL
+          ),
+          "Help: Choose the grouping variable that defines the comparison categories."
         )
       )
     })
@@ -62,12 +71,15 @@ one_way_anova_server <- function(id, filtered_data) {
     output$level_order <- renderUI({
       req(df(), input$group)
       levels <- unique(as.character(df()[[input$group]]))
-      selectInput(
-        ns("order"),
-        "Order of levels (first = reference):",
-        choices = levels,
-        selected = levels,
-        multiple = TRUE
+      with_help_tooltip(
+        selectInput(
+          ns("order"),
+          "Order of levels (first = reference):",
+          choices = levels,
+          selected = levels,
+          multiple = TRUE
+        ),
+        "Help: Arrange the group levels; the first level is used as the reference in outputs."
       )
     })
     

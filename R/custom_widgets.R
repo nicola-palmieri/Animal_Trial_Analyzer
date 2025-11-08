@@ -148,3 +148,15 @@ color_dropdown_input <- function(ns, id = "color_choice", palette = basic_color_
     )))
   )
 }
+
+# ===============================================================
+# 🛈 Consistent tooltip helper for UI widgets
+# ===============================================================
+
+with_help_tooltip <- function(widget, text) {
+  tags$div(
+    class = "ta-help-tooltip",
+    title = text,
+    widget
+  )
+}

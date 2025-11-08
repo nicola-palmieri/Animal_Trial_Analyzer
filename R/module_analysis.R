@@ -20,24 +20,27 @@ analysis_ui <- function(id) {
       ", ns("analysis_type"), ns("analysis_type")))),
       
       # --- Analysis type selector ---
-      selectInput(
-        ns("analysis_type"),
-        "Select analysis type:",
-        choices = list(
-          " " = "",
-          "Descriptive" = c("Descriptive Statistics" = "Descriptive Statistics"),
-          "Univariate" = c(
-            "One-way ANOVA" = "One-way ANOVA",
-            "Two-way ANOVA" = "Two-way ANOVA",
-            "Linear Model (LM)" = "Linear Model (LM)",
-            "Linear Mixed Model (LMM)" = "Linear Mixed Model (LMM)"
+      with_help_tooltip(
+        selectInput(
+          ns("analysis_type"),
+          "Select analysis type:",
+          choices = list(
+            " " = "",
+            "Descriptive" = c("Descriptive Statistics" = "Descriptive Statistics"),
+            "Univariate" = c(
+              "One-way ANOVA" = "One-way ANOVA",
+              "Two-way ANOVA" = "Two-way ANOVA",
+              "Linear Model (LM)" = "Linear Model (LM)",
+              "Linear Mixed Model (LMM)" = "Linear Mixed Model (LMM)"
+            ),
+            "Multivariate" = c(
+              "Pairwise Correlation" = "Pairwise Correlation",
+              "Principal Component Analysis (PCA)" = "PCA"
+            )
           ),
-          "Multivariate" = c(
-            "Pairwise Correlation" = "Pairwise Correlation",
-            "Principal Component Analysis (PCA)" = "PCA"
-          )
+          selected = ""
         ),
-        selected = ""
+        "Help: Choose the statistical method you want to run on the filtered data."
       ),
       
       hr(),

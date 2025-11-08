@@ -49,6 +49,7 @@ ui <- navbarPage(
       .empty-state { max-width: 420px; margin-left: auto; margin-right: auto; }
       .empty-state-icon { font-size: 3rem; line-height: 1; }
       .empty-state h4 { font-weight: 600; }
+      .ta-help-tooltip { cursor: help; display: inline-block; width: 100%; }
     "))
   ),
   

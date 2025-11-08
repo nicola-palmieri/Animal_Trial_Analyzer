@@ -13,8 +13,14 @@ descriptive_ui <- function(id) {
       ),
       br(),
       fluidRow(
-        column(6, actionButton(ns("run"), "Show summary", width = "100%")),
-        column(6, downloadButton(ns("download_summary"), "Download summary", style = "width: 100%;"))
+        column(6, with_help_tooltip(
+          actionButton(ns("run"), "Show summary", width = "100%"),
+          "Help: Calculate the descriptive statistics for the selected variables."
+        )),
+        column(6, with_help_tooltip(
+          downloadButton(ns("download_summary"), "Download summary", style = "width: 100%;"),
+          "Help: Save the displayed summary as a text file for later reference."
+        ))
       ),
       hr()
     ),
@@ -39,8 +45,14 @@ descriptive_server <- function(id, filtered_data) {
       num_cols <- names(data)[vapply(data, is.numeric, logical(1))]
       
       tagList(
-        selectInput(ns("cat_vars"), label = "Categorical variables:", choices = cat_cols, selected = cat_cols, multiple = TRUE),
-        selectInput(ns("num_vars"), label = "Numeric variables:", choices = num_cols, selected = num_cols, multiple = TRUE)
+        with_help_tooltip(
+          selectInput(ns("cat_vars"), label = "Categorical variables:", choices = cat_cols, selected = cat_cols, multiple = TRUE),
+          "Help: Choose the group variables whose counts and proportions you want to inspect."
+        ),
+        with_help_tooltip(
+          selectInput(ns("num_vars"), label = "Numeric variables:", choices = num_cols, selected = num_cols, multiple = TRUE),
+          "Help: Choose the numeric measurements you want to summarise (mean, SD, etc.)."
+        )
       )
     })
     

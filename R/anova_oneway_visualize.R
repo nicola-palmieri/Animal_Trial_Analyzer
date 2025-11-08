@@ -10,32 +10,47 @@ visualize_oneway_ui <- function(id) {
       h4("Step 4 — Visualize one-way ANOVA"),
       p("Select visualization type and adjust subplot layout, axis scaling, and figure size."),
       hr(),
-      selectInput(
-        ns("plot_type"),
-        label = "Select visualization type:",
-        choices = c(
-          "Lineplots (mean ± SE)" = "lineplot_mean_se",
-          "Barplots (mean ± SE)"  = "barplot_mean_se"
+      with_help_tooltip(
+        selectInput(
+          ns("plot_type"),
+          label = "Select visualization type:",
+          choices = c(
+            "Lineplots (mean ± SE)" = "lineplot_mean_se",
+            "Barplots (mean ± SE)"  = "barplot_mean_se"
+          ),
+          selected = "lineplot_mean_se"
         ),
-        selected = "lineplot_mean_se"
+        "Help: Pick the chart style you prefer for comparing group means and error bars."
       ),
       hr(),
       uiOutput(ns("layout_controls")),
       conditionalPanel(
         condition = sprintf("input['%s'] === 'barplot_mean_se'", ns("plot_type")),
-        checkboxInput(
-          ns("show_bar_labels"),
-          "Show value labels on bars",
-          value = FALSE
+        with_help_tooltip(
+          checkboxInput(
+            ns("show_bar_labels"),
+            "Show value labels on bars",
+            value = FALSE
+          ),
+          "Help: Turn on labels to display the mean value on top of each bar."
         )
       ),
       fluidRow(
-        column(6, numericInput(ns("plot_width"), "Subplot width (px)", value = 400, min = 200, max = 1200, step = 50)),
-        column(6, numericInput(ns("plot_height"), "Subplot height (px)", value = 300, min = 200, max = 1200, step = 50))
+        column(6, with_help_tooltip(
+          numericInput(ns("plot_width"), "Subplot width (px)", value = 400, min = 200, max = 1200, step = 50),
+          "Help: Adjust how wide each subplot should be in pixels."
+        )),
+        column(6, with_help_tooltip(
+          numericInput(ns("plot_height"), "Subplot height (px)", value = 300, min = 200, max = 1200, step = 50),
+          "Help: Adjust how tall each subplot should be in pixels."
+        ))
       ),
       add_color_customization_ui(ns, multi_group = FALSE),
       hr(),
-      downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;")
+      with_help_tooltip(
+        downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;"),
+        "Help: Save the current figure as an image file."
+      )
     ),
     mainPanel(
       width = 8,

@@ -10,22 +10,28 @@ upload_ui <- function(id) {
       h4("Step 1 — Upload data"),
       p("Choose whether to load the example dataset or upload your own Excel file."),
       hr(),
-      radioButtons(
-        ns("data_source"),
-        label = "Data source:",
-        choices = c(
-          "Example dataset" = "example",
-          "Upload (long format)" = "long",
-          "Upload (wide format)" = "wide"
+      with_help_tooltip(
+        radioButtons(
+          ns("data_source"),
+          label = "Data source:",
+          choices = c(
+            "Example dataset" = "example",
+            "Upload (long format)" = "long",
+            "Upload (wide format)" = "wide"
+          ),
+          selected = "example"
         ),
-        selected = "example"
+        "Help: Decide whether to explore the built-in example data or load your own table."
       ),
       uiOutput(ns("layout_example")),
       hr(),
-      fileInput(
-        ns("file"),
-        "Upload Excel file (.xlsx / .xls / .xlsm)",
-        accept = c(".xlsx", ".xls", ".xlsm")
+      with_help_tooltip(
+        fileInput(
+          ns("file"),
+          "Upload Excel file (.xlsx / .xls / .xlsm)",
+          accept = c(".xlsx", ".xls", ".xlsm")
+        ),
+        "Help: Provide the Excel workbook that stores your study measurements."
       ),
       uiOutput(ns("sheet_selector")),
       hr(),
@@ -121,7 +127,10 @@ upload_server <- function(id) {
       
       output$validation_msg <- renderText(paste("✅ File loaded:", input$file$name))
       output$sheet_selector <- renderUI(
-        selectInput(ns("sheet"), "Select sheet:", choices = sheets)
+        with_help_tooltip(
+          selectInput(ns("sheet"), "Select sheet:", choices = sheets),
+          "Help: Pick the worksheet inside your Excel file that contains the data."
+        )
       )
     }, ignoreInit = TRUE)
     
@@ -204,12 +213,15 @@ upload_server <- function(id) {
         tagList(
           h5("Ambiguous type columns"),
           lapply(few_level_nums, function(col) {
-            selectInput(
-              ns(paste0("type_", col)),
-              label = col,
-              choices = c("Numeric", "Categorical"),
-              selected = "Numeric",
-              width = "100%"
+            with_help_tooltip(
+              selectInput(
+                ns(paste0("type_", col)),
+                label = col,
+                choices = c("Numeric", "Categorical"),
+                selected = "Numeric",
+                width = "100%"
+              ),
+              "Help: Tell the app whether this column should be treated as numbers or as groups."
             )
           })
         )

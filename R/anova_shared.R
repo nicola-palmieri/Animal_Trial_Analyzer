@@ -12,24 +12,30 @@ build_anova_layout_controls <- function(ns, input, info) {
       fluidRow(
         column(
           width = 6,
-          numericInput(
-            ns("strata_rows"),
-            "Grid rows",
-            value = isolate(if (is.null(input$strata_rows)) NA else input$strata_rows),
-            min = 1,
-            max = 10,
-            step = 1
+          with_help_tooltip(
+            numericInput(
+              ns("strata_rows"),
+              "Grid rows",
+              value = isolate(if (is.null(input$strata_rows)) NA else input$strata_rows),
+              min = 1,
+              max = 10,
+              step = 1
+            ),
+            "Help: Set how many rows of plots to use when displaying different strata."
           )
         ),
         column(
           width = 6,
-          numericInput(
-            ns("strata_cols"),
-            "Grid columns",
-            value = isolate(if (is.null(input$strata_cols)) NA else input$strata_cols),
-            min = 1,
-            max = 10,
-            step = 1
+          with_help_tooltip(
+            numericInput(
+              ns("strata_cols"),
+              "Grid columns",
+              value = isolate(if (is.null(input$strata_cols)) NA else input$strata_cols),
+              min = 1,
+              max = 10,
+              step = 1
+            ),
+            "Help: Set how many columns of plots to use when displaying different strata."
           )
         )
       )
@@ -44,24 +50,30 @@ build_anova_layout_controls <- function(ns, input, info) {
       fluidRow(
         column(
           width = 6,
-          numericInput(
-            ns("resp_rows"),
-            "Grid rows",
-            value = isolate(if (is.null(input$resp_rows)) NA else input$resp_rows),
-            min = 1,
-            max = 10,
-            step = 1
+          with_help_tooltip(
+            numericInput(
+              ns("resp_rows"),
+              "Grid rows",
+              value = isolate(if (is.null(input$resp_rows)) NA else input$resp_rows),
+              min = 1,
+              max = 10,
+              step = 1
+            ),
+            "Help: Set the number of plot rows when multiple responses are shown together."
           )
         ),
         column(
           width = 6,
-          numericInput(
-            ns("resp_cols"),
-            "Grid columns",
-            value = isolate(if (is.null(input$resp_cols)) NA else input$resp_cols),
-            min = 1,
-            max = 10,
-            step = 1
+          with_help_tooltip(
+            numericInput(
+              ns("resp_cols"),
+              "Grid columns",
+              value = isolate(if (is.null(input$resp_cols)) NA else input$resp_cols),
+              min = 1,
+              max = 10,
+              step = 1
+            ),
+            "Help: Set the number of plot columns when multiple responses are shown together."
           )
         )
       )

@@ -21,7 +21,10 @@ add_color_customization_server <- function(ns, input, output, data, color_var_re
       tagList(
         br(),
         h5("Color"),
-        color_dropdown_input(ns, "single_color", basic_color_palette, ncol = 4)
+        with_help_tooltip(
+          color_dropdown_input(ns, "single_color", basic_color_palette, ncol = 4),
+          "Help: Choose the colour used for the entire plot."
+        )
       )
     } else {
       render_color_inputs(ns, data, color_var)

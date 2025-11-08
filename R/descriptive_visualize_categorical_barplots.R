@@ -5,39 +5,60 @@
 visualize_categorical_barplots_ui <- function(id) {
   ns <- NS(id)
   tagList(
-    checkboxInput(ns("show_proportions"), "Show proportions instead of counts", FALSE),
-    checkboxInput(ns("show_value_labels"), "Show value labels on bars", FALSE),
+    with_help_tooltip(
+      checkboxInput(ns("show_proportions"), "Show proportions instead of counts", FALSE),
+      "Help: Switch between raw counts and percentages for each category."
+    ),
+    with_help_tooltip(
+      checkboxInput(ns("show_value_labels"), "Show value labels on bars", FALSE),
+      "Help: Display the numeric value on top of each bar."
+    ),
     fluidRow(
-      column(6, numericInput(ns("plot_width"),  "Subplot width (px)",  400, 200, 2000, 50)),
-      column(6, numericInput(ns("plot_height"), "Subplot height (px)", 300, 200, 2000, 50))
+      column(6, with_help_tooltip(
+        numericInput(ns("plot_width"),  "Subplot width (px)",  400, 200, 2000, 50),
+        "Help: Set the width of each categorical plot in pixels."
+      )),
+      column(6, with_help_tooltip(
+        numericInput(ns("plot_height"), "Subplot height (px)", 300, 200, 2000, 50),
+        "Help: Set the height of each categorical plot in pixels."
+      ))
     ),
     fluidRow(
       column(
         6,
-        numericInput(
-          ns("resp_rows"),
-          "Grid rows",
-          value = NA,
-          min = 1,
-          max = 10,
-          step = 1
+        with_help_tooltip(
+          numericInput(
+            ns("resp_rows"),
+            "Grid rows",
+            value = NA,
+            min = 1,
+            max = 10,
+            step = 1
+          ),
+          "Help: Choose how many rows of plots to display when several charts are shown."
         )
       ),
       column(
         6,
-        numericInput(
-          ns("resp_cols"),
-          "Grid columns",
-          value = NA,
-          min = 1,
-          max = 10,
-          step = 1
+        with_help_tooltip(
+          numericInput(
+            ns("resp_cols"),
+            "Grid columns",
+            value = NA,
+            min = 1,
+            max = 10,
+            step = 1
+          ),
+          "Help: Choose how many columns of plots to display when several charts are shown."
         )
       )
     ),
     add_color_customization_ui(ns, multi_group = TRUE),
     hr(),
-    downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;")
+    with_help_tooltip(
+      downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;"),
+      "Help: Save the categorical barplots as an image file."
+    )
   )
 }
 

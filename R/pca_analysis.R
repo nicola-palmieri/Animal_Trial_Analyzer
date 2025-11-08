@@ -6,7 +6,10 @@ pca_ui <- function(id) {
   ns <- NS(id)
   list(
     config = tagList(
-      selectInput(ns("vars"), "Numeric variables:", choices = NULL, multiple = TRUE),
+      with_help_tooltip(
+        selectInput(ns("vars"), "Numeric variables:", choices = NULL, multiple = TRUE),
+        "Help: Pick the numeric variables whose combined patterns you want PCA to capture."
+      ),
       tags$details(
         tags$summary(strong("Advanced options")),
         helpText(paste(
@@ -16,8 +19,14 @@ pca_ui <- function(id) {
       ),
       br(),
       fluidRow(
-        column(6, actionButton(ns("run_pca"), "Show PCA summary", width = "100%")),
-        column(6, downloadButton(ns("download_all"), "Download all results", style = "width: 100%;"))
+        column(6, with_help_tooltip(
+          actionButton(ns("run_pca"), "Show PCA summary", width = "100%"),
+          "Help: Compute the principal components for the selected variables."
+        )),
+        column(6, with_help_tooltip(
+          downloadButton(ns("download_all"), "Download all results", style = "width: 100%;"),
+          "Help: Export the PCA summaries, loadings, and diagnostics to a text file."
+        ))
       )
     ),
     results = tagList(
