@@ -34,10 +34,27 @@ pca_server <- function(id, filtered_data) {
     df <- reactive(filtered_data())
 
     # Dynamically populate numeric variable list
-    observe({
-      num_vars <- names(df())[sapply(df(), is.numeric)]
-      updateSelectInput(session, "vars", choices = num_vars, selected = num_vars)
-    })
+    repopulate_numeric_selector <- function() {
+      data <- isolate(df())
+      if (is.null(data)) return()
+
+      num_vars <- names(data)[vapply(data, is.numeric, logical(1))]
+      previous <- isolate(input$vars)
+      selected <- intersect(previous %||% character(), num_vars)
+      if (length(selected) == 0) {
+        selected <- num_vars
+      }
+
+      updateSelectInput(session, "vars", choices = num_vars, selected = selected)
+    }
+
+    observeEvent(df(), {
+      repopulate_numeric_selector()
+    }, ignoreNULL = FALSE)
+
+    session$onFlushed(function() {
+      repopulate_numeric_selector()
+    }, once = FALSE)
 
     run_pca_on_subset <- function(subset_data, selected_vars) {
       if (is.null(subset_data) || nrow(subset_data) == 0) {
