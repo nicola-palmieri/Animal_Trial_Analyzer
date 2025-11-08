@@ -53,7 +53,21 @@ visualize_server <- function(id, filtered_data, model_fit) {
         "pairs"          = visualize_ggpairs_ui(ns("ggpairs")),
         "pca"            = visualize_pca_ui(ns("pca"), filtered_data()),
         "descriptive"    = visualize_descriptive_ui(ns("descriptive")),
-        div("Visualization not yet implemented for this analysis type.")
+        div(
+          class = "empty-state card bg-light border-0 shadow-sm text-center my-5",
+          div(
+            class = "card-body py-5 px-4",
+            div(
+              class = "empty-state-icon text-primary mb-3",
+              HTML("&#128065;")
+            ),
+            h4(class = "mb-2", "Visualization coming soon"),
+            p(
+              class = "text-muted mb-0",
+              "We're still crafting charts for this analysis type. In the meantime, explore the other visualizations available above!"
+            )
+          )
+        )
       )
     })
     

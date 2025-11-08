@@ -46,6 +46,9 @@ ui <- navbarPage(
       .section { margin-top: 18px; }
       .card { border-radius: 16px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
       .nav-tabs > li > a { font-weight: 500; }
+      .empty-state { max-width: 420px; margin-left: auto; margin-right: auto; }
+      .empty-state-icon { font-size: 3rem; line-height: 1; }
+      .empty-state h4 { font-weight: 600; }
     "))
   ),
   
