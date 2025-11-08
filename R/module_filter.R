@@ -47,7 +47,7 @@ filter_server <- function(id, uploaded_data) {
       make_numeric_widget <- function(col, x) {
         rng <- suppressWarnings(range(x, na.rm = TRUE))
         if (any(!is.finite(rng))) rng <- c(0, 0)
-        step_val <- ifelse(diff(rng) == 0, 1, diff(rng) / 100)
+        step_val <- ifelse(diff(rng) == 0 || any(!is.finite(diff(rng))), 1, diff(rng) / 100)
         fluidRow(
           column(
             6,
@@ -99,12 +99,16 @@ filter_server <- function(id, uploaded_data) {
       
       for (col in cols) {
         x <- data[[col]]
-        
+
         # Numeric columns
         if (is.numeric(x)) {
           min_val <- input[[paste0("min_", col)]] %||% -Inf
           max_val <- input[[paste0("max_", col)]] %||% Inf
-          data <- subset(data, x >= min_val & x <= max_val)
+          if (all(is.na(x))) {
+            next
+          }
+          keep <- is.na(x) | (x >= min_val & x <= max_val)
+          data <- data[keep, , drop = FALSE]
         }
         # Logical / Factor / Character
         else {
@@ -113,7 +117,8 @@ filter_server <- function(id, uploaded_data) {
             data <- data[0, , drop = FALSE]
             break
           }
-          data <- subset(data, as.character(x) %in% sel)
+          keep <- is.na(x) | (as.character(x) %in% sel)
+          data <- data[keep, , drop = FALSE]
         }
       }
       
