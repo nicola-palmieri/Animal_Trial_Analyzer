@@ -1106,7 +1106,8 @@ build_bar_plot_panel <- function(stats_df,
               TRUE ~ sprintf("p=%.3f", p.value)
             ),
             xmin = group1,
-            xmax = group2
+            xmax = group2,
+            .group_id = seq_len(dplyr::n())
           )
 
         plot_obj <- plot_obj + ggsignif::geom_signif(
@@ -1115,7 +1116,8 @@ build_bar_plot_panel <- function(stats_df,
             xmin = xmin,
             xmax = xmax,
             annotations = label,
-            y_position = y_position
+            y_position = y_position,
+            group = .group_id
           ),
           manual = TRUE,
           inherit.aes = FALSE,
@@ -1242,7 +1244,8 @@ build_bar_plot_panel <- function(stats_df,
               from = start,
               by = step,
               length.out = dplyr::n()
-            )
+            ),
+            .group_id = seq_len(dplyr::n())
           )
 
         subset_df
@@ -1254,6 +1257,10 @@ build_bar_plot_panel <- function(stats_df,
         annotations <- dplyr::bind_rows(annotations)
         annotations <- annotations |>
           dplyr::filter(!is.na(xmin), !is.na(xmax))
+        if (nrow(annotations) > 0) {
+          annotations <- annotations |>
+            dplyr::mutate(.group_id = seq_len(dplyr::n()))
+        }
 
         if (nrow(annotations) > 0) {
           plot_obj <- plot_obj + ggsignif::geom_signif(
@@ -1262,7 +1269,8 @@ build_bar_plot_panel <- function(stats_df,
               xmin = xmin,
               xmax = xmax,
               annotations = label,
-              y_position = y_position
+              y_position = y_position,
+              group = .group_id
             ),
             manual = TRUE,
             inherit.aes = FALSE,
