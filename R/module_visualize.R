@@ -14,9 +14,22 @@ visualize_server <- function(id, filtered_data, model_fit) {
     # -----------------------------------------------------------
     # 1️⃣ Reactive model info
     # -----------------------------------------------------------
+    model_info_or_null <- reactive({
+      tryCatch(
+        model_fit(),
+        error = function(e) {
+          if (inherits(e, "shiny.silent.error") || inherits(e, "shiny.silent.stop")) {
+            return(NULL)
+          }
+          stop(e)
+        }
+      )
+    })
+
     model_info <- reactive({
-      req(model_fit())
-      model_fit()
+      info <- model_info_or_null()
+      req(info)
+      info
     })
     
     # -----------------------------------------------------------
@@ -24,8 +37,7 @@ visualize_server <- function(id, filtered_data, model_fit) {
     # -----------------------------------------------------------
     analysis_type <- reactive({
       info <- model_info()
-      type <- info$type %||% "oneway_anova"
-      tolower(type)
+      info$type %||% ""
     })
     
     # -----------------------------------------------------------
@@ -45,14 +57,36 @@ visualize_server <- function(id, filtered_data, model_fit) {
     # 4️⃣ Dynamic UI loading (lazy initialization)
     # -----------------------------------------------------------
     output$dynamic_ui <- renderUI({
+      info <- model_info_or_null()
+
+      if (is.null(info)) {
+        return(
+          div(
+            class = "empty-state card bg-light border-0 shadow-sm text-center my-5",
+            div(
+              class = "card-body py-5 px-4",
+              div(
+                class = "empty-state-icon text-primary mb-3",
+                HTML("&#128221;")
+              ),
+              h4(class = "mb-2", "No analysis selected yet"),
+              p(
+                class = "text-muted mb-0",
+                "Run an analysis in the Analyze tab to unlock tailored visualizations for your results."
+              )
+            )
+          )
+        )
+      }
+
       type <- analysis_type()
       switch(
         type,
-        "oneway_anova"   = visualize_oneway_ui(ns("oneway")),
-        "twoway_anova"   = visualize_twoway_ui(ns("twoway")),
-        "pairs"          = visualize_ggpairs_ui(ns("ggpairs")),
-        "pca"            = visualize_pca_ui(ns("pca"), filtered_data()),
-        "descriptive"    = visualize_descriptive_ui(ns("descriptive")),
+        "anova1"      = visualize_oneway_ui(ns("oneway")),
+        "anova2"      = visualize_twoway_ui(ns("twoway")),
+        "pairs"       = visualize_ggpairs_ui(ns("ggpairs")),
+        "pca"         = visualize_pca_ui(ns("pca"), filtered_data()),
+        "desc"        = visualize_descriptive_ui(ns("descriptive")),
         div(
           class = "empty-state card bg-light border-0 shadow-sm text-center my-5",
           div(
@@ -77,11 +111,11 @@ visualize_server <- function(id, filtered_data, model_fit) {
     observeEvent(analysis_type(), {
       type <- analysis_type()
       
-      if (type == "oneway_anova") {
+      if (type == "anova1") {
         ensure_vis_server("oneway", function() {
           visualize_oneway_server("oneway", filtered_data, model_info)
         })
-      } else if (type == "twoway_anova") {
+      } else if (type == "anova2") {
         ensure_vis_server("twoway", function() {
           visualize_twoway_server("twoway", filtered_data, model_info)
         })
@@ -93,7 +127,7 @@ visualize_server <- function(id, filtered_data, model_fit) {
         ensure_vis_server("pca", function() {
           visualize_pca_server("pca", filtered_data, model_info)
         })
-      } else if (type == "descriptive") {
+      } else if (type == "desc") {
         ensure_vis_server("descriptive", function() {
           visualize_descriptive_server("descriptive", filtered_data, model_info)
         })
