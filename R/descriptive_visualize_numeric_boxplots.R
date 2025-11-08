@@ -104,9 +104,30 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
       multi_group = TRUE
     )
 
-    plot_info <- reactive({
-      req(module_active())
+    cached_plot_info <- reactiveVal(NULL)
+    cache_ready <- reactiveVal(FALSE)
 
+    invalidate_cache <- function() {
+      cached_plot_info(NULL)
+      cache_ready(FALSE)
+    }
+
+    observeEvent(
+      list(
+        summary_info(),
+        filtered_data(),
+        input$show_points,
+        input$resp_rows,
+        input$resp_cols,
+        custom_colors()
+      ),
+      {
+        invalidate_cache()
+      },
+      ignoreNULL = FALSE
+    )
+
+    compute_plot_info <- function() {
       info <- summary_info()
 
       validate(need(!is.null(info), "Summary not available."))
@@ -118,7 +139,7 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
 
       selected_vars <- resolve_input_value(info$selected_vars)
       group_var     <- resolve_input_value(info$group_var)
-      
+
       out <- build_descriptive_numeric_boxplot(
         df = dat,
         selected_vars = selected_vars,
@@ -131,6 +152,15 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
 
       validate(need(!is.null(out), "No numeric variables available for plotting."))
       out
+    }
+
+    plot_info <- reactive({
+      req(module_active())
+      if (!isTRUE(cache_ready())) {
+        cached_plot_info(compute_plot_info())
+        cache_ready(TRUE)
+      }
+      cached_plot_info()
     })
 
     plot_size <- reactive({

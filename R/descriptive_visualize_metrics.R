@@ -249,9 +249,27 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
       multi_group = TRUE
     )
 
-    plot_details <- reactive({
-      req(module_active())
+    cached_plot_details <- reactiveVal(NULL)
+    cache_ready <- reactiveVal(FALSE)
 
+    invalidate_cache <- function() {
+      cached_plot_details(NULL)
+      cache_ready(FALSE)
+    }
+
+    observeEvent(
+      list(
+        summary_info(),
+        filtered_data(),
+        custom_colors()
+      ),
+      {
+        invalidate_cache()
+      },
+      ignoreNULL = FALSE
+    )
+
+    compute_plot_details <- function() {
       info <- summary_info()
       validate(need(!is.null(info), "Summary not available."))
 
@@ -288,6 +306,15 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
       list(
         plot = build_metric_plot(metric_info, y_label, title, custom_colors = custom_colors())
       )
+    }
+
+    plot_details <- reactive({
+      req(module_active())
+      if (!isTRUE(cache_ready())) {
+        cached_plot_details(compute_plot_details())
+        cache_ready(TRUE)
+      }
+      cached_plot_details()
     })
 
     plot_size <- reactive({
