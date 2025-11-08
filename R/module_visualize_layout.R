@@ -143,6 +143,16 @@ sync_numeric_input <- function(session, input_id, current_value, target_value) {
     return(invisible(FALSE))
   }
 
+  schedule_update <- function(value) {
+    shiny::later(
+      0,
+      function() {
+        updateNumericInput(session, input_id, value = value)
+      },
+      session = session
+    )
+  }
+
   target_int <- suppressWarnings(as.integer(target_value[1]))
   if (is.na(target_int)) {
     return(invisible(FALSE))
@@ -162,9 +172,7 @@ sync_numeric_input <- function(session, input_id, current_value, target_value) {
 
   if (missing_current) {
     assign(key, list(value = target_int, auto = TRUE), envir = state)
-    session$onFlushed(function() {
-      updateNumericInput(session, input_id, value = target_int)
-    }, once = TRUE)
+    schedule_update(target_int)
     return(invisible(TRUE))
   }
 
@@ -175,9 +183,7 @@ sync_numeric_input <- function(session, input_id, current_value, target_value) {
 
   if (isTRUE(entry$auto) && !identical(current_int, target_int)) {
     assign(key, list(value = target_int, auto = TRUE), envir = state)
-    session$onFlushed(function() {
-      updateNumericInput(session, input_id, value = target_int)
-    }, once = TRUE)
+    schedule_update(target_int)
     return(invisible(TRUE))
   }
 
