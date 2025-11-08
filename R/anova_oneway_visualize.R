@@ -222,9 +222,14 @@ plot_oneway_barplot_meanse <- function(data, info, layout_values = list(), line_
   factor1 <- info$factors$factor1
   responses <- info$responses
   has_strata <- !is.null(info$strata) && !is.null(info$strata$var)
-  
+
   strat_var <- if (has_strata) info$strata$var else NULL
   strata_levels <- if (has_strata) info$strata$levels else NULL
+
+  order1 <- info$orders$order1
+  if (!is.null(factor1) && !is.null(order1) && factor1 %in% names(data)) {
+    data[[factor1]] <- factor(as.character(data[[factor1]]), levels = order1)
+  }
   
   # --- layout controls from UI ---
   strata_rows <- suppressWarnings(as.numeric(layout_values$strata_rows))
@@ -265,9 +270,10 @@ plot_oneway_barplot_meanse <- function(data, info, layout_values = list(), line_
             se   = sd(.data[[resp]], na.rm = TRUE) / sqrt(sum(!is.na(.data[[resp]]))),
             .groups = "drop"
           )
-        
-        # ✅ ensure order and matching with contrast group names
-        stats_df[[factor1]] <- factor(stats_df[[factor1]], levels = unique(stats_df[[factor1]]))
+
+        # ensure consistent order with user-selected level order
+        levels_to_use <- if (!is.null(order1)) order1 else unique(as.character(stats_df[[factor1]]))
+        stats_df[[factor1]] <- factor(as.character(stats_df[[factor1]]), levels = levels_to_use)
         
         # ---- optional significance layer ----
         signif_df <- NULL
@@ -284,13 +290,6 @@ plot_oneway_barplot_meanse <- function(data, info, layout_values = list(), line_
             }
           }
         }
-        
-        # ✅ Step 2: diagnostic prints
-        cat("\n--- DEBUG for", resp, if (has_strata) paste0(" (", stratum, ")"), "---\n")
-        cat("signif_df:\n"); print(signif_df)
-        cat("stats_df:\n"); print(stats_df)
-        cat("factor1 levels:\n"); print(levels(stats_df[[factor1]]))
-        cat("-------------------------------------------\n")
         
         # ---- Base barplot ----
         p <- ggplot(stats_df, aes(x = !!sym(factor1), y = mean)) +
@@ -381,9 +380,10 @@ plot_oneway_barplot_meanse <- function(data, info, layout_values = list(), line_
           se   = sd(.data[[resp]], na.rm = TRUE) / sqrt(sum(!is.na(.data[[resp]]))),
           .groups = "drop"
         )
-      
-      # ✅ ensure order and matching with contrast group names
-      stats_df[[factor1]] <- factor(stats_df[[factor1]], levels = unique(stats_df[[factor1]]))
+
+      # ensure consistent order with user-selected level order
+      levels_to_use <- if (!is.null(order1)) order1 else unique(as.character(stats_df[[factor1]]))
+      stats_df[[factor1]] <- factor(as.character(stats_df[[factor1]]), levels = levels_to_use)
       
       # ---- extract Tukey significance ----
       signif_df <- NULL
