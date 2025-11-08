@@ -15,8 +15,7 @@ Table Analyzer is a modular R/Shiny application that walks researchers from raw 
   - The filtered preview updates live and feeds downstream modules.
 - **Analysis hub**
   - Modules: Descriptive statistics, One-way ANOVA, Two-way ANOVA, Linear Model (LM), Linear Mixed Model (LMM), Pairwise Correlation, and Principal Component Analysis (PCA).
-  - LM/LMM support **multi-response fitting**, optional covariates, two-way interaction toggles, random-intercept selection (LMM), and per-analysis stratification (run the same model within each level of a factor).
-  - Each analysis reports formulas, tidy summaries, Type-III ANOVA tables, and downloadable `.docx` reports (LM/LMM) with formatted coefficients, random-effects variance, and ICC.
+  - ANOVA, LM, and LMM modules accept multiple responses but fit them as independent models (no multivariate ANOVA); each run reports formulas, tidy summaries, Type-III ANOVA tables, downloadable `.docx` reports (LM/LMM) with formatted coefficients, random-effects variance, and ICC, plus optional per-analysis stratification.
 - **Visualization gallery**
   - Dedicated panels mirror the active analysis: descriptive dashboards, PCA biplots with optional loadings, correlation pair grids (`GGally::ggpairs`), and ANOVA effect plots.
   - Built-in color palettes can be customized per grouping level.
