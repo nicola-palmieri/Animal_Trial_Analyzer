@@ -82,7 +82,7 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
           posthoc_all = posthoc_all
         )
       } else {
-        build_anova_plot_info(
+        plot_anova_lineplot_meanse(
           data,
           info,
           layout_inputs,

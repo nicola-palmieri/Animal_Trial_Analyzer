@@ -948,7 +948,7 @@ build_line_plot_panel <- function(stats_df, title_text, y_limits, factor1, facto
     theme(plot.title = element_text(size = 12, face = "bold"))
 }
 
-build_anova_plot_info <- function(data, info, layout_values, line_colors = NULL) {
+plot_anova_lineplot_meanse <- function(data, info, layout_values, line_colors = NULL) {
   context <- initialize_anova_plot_context(data, info, layout_values)
   data <- context$data
   factor1 <- context$factor1

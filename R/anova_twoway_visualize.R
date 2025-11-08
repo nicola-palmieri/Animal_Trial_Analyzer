@@ -79,7 +79,7 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
         line_colors <- NULL
       }
 
-      build_anova_plot_info(
+      plot_anova_lineplot_meanse(
         data,
         info,
         layout_inputs,
