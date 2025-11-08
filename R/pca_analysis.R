@@ -86,6 +86,7 @@ pca_server <- function(id, filtered_data) {
           model = NULL,
           data = plot_data,
           message = conditionMessage(model$error),
+          message_title = "PCA computation failed",
           original_n = original_n,
           used_n = used_n,
           excluded_n = excluded_n,
@@ -144,11 +145,14 @@ pca_server <- function(id, filtered_data) {
         }
 
         if (!is.null(entry) && !is.null(entry$message) && nzchar(entry$message)) {
-          message <- entry$message
+          if (!is.null(entry$message_title)) {
+            cat(format_safe_error_message(entry$message_title, entry$message))
+          } else {
+            cat(entry$message)
+          }
         } else {
-          message <- "Not enough data to compute PCA."
+          cat("Not enough data to compute PCA.")
         }
-        cat(message)
         return(invisible())
       }
 
@@ -196,11 +200,14 @@ pca_server <- function(id, filtered_data) {
 
         if (is.null(entry) || is.null(entry$model)) {
           if (!is.null(entry) && !is.null(entry$message) && nzchar(entry$message)) {
-            message <- entry$message
+            if (!is.null(entry$message_title)) {
+              cat(format_safe_error_message(entry$message_title, entry$message), "\n", sep = "")
+            } else {
+              cat(entry$message, "\n", sep = "")
+            }
           } else {
-            message <- "Not enough data to compute PCA."
+            cat("Not enough data to compute PCA.\n")
           }
-          cat(message, "\n", sep = "")
           return()
         }
 
