@@ -314,10 +314,7 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
                 downloadButton(ns(paste0("download_", idx, "_", j)), "Download results", style = "width: 100%;")
               )
             } else {
-              div(
-                class = "alert alert-warning",
-                tags$pre(format_safe_error_message("Model fitting failed", stratum$error))
-              )
+              tags$pre(format_safe_error_message("Model fitting failed", stratum$error))
             }
 
           tabPanel(title = label, content)
@@ -340,26 +337,19 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
 
       error_block <- NULL
       if (!is.null(error_resps) && length(error_resps) > 0) {
-        error_items <- lapply(error_resps, function(resp) {
+        error_block <- lapply(error_resps, function(resp) {
           err <- mod$errors[[resp]]
-          tags$li(
-            tags$pre(
-              format_safe_error_message(
-                paste("Model fitting failed for", resp),
-                if (!is.null(err)) err else ""
-              )
+          tags$pre(
+            format_safe_error_message(
+              paste("Model fitting failed for", resp),
+              if (!is.null(err)) err else ""
             )
           )
         })
-        error_block <- div(
-          class = "alert alert-warning",
-          strong("Error:"),
-          tags$ul(error_items)
-        )
       }
 
       if (is.null(success_resps) || length(success_resps) == 0) {
-        if (!is.null(error_block)) return(tagList(error_block))
+        if (!is.null(error_block)) return(do.call(tagList, error_block))
         return(NULL)
       }
 
@@ -381,10 +371,8 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
         panels[[1]]
       }
 
-      tagList(
-        if (!is.null(error_block)) error_block,
-        results_block
-      )
+      elements <- c(if (!is.null(error_block)) error_block, list(results_block))
+      do.call(tagList, elements)
     })
 
     observeEvent(models(), {
