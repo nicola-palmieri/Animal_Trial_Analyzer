@@ -14,7 +14,8 @@ visualize_twoway_ui <- function(id) {
         ns("plot_type"),
         label = "Select visualization type:",
         choices = c(
-          "Lineplots (mean ± SE)" = "lineplot_mean_se"
+          "Lineplots (mean ± SE)" = "lineplot_mean_se",
+          "Barplots (mean ± SE)"  = "barplot_mean_se"
         ),
         selected = "lineplot_mean_se"
       ),
@@ -79,12 +80,23 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
         line_colors <- NULL
       }
 
-      plot_anova_lineplot_meanse(
-        data,
-        info,
-        layout_inputs,
-        line_colors = line_colors
-      )
+      if (identical(input$plot_type, "barplot_mean_se")) {
+        posthoc_all <- compile_anova_results(info)$posthoc
+        plot_anova_barplot_meanse(
+          data,
+          info,
+          layout_values = layout_inputs,
+          line_colors = line_colors,
+          posthoc_all = posthoc_all
+        )
+      } else {
+        plot_anova_lineplot_meanse(
+          data,
+          info,
+          layout_inputs,
+          line_colors = line_colors
+        )
+      }
     })
 
     plot_obj <- reactive({
@@ -156,7 +168,6 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
     })
 
     output$plot <- renderPlot({
-      req(input$plot_type == "lineplot_mean_se")
       plot <- plot_obj()
       if (is.null(plot)) return(NULL)
       plot
