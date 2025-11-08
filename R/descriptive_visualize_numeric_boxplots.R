@@ -136,15 +136,8 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
 
     cached_plot_info <- reactiveVal(NULL)
     cache_ready <- reactiveVal(FALSE)
-    skip_auto_invalidations <- reactiveVal(0L)
 
     invalidate_cache <- function() {
-      remaining <- skip_auto_invalidations()
-      if (remaining > 0L) {
-        skip_auto_invalidations(remaining - 1L)
-        return(invisible(FALSE))
-      }
-
       cached_plot_info(NULL)
       cache_ready(FALSE)
       invisible(TRUE)
@@ -157,8 +150,6 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
         input$show_points,
         input$show_outliers,
         input$outlier_label,
-        input$resp_rows,
-        input$resp_cols,
         custom_colors()
       ),
       {
@@ -168,10 +159,16 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
     )
 
     observeEvent(input$resp_rows, {
+      if (isTRUE(consume_pending_numeric_update(session, "resp_rows"))) {
+        return()
+      }
       invalidate_cache()
     }, ignoreNULL = FALSE)
 
     observeEvent(input$resp_cols, {
+      if (isTRUE(consume_pending_numeric_update(session, "resp_cols"))) {
+        return()
+      }
       invalidate_cache()
     }, ignoreNULL = FALSE)
 
@@ -235,17 +232,8 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
       cols <- info$defaults$cols
       if (is.null(rows) || is.null(cols)) return()
 
-      updates <- 0L
-      if (isTRUE(sync_numeric_input(session, "resp_rows", input$resp_rows, rows))) {
-        updates <- updates + 1L
-      }
-      if (isTRUE(sync_numeric_input(session, "resp_cols", input$resp_cols, cols))) {
-        updates <- updates + 1L
-      }
-
-      if (updates > 0L) {
-        skip_auto_invalidations(skip_auto_invalidations() + updates)
-      }
+      sync_numeric_input(session, "resp_rows", input$resp_rows, rows)
+      sync_numeric_input(session, "resp_cols", input$resp_cols, cols)
     }, ignoreNULL = FALSE)
 
     output$grid_warning <- renderUI({
