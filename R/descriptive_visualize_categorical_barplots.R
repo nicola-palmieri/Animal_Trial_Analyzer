@@ -102,9 +102,30 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
       multi_group = TRUE
     )
 
-    plot_info <- reactive({
-      req(module_active())
+    cached_plot_info <- reactiveVal(NULL)
+    cache_ready <- reactiveVal(FALSE)
 
+    invalidate_cache <- function() {
+      cached_plot_info(NULL)
+      cache_ready(FALSE)
+    }
+
+    observeEvent(
+      list(
+        summary_info(),
+        filtered_data(),
+        input$show_proportions,
+        input$resp_rows,
+        input$resp_cols,
+        custom_colors()
+      ),
+      {
+        invalidate_cache()
+      },
+      ignoreNULL = FALSE
+    )
+
+    compute_plot_info <- function() {
       info <- summary_info()
 
       validate(need(!is.null(info), "Summary not available."))
@@ -130,6 +151,15 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
       )
       validate(need(!is.null(out), "No categorical variables available for plotting."))
       out
+    }
+
+    plot_info <- reactive({
+      req(module_active())
+      if (!isTRUE(cache_ready())) {
+        cached_plot_info(compute_plot_info())
+        cache_ready(TRUE)
+      }
+      cached_plot_info()
     })
 
     plot_size <- reactive({

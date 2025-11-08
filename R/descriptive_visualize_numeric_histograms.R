@@ -84,21 +84,41 @@ visualize_numeric_histograms_server <- function(id, filtered_data, summary_info,
       multi_group = TRUE
     )
 
-    plot_info <- reactive({
-      # --- Validate summary availability ---
+    cached_plot_info <- reactiveVal(NULL)
+    cache_ready <- reactiveVal(FALSE)
+
+    invalidate_cache <- function() {
+      cached_plot_info(NULL)
+      cache_ready(FALSE)
+    }
+
+    observeEvent(
+      list(
+        summary_info(),
+        filtered_data(),
+        input$use_density,
+        input$resp_rows,
+        input$resp_cols,
+        custom_colors()
+      ),
+      {
+        invalidate_cache()
+      },
+      ignoreNULL = FALSE
+    )
+
+    compute_plot_info <- function() {
       info <- summary_info()
       validate(need(!is.null(info), "Summary not available."))
-      
-      # --- Prepare data ---
+
       processed <- resolve_input_value(info$processed_data)
       dat <- if (!is.null(processed)) processed else filtered_data()
       validate(need(!is.null(dat) && is.data.frame(dat) && nrow(dat) > 0, "No data available."))
-      
+
       selected_vars <- resolve_input_value(info$selected_vars)
       group_var     <- resolve_input_value(info$group_var)
       strata_levels <- resolve_input_value(info$strata_levels)
-      
-      # --- Build histograms ---
+
       out <- build_descriptive_numeric_histogram(
         df = dat,
         selected_vars = selected_vars,
@@ -111,6 +131,15 @@ visualize_numeric_histograms_server <- function(id, filtered_data, summary_info,
       )
       validate(need(!is.null(out), "No numeric variables available for plotting."))
       out
+    }
+
+    plot_info <- reactive({
+      req(module_active())
+      if (!isTRUE(cache_ready())) {
+        cached_plot_info(compute_plot_info())
+        cache_ready(TRUE)
+      }
+      cached_plot_info()
     })
 
 
