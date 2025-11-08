@@ -53,8 +53,48 @@ convert_wide_to_long <- function(path, sheet = 1, replicate_col = "Replicate") {
       names_to = c("Variable", replicate_col),
       names_pattern = "^(.*)_([^_]*)$",
       values_to = "Value"
-    ) |>
-    pivot_wider(names_from = "Variable", values_from = "Value")
-  
-  as_tibble(data_long)
+    )
+
+  # ---- Detect duplicate measurements before widening ----
+  id_cols <- c(fixed_cols, replicate_col, "Variable")
+  duplicates <- data_long |>
+    dplyr::group_by(dplyr::across(dplyr::all_of(id_cols))) |>
+    dplyr::summarise(.n = dplyr::n(), .groups = "drop") |>
+    dplyr::filter(.n > 1)
+
+  if (nrow(duplicates) > 0) {
+    example <- duplicates[1, , drop = FALSE]
+    var_label <- example$Variable
+    if (is.factor(var_label)) {
+      var_label <- as.character(var_label)
+    }
+    if (length(var_label) == 0 || is.na(var_label) || identical(var_label, "")) {
+      var_label <- "<unknown>"
+    }
+
+    replicate_label <- example[[replicate_col]]
+    if (is.factor(replicate_label)) {
+      replicate_label <- as.character(replicate_label)
+    }
+    if (length(replicate_label) == 0 || is.na(replicate_label) || identical(replicate_label, "")) {
+      replicate_label <- "<blank>"
+    }
+
+    stop(
+      sprintf(
+        "Duplicate measurements detected for variable '%s' and replicate '%s'. Ensure header labels are unique before uploading.",
+        var_label,
+        replicate_label
+      ),
+      call. = FALSE
+    )
+  }
+
+  data_long |>
+    pivot_wider(names_from = "Variable", values_from = "Value") |>
+    as_tibble()
 }
+
+safe_convert_wide_to_long <- purrr::safely(convert_wide_to_long)
+
+safe_preprocess_uploaded_table <- purrr::safely(preprocess_uploaded_table)

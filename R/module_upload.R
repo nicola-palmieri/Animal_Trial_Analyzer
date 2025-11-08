@@ -60,7 +60,14 @@ upload_server <- function(id) {
         path <- "data/toy_animal_trial_data_long.xlsx"
         validate(need(file.exists(path), "⚠️ Example dataset not found in data folder."))
         data <- readxl::read_excel(path)
-        data <- preprocess_uploaded_table(data)
+        processed <- safe_preprocess_uploaded_table(data)
+        if (!is.null(processed$error)) {
+          output$validation_msg <- renderText(
+            paste("❌ Error preparing example dataset:", conditionMessage(processed$error))
+          )
+          return()
+        }
+        data <- processed$result
         df(data)
         output$validation_msg <- renderText("📂 Loaded built-in example dataset (long format).")
         output$preview <- renderDT(data, options = list(scrollX = TRUE, pageLength = 5))
@@ -126,23 +133,28 @@ upload_server <- function(id) {
       path <- input$file$datapath
       data <- NULL
       
+      success_message <- NULL
+
       if (input$data_source == "wide") {
         # ⚙️ Wide format conversion with error handling
-        data <- tryCatch(
-          convert_wide_to_long(
-            path,
-            sheet = input$sheet,
-            replicate_col = "Replicate"
-          ),
-          error = function(e) {
-            output$validation_msg <- renderText(
-              paste("❌ Error converting wide format:", conditionMessage(e))
-            )
-            NULL
-          }
+        safe_result <- safe_convert_wide_to_long(
+          path,
+          sheet = input$sheet,
+          replicate_col = "Replicate"
         )
-        if (is.null(data)) return()
-        output$validation_msg <- renderText("✅ Wide format reshaped successfully.")
+
+        if (!is.null(safe_result$error)) {
+          output$validation_msg <- renderText(
+            paste(
+              "❌ Error converting wide format:",
+              conditionMessage(safe_result$error)
+            )
+          )
+          return()
+        }
+
+        data <- safe_result$result
+        success_message <- "✅ Wide format reshaped successfully."
       } else {
         # 🧾 Simple long format load
         data <- tryCatch(
@@ -155,14 +167,25 @@ upload_server <- function(id) {
           }
         )
         if (is.null(data)) return()
-        output$validation_msg <- renderText("✅ Long format loaded successfully.")
+        success_message <- "✅ Long format loaded successfully."
       }
-      
+
       # ✅ Shared postprocessing and preview
-      data <- preprocess_uploaded_table(data)
+      processed <- safe_preprocess_uploaded_table(data)
+      if (!is.null(processed$error)) {
+        output$validation_msg <- renderText(
+          paste("❌ Error preparing data:", conditionMessage(processed$error))
+        )
+        return()
+      }
+
+      data <- processed$result
       df(data)
       output$preview <- renderDT(data, options = list(scrollX = TRUE, pageLength = 5))
       create_type_selectors(data)
+      if (!is.null(success_message)) {
+        output$validation_msg <- renderText(success_message)
+      }
     })
     
     # -----------------------------------------------------------
