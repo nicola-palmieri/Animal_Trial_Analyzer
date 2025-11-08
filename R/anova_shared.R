@@ -201,8 +201,25 @@ prepare_anova_outputs <- function(model_obj, factor_names) {
   old_contrasts <- options("contrasts")
   on.exit(options(old_contrasts), add = TRUE)
   options(contrasts = c("contr.sum", "contr.poly"))
-  
-  anova_obj <- car::Anova(model_obj, type = 3)
+
+  safe_anova <- purrr::safely(function(mod) {
+    car::Anova(mod, type = 3)
+  })
+
+  anova_result <- safe_anova(model_obj)
+  if (!is.null(anova_result$error)) {
+    return(list(
+      error = conditionMessage(anova_result$error),
+      anova_object = NULL,
+      anova_table = NULL,
+      anova_significant = NULL,
+      posthoc_details = list(),
+      posthoc_table = NULL,
+      posthoc_significant = NULL
+    ))
+  }
+
+  anova_obj <- anova_result$result
   anova_df <- as.data.frame(anova_obj)
   anova_df$Effect <- rownames(anova_df)
   rownames(anova_df) <- NULL
@@ -270,8 +287,9 @@ prepare_anova_outputs <- function(model_obj, factor_names) {
       posthoc_significant <- rep(FALSE, nrow(posthoc_combined))
     }
   }
-  
+
   list(
+    error = NULL,
     anova_object = anova_obj,
     anova_table = anova_df,
     anova_significant = anova_significant,
@@ -312,18 +330,29 @@ compile_anova_results <- function(model_info) {
 
     for (resp in names(model_info$models)) {
       entry <- model_info$models[[resp]]
+      entry_errors <- character(0)
       if (!is.null(entry$model)) {
         outputs <- prepare_anova_outputs(entry$model, factor_names)
-        summary_list[[resp]] <- outputs$anova_table
-        posthoc_list[[resp]] <- outputs$posthoc_table
-        effects_list[[resp]] <- build_effects(outputs)
+        if (!is.null(outputs$error)) {
+          entry_errors <- c(entry_errors, outputs$error)
+          summary_list[[resp]] <- NULL
+          posthoc_list[[resp]] <- NULL
+          effects_list[[resp]] <- NULL
+        } else {
+          summary_list[[resp]] <- outputs$anova_table
+          posthoc_list[[resp]] <- outputs$posthoc_table
+          effects_list[[resp]] <- build_effects(outputs)
+        }
       } else {
         summary_list[[resp]] <- NULL
         posthoc_list[[resp]] <- NULL
         effects_list[[resp]] <- NULL
       }
       if (!is.null(entry$error)) {
-        errors_list[[resp]] <- entry$error
+        entry_errors <- c(entry_errors, entry$error)
+      }
+      if (length(entry_errors) > 0) {
+        errors_list[[resp]] <- paste(unique(entry_errors), collapse = "\n")
       }
     }
 
@@ -347,8 +376,13 @@ compile_anova_results <- function(model_info) {
     for (resp in names(stratum_models)) {
       entry <- stratum_models[[resp]]
       outputs <- NULL
+      entry_error <- NULL
       if (!is.null(entry$model)) {
         outputs <- prepare_anova_outputs(entry$model, factor_names)
+        if (!is.null(outputs$error)) {
+          entry_error <- outputs$error
+          outputs <- NULL
+        }
       }
 
       if (is.null(summary_list[[resp]])) summary_list[[resp]] <- list()
@@ -361,7 +395,11 @@ compile_anova_results <- function(model_info) {
       effects_list[[resp]][[stratum_name]] <- if (!is.null(outputs)) build_effects(outputs) else NULL
 
       if (!is.null(entry$error)) {
-        errors_list[[resp]][[stratum_name]] <- entry$error
+        entry_error <- c(entry_error, entry$error)
+      }
+
+      if (!is.null(entry_error)) {
+        errors_list[[resp]][[stratum_name]] <- paste(unique(entry_error), collapse = "\n")
       }
     }
   }
@@ -390,6 +428,14 @@ print_anova_summary_and_posthoc <- function(model_entry, factors) {
 
   model_obj <- model_entry$model
   results <- prepare_anova_outputs(model_obj, factors)
+  if (!is.null(results$error)) {
+    cat("ANOVA computation failed:\n", results$error, "\n", sep = "")
+    return(invisible(NULL))
+  }
+  if (is.null(results$anova_object)) {
+    cat("ANOVA results are unavailable.\n")
+    return(invisible(NULL))
+  }
   print(results$anova_object)
 
   if (length(results$posthoc_details) == 0) {
@@ -428,6 +474,12 @@ bind_single_model_outputs <- function(output, summary_id, download_id,
         stop("Model not available for download due to fitting error.")
       }
       results <- prepare_anova_outputs(model_entry$model, factors)
+      if (!is.null(results$error)) {
+        stop(paste0("ANOVA results unavailable: ", results$error))
+      }
+      if (is.null(results$anova_table)) {
+        stop("ANOVA results are unavailable for export.")
+      }
       write_anova_docx(file, results, model_entry$model, response_name, stratum_label)
     }
   )
@@ -536,18 +588,32 @@ download_all_anova_results <- function(models_info, file) {
   if (is.null(models_info) || is.null(models_info$models)) {
     stop("No models found to export.")
   }
-  
+
   combined_results <- list()
+  factor_names <- unique(unlist(models_info$factors))
+  factor_names <- factor_names[!is.na(factor_names) & nzchar(factor_names)]
+  errors <- character(0)
 
   # --- Case 1: no stratification
   if (is.null(models_info$strata)) {
     for (resp in models_info$responses) {
       model_entry <- models_info$models[[resp]]
       if (is.null(model_entry) || !is.null(model_entry$error) || is.null(model_entry$model)) {
+        if (!is.null(model_entry$error)) {
+          errors <- c(errors, paste0(resp, ": ", model_entry$error))
+        }
         next
       }
-      model_obj <- model_entry$model
-      anova_obj <- car::Anova(model_obj, type = 3)
+      outputs <- prepare_anova_outputs(model_entry$model, factor_names)
+      if (!is.null(outputs$error)) {
+        errors <- c(errors, paste0(resp, ": ", outputs$error))
+        next
+      }
+      anova_obj <- outputs$anova_object
+      if (is.null(anova_obj)) {
+        errors <- c(errors, paste0(resp, ": ANOVA results are unavailable."))
+        next
+      }
       tbl <- as.data.frame(anova_obj)
       tbl$Response <- resp
       tbl$Stratum <- "None"
@@ -563,10 +629,21 @@ download_all_anova_results <- function(models_info, file) {
       for (resp in models_info$responses) {
         model_entry <- models_info$models[[stratum]][[resp]]
         if (is.null(model_entry) || !is.null(model_entry$error) || is.null(model_entry$model)) {
+          if (!is.null(model_entry$error)) {
+            errors <- c(errors, paste0(resp, " (", stratum, "): ", model_entry$error))
+          }
           next
         }
-        model_obj <- model_entry$model
-        anova_obj <- car::Anova(model_obj, type = 3)
+        outputs <- prepare_anova_outputs(model_entry$model, factor_names)
+        if (!is.null(outputs$error)) {
+          errors <- c(errors, paste0(resp, " (", stratum, "): ", outputs$error))
+          next
+        }
+        anova_obj <- outputs$anova_object
+        if (is.null(anova_obj)) {
+          errors <- c(errors, paste0(resp, " (", stratum, "): ANOVA results are unavailable."))
+          next
+        }
         tbl <- as.data.frame(anova_obj)
         tbl$Response <- resp
         tbl$Stratum <- stratum
@@ -580,7 +657,15 @@ download_all_anova_results <- function(models_info, file) {
   }
 
   if (length(combined_results) == 0) {
-    stop("No ANOVA models available to export.")
+    msg <- "No ANOVA models available to export."
+    if (length(errors) > 0) {
+      msg <- paste0(
+        msg,
+        " The following issues were reported:\n",
+        paste(sprintf("- %s", unique(errors)), collapse = "\n")
+      )
+    }
+    stop(msg)
   }
 
   write_anova_docx(combined_results, file)
