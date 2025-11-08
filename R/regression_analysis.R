@@ -314,14 +314,7 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
                 downloadButton(ns(paste0("download_", idx, "_", j)), "Download results", style = "width: 100%;")
               )
             } else {
-              error_id <- paste0("strata_error_", idx, "_", j)
-              local({
-                local_error <- stratum$error
-                output[[error_id]] <- renderText({
-                  format_safe_error_message("Model fitting failed", local_error)
-                })
-              })
-              verbatimTextOutput(ns(error_id))
+              tags$pre(format_safe_error_message("Model fitting failed", stratum$error))
             }
 
           tabPanel(title = label, content)
@@ -344,21 +337,14 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
 
       error_block <- NULL
       if (!is.null(error_resps) && length(error_resps) > 0) {
-        error_block <- lapply(seq_along(error_resps), function(idx) {
-          resp <- error_resps[idx]
+        error_block <- lapply(error_resps, function(resp) {
           err <- mod$errors[[resp]]
-          output_id <- paste0("error_message_", idx)
-          local({
-            local_resp <- resp
-            local_err <- err
-            output[[output_id]] <- renderText({
-              format_safe_error_message(
-                paste("Model fitting failed for", local_resp),
-                if (!is.null(local_err)) local_err else ""
-              )
-            })
-          })
-          verbatimTextOutput(ns(output_id))
+          tags$pre(
+            format_safe_error_message(
+              paste("Model fitting failed for", resp),
+              if (!is.null(err)) err else ""
+            )
+          )
         })
       }
 
