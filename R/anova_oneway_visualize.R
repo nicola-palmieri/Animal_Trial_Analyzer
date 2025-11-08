@@ -55,25 +55,10 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
     )
 
     last_plot_type <- reactiveVal("lineplot_mean_se")
-    restoring_plot_type <- reactiveVal(FALSE)
-
-    observeEvent(model_info(), {
-      restoring_plot_type(TRUE)
-      selected <- isolate(last_plot_type())
-      if (!is.null(selected)) {
-        updateSelectInput(session, "plot_type", selected = selected)
-      }
-      session$onFlushed(function() {
-        restoring_plot_type(FALSE)
-      }, once = TRUE)
-    }, ignoreNULL = FALSE)
 
     observeEvent(input$plot_type, {
-      if (isTRUE(restoring_plot_type())) {
-        return()
-      }
       last_plot_type(input$plot_type)
-    }, ignoreNULL = FALSE)
+    }, ignoreInit = TRUE)
 
     cached_results <- reactiveValues(plots = list())
 

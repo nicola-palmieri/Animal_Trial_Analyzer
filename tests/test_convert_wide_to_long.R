@@ -9,6 +9,47 @@ library(purrr)
 # Paste your convert_wide_to_long() and helpers here
 # ==========================================================
 
+convert_wide_to_long <- function(path, sheet = 1, replicate_col = "Replicate") {
+  # ---- Read first two rows to capture merged header structure ----
+  headers <- readxl::read_excel(path, sheet = sheet, n_max = 2, col_names = FALSE)
+  header1 <- as.character(unlist(headers[1, , drop = TRUE]))
+  header2 <- as.character(unlist(headers[2, , drop = TRUE]))
+  
+  # ---- Fill blanks forward in first header ----
+  header1[header1 == ""] <- NA
+  header1 <- zoo::na.locf(header1, na.rm = FALSE)
+  header2[is.na(header2) | header2 == ""] <- ""
+  
+  # ---- Combine headers safely ----
+  clean_names <- ifelse(header2 == "", header1, paste0(header1, "_", header2))
+  clean_names <- make.unique(clean_names, sep = "_")
+  
+  # ---- Detect number of fixed columns ----
+  first_empty <- which(is.na(headers[1, ]) | headers[1, ] == "")[1]
+  if (is.na(first_empty)) {
+    n_fixed <- 0
+  } else {
+    n_fixed <- max(0, first_empty - 2)
+  }
+  fixed_cols <- clean_names[seq_len(n_fixed)]
+  measure_cols <- setdiff(clean_names, fixed_cols)
+  
+  # ---- Read data with computed names ----
+  data <- readxl::read_excel(path, sheet = sheet, skip = 2, col_names = clean_names)
+  
+  # ---- Reshape from wide to long then back to tidy ----
+  data_long <- data |>
+    pivot_longer(
+      cols = tidyselect::all_of(measure_cols),
+      names_to = c("Variable", replicate_col),
+      names_pattern = "^(.*)_([^_]*)$",
+      values_to = "Value"
+    ) |>
+    pivot_wider(names_from = "Variable", values_from = "Value")
+  
+  as_tibble(data_long)
+}
+
 
 # ==========================================================
 # Helper functions
@@ -16,12 +57,18 @@ library(purrr)
 
 dir.create("test_excels", showWarnings = FALSE)
 
-write_test_excel <- function(data, name) {
-  path <- file.path("test_excels", paste0(sprintf("%02d_", name), ".xlsx"))
+write_test_excel <- function(data, name, index) {
+  filename <- sprintf("%02d_%s.xlsx", index, name)
+  path <- file.path("test_excels", filename)
   openxlsx::write.xlsx(data, path, colNames = FALSE)
   path
 }
 
+paths <- purrr::map2(
+  seq_along(tests),
+  tests,
+  function(i, x) write_test_excel(x[[2]], x[[1]], i)
+)
 safe_convert <- safely(function(path) {
   convert_wide_to_long(path)
 })
