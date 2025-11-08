@@ -11,6 +11,7 @@ library(flextable)
 library(GGally)
 library(ggsignif)
 library(ggplot2)
+library(geepack)
 library(lmerTest)
 library(officer)
 library(patchwork)
@@ -24,7 +25,8 @@ library(zoo)
 options(shiny.autoreload = TRUE)
 options(shiny.maxRequestSize = 200 * 1024^2)
 
-for (f in list.files("R", full.names = TRUE, pattern = "\\.R$")) source(f)
+r_files <- list.files("R", full.names = TRUE, pattern = "\\.R$", recursive = TRUE)
+invisible(lapply(sort(r_files), source))
 
 # ---------------------------------------------------------------
 # UI
