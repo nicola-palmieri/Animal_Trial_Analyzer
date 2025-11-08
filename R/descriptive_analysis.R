@@ -41,7 +41,6 @@ descriptive_server <- function(id, filtered_data) {
       
       tagList(
         selectInput(ns("cat_vars"), label = "Categorical variables:", choices = cat_cols, selected = cat_cols, multiple = TRUE),
-        br(),
         selectInput(ns("num_vars"), label = "Numeric variables:", choices = num_cols, selected = num_cols, multiple = TRUE)
       )
     })

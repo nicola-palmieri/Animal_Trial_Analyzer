@@ -64,7 +64,7 @@ visualize_server <- function(id, filtered_data, model_fit) {
             h4(class = "mb-2", "Visualization coming soon"),
             p(
               class = "text-muted mb-0",
-              "We're still crafting charts for this analysis type. In the meantime, explore the other visualizations available above!"
+              "We're still crafting charts for this analysis type. In the meantime, explore the other visualizations available!"
             )
           )
         )
