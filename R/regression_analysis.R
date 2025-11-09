@@ -2,6 +2,14 @@
 # 🧬 Common module for LM and LMM
 # ===============================================================
 
+reg_diagnostic_explanation <- paste(
+  "The Residuals vs Fitted plot shows how far the model's predictions are from the observed values.",
+  "A healthy model has points that bounce randomly around the dashed zero line; clear curves or a funnel shape mean the model is missing structure or the error size changes across fitted values.",
+  "The Normal Q-Q plot checks whether the residuals follow a roughly normal distribution.",
+  "Points that stay close to the dashed line support the normality assumption, while steady bends or extreme outliers hint at skewed or heavy-tailed errors.",
+  "If you spot strong patterns in either plot, consider transforming variables, adding predictors, or trying a different model to improve the fit."
+)
+
 regression_ui <- function(id, engine = c("lm", "lmm"), allow_multi_response = FALSE) {
   ns <- NS(id)
   engine <- match.arg(engine)
@@ -310,6 +318,7 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
           verbatimTextOutput(ns(paste0("summary_", idx))),
           br(),
           h5("Diagnostics"),
+          helpText(reg_diagnostic_explanation),
           fluidRow(
             column(6, plotOutput(ns(paste0("resid_", idx)))),
             column(6, plotOutput(ns(paste0("qq_", idx))))
@@ -330,6 +339,7 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
                 verbatimTextOutput(ns(paste0("summary_", idx, "_", j))),
                 br(),
                 h5("Diagnostics"),
+                helpText(reg_diagnostic_explanation),
                 fluidRow(
                   column(6, plotOutput(ns(paste0("resid_", idx, "_", j)))),
                   column(6, plotOutput(ns(paste0("qq_", idx, "_", j))))
@@ -429,13 +439,39 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
             })
 
             output[[paste0("resid_", local_idx)]] <- renderPlot({
-              plot(fitted(model_obj), resid(model_obj), xlab = "Fitted values", ylab = "Residuals")
-              abline(h = 0, lty = 2)
+              plot_df <- data.frame(
+                fitted = stats::fitted(model_obj),
+                residuals = stats::residuals(model_obj)
+              )
+
+              ggplot2::ggplot(plot_df, ggplot2::aes(x = fitted, y = residuals)) +
+                ggplot2::geom_point(color = "steelblue", alpha = 0.8) +
+                ggplot2::geom_hline(yintercept = 0, linetype = "dashed") +
+                ggplot2::labs(
+                  title = "Residuals vs Fitted",
+                  x = "Fitted values",
+                  y = "Residuals"
+                ) +
+                ggplot2::theme_minimal(base_size = 13)
             })
 
             output[[paste0("qq_", local_idx)]] <- renderPlot({
-              qqnorm(resid(model_obj))
-              qqline(resid(model_obj))
+              resid_vals <- stats::residuals(model_obj)
+              qq <- stats::qqnorm(resid_vals, plot.it = FALSE)
+              qq_df <- data.frame(
+                theoretical = qq$x,
+                sample = qq$y
+              )
+
+              ggplot2::ggplot(qq_df, ggplot2::aes(x = theoretical, y = sample)) +
+                ggplot2::geom_point(color = "steelblue", alpha = 0.8) +
+                ggplot2::geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+                ggplot2::labs(
+                  title = "Normal Q-Q",
+                  x = "Theoretical quantiles",
+                  y = "Sample quantiles"
+                ) +
+                ggplot2::theme_minimal(base_size = 13)
             })
 
             output[[paste0("download_", local_idx)]] <- downloadHandler(
@@ -471,13 +507,39 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
                 })
 
                 output[[paste0("resid_", local_idx, "_", local_j)]] <- renderPlot({
-                  plot(fitted(model_obj), resid(model_obj), xlab = "Fitted values", ylab = "Residuals")
-                  abline(h = 0, lty = 2)
+                  plot_df <- data.frame(
+                    fitted = stats::fitted(model_obj),
+                    residuals = stats::residuals(model_obj)
+                  )
+
+                  ggplot2::ggplot(plot_df, ggplot2::aes(x = fitted, y = residuals)) +
+                    ggplot2::geom_point(color = "steelblue", alpha = 0.8) +
+                    ggplot2::geom_hline(yintercept = 0, linetype = "dashed") +
+                    ggplot2::labs(
+                      title = "Residuals vs Fitted",
+                      x = "Fitted values",
+                      y = "Residuals"
+                    ) +
+                    ggplot2::theme_minimal(base_size = 13)
                 })
 
                 output[[paste0("qq_", local_idx, "_", local_j)]] <- renderPlot({
-                  qqnorm(resid(model_obj))
-                  qqline(resid(model_obj))
+                  resid_vals <- stats::residuals(model_obj)
+                  qq <- stats::qqnorm(resid_vals, plot.it = FALSE)
+                  qq_df <- data.frame(
+                    theoretical = qq$x,
+                    sample = qq$y
+                  )
+
+                  ggplot2::ggplot(qq_df, ggplot2::aes(x = theoretical, y = sample)) +
+                    ggplot2::geom_point(color = "steelblue", alpha = 0.8) +
+                    ggplot2::geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+                    ggplot2::labs(
+                      title = "Normal Q-Q",
+                      x = "Theoretical quantiles",
+                      y = "Sample quantiles"
+                    ) +
+                    ggplot2::theme_minimal(base_size = 13)
                 })
 
                 output[[paste0("download_", local_idx, "_", local_j)]] <- downloadHandler(
