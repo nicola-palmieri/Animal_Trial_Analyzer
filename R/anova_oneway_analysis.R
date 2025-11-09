@@ -1,5 +1,5 @@
 # ===============================================================
-# 🧪 Table Analyzer — One-way ANOVA Module 
+# 🧪 Table Analyzer — One-way ANOVA Module (Clean & Minimal)
 # ===============================================================
 
 one_way_anova_ui <- function(id) {
@@ -14,19 +14,23 @@ one_way_anova_ui <- function(id) {
       ),
       br(),
       fluidRow(
-        column(6, with_help_tooltip(
-          actionButton(ns("run"), "Show results", width = "100%"),
-          "Run the ANOVA using the selected response and group variable."
-        )),
-        column(6, with_help_tooltip(
-          downloadButton(ns("download_all"), "Download all results", style = "width: 100%;"),
-          "Export the ANOVA summaries, post-hoc tests, and diagnostics."
-        ))
+        column(
+          6,
+          with_help_tooltip(
+            actionButton(ns("run"), "Show results", width = "100%"),
+            "Run the ANOVA using the selected response and group variable."
+          )
+        ),
+        column(
+          6,
+          with_help_tooltip(
+            downloadButton(ns("download_all"), "Download all results", style = "width: 100%;"),
+            "Export the ANOVA summaries, post-hoc tests, and diagnostics."
+          )
+        )
       )
     ),
-    results = tagList(
-      uiOutput(ns("summary_ui"))
-    )
+    results = uiOutput(ns("summary_ui"))
   )
 }
 
@@ -34,21 +38,14 @@ one_way_anova_server <- function(id, filtered_data) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
-    # -----------------------------------------------------------
-    # Reactive data
-    # -----------------------------------------------------------
-    df <- filtered_data
+    responses <- multi_response_server("response", filtered_data)
+    strat_info <- stratification_server("strat", filtered_data)
     
-    # -----------------------------------------------------------
-    # Dynamic inputs
-    # -----------------------------------------------------------
-    responses <- multi_response_server("response", df)
-
     output$inputs <- renderUI({
-      req(df())
-      data <- df()
+      req(filtered_data())
+      data <- filtered_data()
       cat_cols <- names(data)[sapply(data, function(x) is.character(x) || is.factor(x))]
-
+      
       tagList(
         multi_response_ui(ns("response")),
         with_help_tooltip(
@@ -63,14 +60,9 @@ one_way_anova_server <- function(id, filtered_data) {
       )
     })
     
-    strat_info <- stratification_server("strat", df)
-    
-    # -----------------------------------------------------------
-    # Level order selection
-    # -----------------------------------------------------------
     output$level_order <- renderUI({
-      req(df(), input$group)
-      levels <- unique(as.character(df()[[input$group]]))
+      req(filtered_data(), input$group)
+      levels <- unique(as.character(filtered_data()[[input$group]]))
       with_help_tooltip(
         selectInput(
           ns("order"),
@@ -83,19 +75,12 @@ one_way_anova_server <- function(id, filtered_data) {
       )
     })
     
-    # -----------------------------------------------------------
-    # Model fitting (via shared helper)
-    # -----------------------------------------------------------
     models <- eventReactive(input$run, {
-      req(df(), input$group, input$order)
-      resp_vals <- responses()
-      validate(
-        need(length(resp_vals) > 0, "Please select at least one response variable."),
-        need(all(input$order %in% unique(df()[[input$group]])), "Invalid level order.")
-      )
+      req(filtered_data(), input$group, input$order)
+      validate(need(length(responses()) > 0, "Select at least one response variable."))
       prepare_stratified_anova(
-        df = df(),
-        responses = resp_vals,
+        df = filtered_data(),
+        responses = responses(),
         model = "oneway_anova",
         factor1_var = input$group,
         factor1_order = input$order,
@@ -103,108 +88,55 @@ one_way_anova_server <- function(id, filtered_data) {
       )
     })
     
-    
-    # -----------------------------------------------------------
-    # Download all results as one combined DOCX
-    # -----------------------------------------------------------
     output$download_all <- downloadHandler(
       filename = function() {
-        model_info <- models()
-        n_resp <- length(model_info$responses)
-        n_strata <- if (is.null(model_info$strata)) 0 else length(model_info$strata$levels)
-        strata_label <- ifelse(n_strata == 0, "nostratum", paste0(n_strata, "strata"))
-        timestamp <- format(Sys.time(), "%Y%m%d-%H%M")
-        sprintf("anova_results_%sresp_%s_%s.docx", n_resp, strata_label, timestamp)
+        info <- models()
+        n_resp <- length(info$responses)
+        n_strata <- if (is.null(info$strata)) 0 else length(info$strata$levels)
+        label <- ifelse(n_strata == 0, "nostratum", paste0(n_strata, "strata"))
+        paste0("anova_results_", n_resp, "resp_", label, "_", format(Sys.time(), "%Y%m%d-%H%M"), ".docx")
       },
-      content = function(file) {
-        model_info <- models()
-        req(model_info)
-        download_all_anova_results(model_info, file)
-      }
+      content = function(file) download_all_anova_results(models(), file)
     )
     
-    # -----------------------------------------------------------
-    # Render results (shared UI generator)
-    # -----------------------------------------------------------
     output$summary_ui <- renderUI({
       render_anova_results(ns, models(), "One-way ANOVA")
     })
     
-    # -----------------------------------------------------------
-    # Render model summaries + download buttons (shared helper)
-    # -----------------------------------------------------------
     bind_anova_outputs(ns, output, models)
-
-    df_final <- reactive({
+    
+    anova_results <- reactive({
       mod <- models()
       req(mod)
-      mod$data_used
-    })
-
-    model_fit <- reactive({
-      mod <- models()
-      req(mod)
-      mod$models
-    })
-
-    compiled_results <- reactive({
-      mod <- models()
-      req(mod)
-      compile_anova_results(mod)
-    })
-
-    summary_table <- reactive({
-      res <- compiled_results()
-      req(res)
-      res$summary
-    })
-
-    posthoc_results <- reactive({
-      res <- compiled_results()
-      req(res)
-      res$posthoc
-    })
-
-    effect_table <- reactive({
-      res <- compiled_results()
-      req(res)
-      res$effects
-    })
-
-    error_table <- reactive({
-      res <- compiled_results()
-      req(res)
-      res$errors
-    })
-
-    reactive({
-      mod <- models()
-      req(mod)
-
-      data_used <- df_final()
-
+      res <- compile_anova_results(mod)
+      
       list(
         analysis_type = "ANOVA",
-        data_used = data_used,
-        model = model_fit(),
-        summary = summary_table(),
-        posthoc = posthoc_results(),
-        effects = effect_table(),
-        stats = if (!is.null(data_used)) list(n = nrow(data_used), vars = names(data_used)) else NULL,
+        type = "oneway_anova",
+        data_used = mod$data_used,
+        model = mod$models,
+        summary = res$summary,
+        posthoc = res$posthoc,
+        effects = res$effects,
+        stats = list(
+          n = nrow(mod$data_used),
+          vars = names(mod$data_used)
+        ),
         metadata = list(
           responses = mod$responses,
           strata = mod$strata,
           factors = mod$factors,
           orders = mod$orders,
-          errors = error_table()
+          errors = res$errors
         ),
-        type = "oneway_anova",
-        models = model_fit(),
         responses = mod$responses,
         strata = mod$strata,
         factors = mod$factors,
         orders = mod$orders
       )
     })
+    
+    
+    return(anova_results)
   })
 }
