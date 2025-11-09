@@ -40,7 +40,10 @@ ui <- navbarPage(
       .container-fluid { max-width: 100%; margin: auto; }
       .hero {
         background: linear-gradient(135deg, #f8f9fa 0%, #e9f5ff 100%);
-        border-radius: 16px; padding: 20px 24px;
+        border-radius: 16px;
+        padding: 40px 24px;
+        margin-top: 20px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
       }
       h1, h2, h3 { margin-top: 0.4rem; }
       .section { margin-top: 18px; }
@@ -50,10 +53,89 @@ ui <- navbarPage(
       .empty-state-icon { font-size: 3rem; line-height: 1; }
       .empty-state h4 { font-weight: 600; }
       .ta-help-tooltip { cursor: help; display: inline-block; width: 100%; }
+      .home-wrapper {
+        min-height: calc(100vh - 180px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .home-wrapper .hero {
+        max-width: 760px;
+        width: 100%;
+      }
+      .home-steps h5 {
+        font-weight: 600;
+      }
+      .home-steps p {
+        margin-bottom: 0;
+        color: #6c757d;
+      }
     "))
   ),
-  
-    tabPanel(
+
+  tabPanel(
+    title = tagList(icon("home"), " Home"),
+    fluidPage(
+      div(
+        class = "home-wrapper px-3",
+        div(
+          class = "hero text-center mx-auto",
+          h1("Welcome to Table Analyzer"),
+          p(
+            class = "lead text-muted",
+            "Explore, clean, and interpret tabular data in a calm, guided workspace."
+          ),
+          br(),
+          div(
+            class = "home-steps",
+            fluidRow(
+              class = "g-4 justify-content-center",
+              column(
+                width = 3,
+                div(
+                  icon("upload", class = "fa-2x text-primary mb-2"),
+                  h5("1. Upload"),
+                  p("Bring in spreadsheets or CSV files with ease.")
+                )
+              ),
+              column(
+                width = 3,
+                div(
+                  icon("filter", class = "fa-2x text-primary mb-2"),
+                  h5("2. Filter"),
+                  p("Refine rows and columns to spotlight what's important.")
+                )
+              ),
+              column(
+                width = 3,
+                div(
+                  icon("chart-line", class = "fa-2x text-primary mb-2"),
+                  h5("3. Analyze"),
+                  p("Run summaries and models tailored to your dataset.")
+                )
+              ),
+              column(
+                width = 3,
+                div(
+                  icon("chart-area", class = "fa-2x text-primary mb-2"),
+                  h5("4. Visualize"),
+                  p("Create polished plots to communicate key findings.")
+                )
+              )
+            )
+          ),
+          br(),
+          tags$hr(class = "my-4"),
+          p(
+            em("Developed by the Data Insights Lab for transparent, reproducible analysis."),
+            class = "text-muted small"
+          )
+        )
+      )
+    )
+  ),
+
+  tabPanel(
     title = tagList(icon("upload"), " Upload"),
     fluidPage(upload_ui("upload"))
   ),
