@@ -289,6 +289,54 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
 }
 
 
+format_value_labels <- function(df, show_proportions) {
+  formatter <- if (isTRUE(show_proportions)) {
+    scales::label_percent(accuracy = 0.1, trim = TRUE)
+  } else {
+    scales::label_comma(accuracy = 1, trim = TRUE)
+  }
+
+  df |>
+    dplyr::mutate(
+      label_text = formatter(.data$value),
+      label_y = .data$value,
+      label_vjust = ifelse(.data$value >= 0, -0.4, 1.2)
+    )
+}
+
+apply_value_scale <- function(plot, show_proportions, show_value_labels) {
+  if (isTRUE(show_proportions)) {
+    scale_args <- list(labels = scales::percent_format(accuracy = 1))
+    if (isTRUE(show_value_labels)) {
+      scale_args$limits <- c(0, NA)
+      scale_args$expand <- expansion(mult = c(0.02, 0.12))
+    } else {
+      scale_args$limits <- c(0, 1)
+    }
+    plot + do.call(scale_y_continuous, scale_args)
+  } else if (isTRUE(show_value_labels)) {
+    plot + scale_y_continuous(limits = c(0, NA), expand = expansion(mult = c(0.05, 0.12)))
+  } else {
+    plot
+  }
+}
+
+add_value_labels <- function(plot, data, show_value_labels, show_proportions, position = NULL) {
+  if (!isTRUE(show_value_labels)) return(plot)
+
+  label_df <- format_value_labels(data, show_proportions)
+
+  plot +
+    geom_text(
+      data = label_df,
+      aes(label = label_text, y = label_y, vjust = label_vjust),
+      position = position,
+      color = "gray20",
+      size = 3.5,
+      fontface = "bold"
+    )
+}
+
 build_descriptive_categorical_plot <- function(df,
                                                selected_vars = NULL,
                                                group_var = NULL,
@@ -376,51 +424,8 @@ build_descriptive_categorical_plot <- function(df,
         labs(title = var, x = NULL, y = y_label, fill = group_col) +
         theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-      if (isTRUE(show_value_labels)) {
-        label_formatter <- if (isTRUE(show_proportions)) {
-          scales::label_percent(accuracy = 0.1, trim = TRUE)
-        } else {
-          scales::label_comma(accuracy = 1, trim = TRUE)
-        }
-
-        label_df <- count_df |>
-          dplyr::mutate(
-            label_text = label_formatter(value),
-            label_y = value,
-            label_vjust = ifelse(value >= 0, -0.4, 1.2)
-          )
-
-        p <- p +
-          geom_text(
-            data = label_df,
-            aes(
-              x = .data[[var]],
-              y = label_y,
-              label = label_text,
-              vjust = label_vjust,
-              group = .data[[group_col]]
-            ),
-            position = group_dodge,
-            color = "gray20",
-            size = 3.5,
-            fontface = "bold",
-            inherit.aes = FALSE
-          )
-      }
-
-      if (isTRUE(show_proportions)) {
-        scale_args <- list(labels = scales::percent_format(accuracy = 1))
-        if (isTRUE(show_value_labels)) {
-          scale_args$limits <- c(0, NA)
-          scale_args$expand <- expansion(mult = c(0.02, 0.12))
-        } else {
-          scale_args$limits <- c(0, 1)
-        }
-        p <- p + do.call(scale_y_continuous, scale_args)
-      } else if (isTRUE(show_value_labels)) {
-        p <- p + scale_y_continuous(limits = c(0, NA), expand = expansion(mult = c(0.05, 0.12)))
-      }
-
+      p <- add_value_labels(p, count_df, show_value_labels, show_proportions, group_dodge)
+      p <- apply_value_scale(p, show_proportions, show_value_labels)
       p
     } else {
       count_df <- dplyr::count(var_data, .data[[var]], name = "count")
@@ -447,44 +452,8 @@ build_descriptive_categorical_plot <- function(df,
         labs(title = var, x = NULL, y = y_label) +
         theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-      if (isTRUE(show_value_labels)) {
-        label_formatter <- if (isTRUE(show_proportions)) {
-          scales::label_percent(accuracy = 0.1, trim = TRUE)
-        } else {
-          scales::label_comma(accuracy = 1, trim = TRUE)
-        }
-
-        label_df <- count_df |>
-          dplyr::mutate(
-            label_text = label_formatter(value),
-            label_y = value,
-            label_vjust = ifelse(value >= 0, -0.4, 1.2)
-          )
-
-        p <- p +
-          geom_text(
-            data = label_df,
-            aes(x = .data[[var]], y = label_y, label = label_text, vjust = label_vjust),
-            color = "gray20",
-            size = 3.5,
-            fontface = "bold",
-            inherit.aes = FALSE
-          )
-      }
-
-      if (isTRUE(show_proportions)) {
-        scale_args <- list(labels = scales::percent_format(accuracy = 1))
-        if (isTRUE(show_value_labels)) {
-          scale_args$limits <- c(0, NA)
-          scale_args$expand <- expansion(mult = c(0.02, 0.12))
-        } else {
-          scale_args$limits <- c(0, 1)
-        }
-        p <- p + do.call(scale_y_continuous, scale_args)
-      } else if (isTRUE(show_value_labels)) {
-        p <- p + scale_y_continuous(limits = c(0, NA), expand = expansion(mult = c(0.05, 0.12)))
-      }
-
+      p <- add_value_labels(p, count_df, show_value_labels, show_proportions)
+      p <- apply_value_scale(p, show_proportions, show_value_labels)
       p
     }
   })
