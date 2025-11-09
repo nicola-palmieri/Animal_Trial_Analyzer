@@ -35,15 +35,14 @@ ggpairs_ui <- function(id) {
 
 ggpairs_server <- function(id, data_reactive) {
   moduleServer(id, function(input, output, session) {
-    ns <- session$ns
     df <- reactive(data_reactive())
 
     strat_info <- stratification_server("strat", df)
 
     # ---- Update variable selector ----
     observe({
-      req(df())
-      num_vars <- names(df())[sapply(df(), is.numeric)]
+      data <- req(df())
+      num_vars <- names(data)[vapply(data, is.numeric, logical(1))]
       updateSelectInput(session, "vars", choices = num_vars, selected = num_vars)
     })
 
@@ -75,9 +74,8 @@ ggpairs_server <- function(id, data_reactive) {
 
     # ---- Compute correlation matrix ----
     observeEvent(input$run, {
-      req(df())
-      data <- df()
-      numeric_vars <- names(data)[sapply(data, is.numeric)]
+      data <- req(df())
+      numeric_vars <- names(data)[vapply(data, is.numeric, logical(1))]
       selected_vars <- if (length(input$vars)) input$vars else numeric_vars
       selected_vars <- intersect(selected_vars, numeric_vars)
 
@@ -97,22 +95,23 @@ ggpairs_server <- function(id, data_reactive) {
       strat_details <- strat_info()
       group_var <- strat_details$var
 
-      strata_levels <- "Overall"
-      if (!is.null(group_var) && group_var %in% names(data)) {
+      if (!is.null(group_var) && !group_var %in% names(data)) {
+        group_var <- NULL
+      }
+
+      if (is.null(group_var)) {
+        strata_levels <- "Overall"
+      } else {
         levels <- strat_details$levels
-        if (is.null(levels) || length(levels) == 0) {
+        if (is.null(levels) || !length(levels)) {
           values <- data[[group_var]]
           values <- values[!is.na(values)]
           strata_levels <- unique(as.character(values))
         } else {
           strata_levels <- levels
         }
-      } else {
-        group_var <- NULL
       }
 
-      matrices <- list()
-      plots <- list()
       processed_data <- data[, unique(c(selected_vars, group_var)), drop = FALSE]
 
       if (!is.null(group_var)) {
@@ -126,24 +125,26 @@ ggpairs_server <- function(id, data_reactive) {
       }
 
       if (is.null(group_var)) {
-        dat <- data[, selected_vars, drop = FALSE]
-        cor_matrix <- cor(dat, use = "pairwise.complete.obs")
-        matrices[["Overall"]] <- cor_matrix
-        plots[["Overall"]] <- build_ggpairs_object(dat)
+        dat <- processed_data[, selected_vars, drop = FALSE]
+        matrices <- list(Overall = cor(dat, use = "pairwise.complete.obs"))
+        plots <- list(Overall = build_ggpairs_object(dat))
       } else {
-        for (level in strata_levels) {
-          subset_rows <- !is.na(data[[group_var]]) & as.character(data[[group_var]]) == level
-          subset_data <- data[subset_rows, , drop = FALSE]
-          if (nrow(subset_data) == 0) {
-            matrices[[level]] <- NULL
-            plots[[level]] <- NULL
-            next
-          }
-          dat <- subset_data[, selected_vars, drop = FALSE]
-          cor_matrix <- suppressWarnings(cor(dat, use = "pairwise.complete.obs"))
-          matrices[[level]] <- cor_matrix
-          plots[[level]] <- build_ggpairs_object(dat)
-        }
+        split_data <- lapply(strata_levels, function(level) {
+          dat <- processed_data[processed_data[[group_var]] == level, selected_vars, drop = FALSE]
+          if (nrow(dat) == 0) return(NULL)
+          dat
+        })
+        names(split_data) <- strata_levels
+
+        matrices <- lapply(split_data, function(dat) {
+          if (is.null(dat)) return(NULL)
+          suppressWarnings(cor(dat, use = "pairwise.complete.obs"))
+        })
+
+        plots <- lapply(split_data, function(dat) {
+          if (is.null(dat)) return(NULL)
+          build_ggpairs_object(dat)
+        })
       }
 
       correlation_store(list(
@@ -225,21 +226,17 @@ ggpairs_server <- function(id, data_reactive) {
     # ---- Return structured output for visualization ----
     df_final <- reactive({
       res <- correlation_store()
-      if (is.null(res)) return(NULL)
+      req(res)
       res$data_used
     })
 
     model_fit <- reactive({
       res <- correlation_store()
-      if (is.null(res)) return(NULL)
+      req(res)
       res$matrices
     })
 
-    summary_table <- reactive({
-      res <- correlation_store()
-      if (is.null(res)) return(NULL)
-      res$matrices
-    })
+    summary_table <- model_fit
 
     posthoc_results <- reactive(NULL)
 
@@ -269,14 +266,14 @@ ggpairs_server <- function(id, data_reactive) {
         type = "pairs",
         data = df,
         group_var = reactive({
-          det <- correlation_store()
-          if (is.null(det)) return(NULL)
-          det$group_var
+          res <- correlation_store()
+          req(res)
+          res$group_var
         }),
         strata_order = reactive({
-          det <- correlation_store()
-          if (is.null(det)) return(NULL)
-          det$strata_levels
+          res <- correlation_store()
+          req(res)
+          res$strata_levels
         }),
         results = reactive(correlation_store())
       )
