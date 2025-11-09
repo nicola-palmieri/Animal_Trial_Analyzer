@@ -326,6 +326,8 @@ add_value_labels <- function(plot, data, show_value_labels, show_proportions, po
 
   label_df <- format_value_labels(data, show_proportions)
 
+  position <- if (is.null(position)) "identity" else position
+
   plot +
     geom_text(
       data = label_df,
