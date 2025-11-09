@@ -4,76 +4,82 @@
 
 MAX_STRATIFICATION_LEVELS <- 10
 
-stratification_ui <- function(id, ns = NULL) {
-  ns_fn <- if (is.null(ns)) {
-    NS(id)
-  } else if (is.function(ns)) {
-    function(x) ns(paste(id, x, sep = "-"))
-  } else {
-    NS(id)
-  }
-  
+get_categorical_columns <- function(df) {
+  names(df)[vapply(df, function(x) is.factor(x) || is.character(x), logical(1))]
+}
+
+stratification_ui <- function(id) {
+  ns <- NS(id)
   tagList(
-    uiOutput(ns_fn("stratify_var_ui")),
-    uiOutput(ns_fn("strata_order_ui"))
+    uiOutput(ns("stratify_var_ui")),
+    uiOutput(ns("strata_order_ui"))
   )
 }
 
 stratification_server <- function(id, data) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
-    
+
     df <- reactive({
-      d <- if (is.function(data)) data() else data
-      req(is.data.frame(d))
-      validate(need(nrow(d) > 0, "No data available for stratification."))
-      d
+      data_obj <- if (is.function(data)) data() else data
+      req(is.data.frame(data_obj))
+      validate(need(nrow(data_obj) > 0, "No data available for stratification."))
+      data_obj
     })
-    
-    # ---- UI: variable selector ----
+
     output$stratify_var_ui <- renderUI({
-      d <- req(df())
-      cat_cols <- names(d)[vapply(d, function(x) is.factor(x) || is.character(x), logical(1))]
+      data <- req(df())
+      cat_cols <- get_categorical_columns(data)
+
+      if (length(cat_cols) == 0) {
+        return(helpText("No categorical columns available for stratification."))
+      }
+
       with_help_tooltip(
         selectInput(
           ns("stratify_var"),
-          "Stratify by",
+          "Stratify by:",
           choices = c("None", cat_cols),
           selected = "None"
         ),
-        "Help: Pick a categorical variable if you want separate summaries for each group."
+        "Tip: Choose a categorical variable to split analyses by group."
       )
     })
-    
-    # ---- UI: order/levels selector ----
+
     output$strata_order_ui <- renderUI({
       req(input$stratify_var)
       if (input$stratify_var == "None") return(NULL)
-      d <- req(df())
-      
-      values <- d[[input$stratify_var]]
-      values <- values[!is.na(values)]
-      available_levels <- if (is.factor(values)) levels(values) else unique(as.character(values))
+
+      data <- req(df())
+      selected_values <- data[[input$stratify_var]]
+      selected_values <- selected_values[!is.na(selected_values)]
+
+      available_levels <- if (is.factor(selected_values)) {
+        levels(selected_values)
+      } else {
+        unique(as.character(selected_values))
+      }
       available_levels <- available_levels[nzchar(available_levels)]
-      
+
       n_levels <- length(available_levels)
-      validate(need(n_levels <= MAX_STRATIFICATION_LEVELS,
-                    sprintf("'%s' has too many levels (%d > %d).",
-                            input$stratify_var, n_levels, MAX_STRATIFICATION_LEVELS)))
-      
+      validate(need(
+        n_levels <= MAX_STRATIFICATION_LEVELS,
+        sprintf("'%s' has too many levels (%d > %d).",
+                input$stratify_var, n_levels, MAX_STRATIFICATION_LEVELS)
+      ))
+
       with_help_tooltip(
         selectInput(
           ns("strata_order"),
-          "Order of levels",
+          "Order of levels:",
           choices = available_levels,
           selected = available_levels,
           multiple = TRUE
         ),
-        "Help: Decide which group levels to include and in what order they should appear."
+        "Tip: Adjust which levels to include and in what order they appear."
       )
     })
-    
-    # ---- Unified reactive output ----
+
     reactive({
       list(
         var = if (identical(input$stratify_var, "None")) NULL else input$stratify_var,
@@ -82,5 +88,6 @@ stratification_server <- function(id, data) {
     })
   })
 }
+
   
 
