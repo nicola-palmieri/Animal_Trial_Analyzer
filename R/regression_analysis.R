@@ -364,7 +364,7 @@ regression_ui <- function(id, engine = c("lm", "lmm"), allow_multi_response = FA
       br(),
       tags$details(
         tags$summary(strong("Advanced options")),
-        stratification_ui("strat")
+        stratification_ui("strat", ns)
       ),
       br(),
       fluidRow(
