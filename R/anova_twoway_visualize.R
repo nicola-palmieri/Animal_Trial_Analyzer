@@ -94,6 +94,9 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
       default = 14
     )
 
+    strata_grid <- plot_grid_server("strata_grid")
+    response_grid <- plot_grid_server("response_grid")
+
     cached_results <- reactiveValues(plots = list())
 
     plot_types <- c("lineplot_mean_se", "barplot_mean_se")
@@ -115,18 +118,6 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
       if (is.null(x)) return(default)
       value <- x[[name]]
       if (is.null(value)) default else value
-    }
-
-    update_layout_inputs <- function(section, rows_id, cols_id) {
-      if (is.null(section)) return()
-      rows <- section$rows
-      cols <- section$cols
-      if (!is.null(rows)) {
-        sync_numeric_input(session, rows_id, input[[rows_id]], rows)
-      }
-      if (!is.null(cols)) {
-        sync_numeric_input(session, cols_id, input[[cols_id]], cols)
-      }
     }
 
     compute_all_plots <- function(data, info, layout_inputs, colors, base_size_value) {
@@ -190,10 +181,8 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
       list(
         model_info(),
         df(),
-        input$strata_rows,
-        input$strata_cols,
-        input$resp_rows,
-        input$resp_cols,
+        strata_grid$values(),
+        response_grid$values(),
         custom_colors(),
         base_size(),
         input$show_bar_labels
@@ -202,10 +191,10 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
         info <- model_info()
         data <- df()
         layout_inputs <- list(
-          strata_rows = input$strata_rows,
-          strata_cols = input$strata_cols,
-          resp_rows = input$resp_rows,
-          resp_cols = input$resp_cols
+          strata_rows = strata_grid$rows(),
+          strata_cols = strata_grid$cols(),
+          resp_rows = response_grid$rows(),
+          resp_cols = response_grid$cols()
         )
 
         cached_results$plots <- compute_all_plots(
@@ -247,18 +236,6 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
         h = input$plot_height * strata_rows * resp_rows
       )
     })
-
-    observeEvent(results(), {
-      res_list <- results()
-      if (!length(res_list)) return()
-
-      valid <- Filter(function(item) !is.null(item$defaults) && !is.null(item$layout), res_list)
-      if (!length(valid)) return()
-
-      defaults <- valid[[1]]$defaults
-      update_layout_inputs(defaults$strata, "strata_rows", "strata_cols")
-      update_layout_inputs(defaults$responses, "resp_rows", "resp_cols")
-    }, ignoreNULL = FALSE)
 
     output$layout_controls <- renderUI({
       info <- model_info()

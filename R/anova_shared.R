@@ -6,26 +6,13 @@ build_anova_layout_controls <- function(ns, input, info) {
   has_strata <- !is.null(info$strata) && !is.null(info$strata$var)
   n_responses <- if (!is.null(info$responses)) length(info$responses) else 0
 
-  make_grid_input <- function(id, label, help_text) {
-    with_help_tooltip(
-      numericInput(
-        ns(id),
-        label,
-        value = isolate(if (is.null(input[[id]])) NA else input[[id]]),
-        min = 1,
-        max = 10,
-        step = 1
-      ),
-      help_text
-    )
-  }
-
-  build_grid_section <- function(title, row_id, col_id, row_help, col_help) {
+  build_grid_section <- function(title, grid_id, row_help, col_help) {
     tagList(
       h5(title),
-      fluidRow(
-        column(width = 6, make_grid_input(row_id, "Grid rows", row_help)),
-        column(width = 6, make_grid_input(col_id, "Grid columns", col_help))
+      plot_grid_ui(
+        id = ns(grid_id),
+        rows_help = row_help,
+        cols_help = col_help
       )
     )
   }
@@ -33,8 +20,7 @@ build_anova_layout_controls <- function(ns, input, info) {
   strata_inputs <- if (has_strata) {
     build_grid_section(
       title = "Across strata:",
-      row_id = "strata_rows",
-      col_id = "strata_cols",
+      grid_id = "strata_grid",
       row_help = "Set how many rows of plots to use when displaying different strata.",
       col_help = "Set how many columns of plots to use when displaying different strata."
     )
@@ -45,8 +31,7 @@ build_anova_layout_controls <- function(ns, input, info) {
   response_inputs <- if (!is.null(n_responses) && n_responses > 1) {
     build_grid_section(
       title = "Across responses:",
-      row_id = "resp_rows",
-      col_id = "resp_cols",
+      grid_id = "response_grid",
       row_help = "Set the number of plot rows when multiple responses are shown together.",
       col_help = "Set the number of plot columns when multiple responses are shown together."
     )
