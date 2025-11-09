@@ -10,17 +10,28 @@ base_size_ui <- function(ns,
                          step = 1,
                          help_text = "Adjust the base font size used for plot text.") {
   tagList(
+    shiny::singleton(
+      tags$style(
+        HTML(
+          "\n        .ta-base-size-input .shiny-input-container,\n        .ta-base-size-input .form-group {\n          margin-bottom: 0;\n        }\n        .ta-base-size-input input.form-control {\n          height: 32px;\n          padding: 4px 10px;\n        }\n      "
+        )
+      )
+    ),
     h5("Base size"),
-    with_help_tooltip(
-      numericInput(
-        inputId = ns(input_id),
-        label = "Base font size",
-        value = default,
-        min = min,
-        max = max,
-        step = step
-      ),
-      help_text
+    div(
+      class = "ta-base-size-input",
+      with_help_tooltip(
+        numericInput(
+          inputId = ns(input_id),
+          label = NULL,
+          value = default,
+          min = min,
+          max = max,
+          step = step,
+          width = "100%"
+        ),
+        help_text
+      )
     )
   )
 }
