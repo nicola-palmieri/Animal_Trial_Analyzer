@@ -171,11 +171,9 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
     })
 
     cached_plot_info <- reactiveVal(NULL)
-    cache_ready <- reactiveVal(FALSE)
 
     invalidate_cache <- function() {
       cached_plot_info(NULL)
-      cache_ready(FALSE)
       invisible(TRUE)
     }
 
@@ -195,19 +193,14 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
       ignoreNULL = FALSE
     )
 
-    observeEvent(input$resp_rows, {
-      if (isTRUE(consume_pending_numeric_update(session, "resp_rows"))) {
-        return()
-      }
-      invalidate_cache()
-    }, ignoreNULL = FALSE)
-
-    observeEvent(input$resp_cols, {
-      if (isTRUE(consume_pending_numeric_update(session, "resp_cols"))) {
-        return()
-      }
-      invalidate_cache()
-    }, ignoreNULL = FALSE)
+    invisible(lapply(c("resp_rows", "resp_cols"), function(id) {
+      observeEvent(input[[id]], {
+        if (isTRUE(consume_pending_numeric_update(session, id))) {
+          return()
+        }
+        invalidate_cache()
+      }, ignoreNULL = FALSE)
+    }))
 
     compute_plot_info <- function() {
       info <- summary_info()
@@ -241,9 +234,8 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
 
     plot_info <- reactive({
       req(module_active())
-      if (!isTRUE(cache_ready())) {
+      if (is.null(cached_plot_info())) {
         cached_plot_info(compute_plot_info())
-        cache_ready(TRUE)
       }
       cached_plot_info()
     })
@@ -350,10 +342,9 @@ build_descriptive_numeric_boxplot <- function(df,
   }
   
   plots <- lapply(num_vars, function(var) {
-    # skip all-NA vars early
     vec <- df[[var]]
     if (all(is.na(vec))) return(NULL)
-    
+
     if (!is.null(group_var)) {
       group_levels <- levels(df[[group_var]])
       palette <- resolve_palette_for_levels(group_levels, custom = custom_colors)
@@ -363,12 +354,16 @@ build_descriptive_numeric_boxplot <- function(df,
         theme_minimal(base_size = base_size) +
         labs(title = var, x = NULL, y = var) +
         theme(axis.text.x = element_text(angle = 45, hjust = 1))
-      added_color_scale <- FALSE
+
+      needs_color_scale <- FALSE
       if (isTRUE(show_points)) {
-        p <- p +
-          geom_jitter(aes(color = .data[[group_var]]), width = 0.2, alpha = 0.5, size = 1) +
-          scale_color_manual(values = palette, guide = "none")
-        added_color_scale <- TRUE
+        p <- p + geom_jitter(
+          aes(color = .data[[group_var]]),
+          width = 0.2,
+          alpha = 0.5,
+          size = 1
+        )
+        needs_color_scale <- TRUE
       }
 
       if (isTRUE(show_outliers)) {
@@ -378,7 +373,7 @@ build_descriptive_numeric_boxplot <- function(df,
           group_col = group_var,
           label_col = outlier_label_var
         )
-        if (!is.null(outliers) && nrow(outliers) > 0) {
+        if (has_rows(outliers)) {
           p <- p + geom_point(
             data = outliers,
             aes(x = x, y = y, color = group),
@@ -386,12 +381,10 @@ build_descriptive_numeric_boxplot <- function(df,
             size = 2.5,
             show.legend = FALSE
           )
-          if (!added_color_scale) {
-            p <- p + scale_color_manual(values = palette, guide = "none")
-            added_color_scale <- TRUE
-          }
-          label_data <- outliers[!is.na(outliers$label) & nzchar(outliers$label), , drop = FALSE]
-          if (nrow(label_data) > 0) {
+          needs_color_scale <- TRUE
+
+          label_data <- filter_labeled_outliers(outliers)
+          if (has_rows(label_data)) {
             p <- p + ggrepel::geom_text_repel(
               data = label_data,
               aes(x = x, y = y, label = label, color = group),
@@ -406,24 +399,29 @@ build_descriptive_numeric_boxplot <- function(df,
           }
         }
       }
+
+      if (needs_color_scale) {
+        p <- p + scale_color_manual(values = palette, guide = "none")
+      }
     } else {
-      # ✅ always provide an x aesthetic
+      single_color <- resolve_single_color(custom_colors)
       p <- ggplot(df, aes(x = factor(1), y = .data[[var]])) +
-        geom_boxplot(fill = resolve_single_color(custom_colors), width = 0.3) +
+        geom_boxplot(fill = single_color, width = 0.3) +
         theme_minimal(base_size = base_size) +
         labs(title = var, x = NULL, y = var) +
         theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+
       if (isTRUE(show_points)) {
-        p <- p + geom_jitter(color = resolve_single_color(custom_colors), width = 0.05, alpha = 0.5, size = 1)
+        p <- p + geom_jitter(color = single_color, width = 0.05, alpha = 0.5, size = 1)
       }
+
       if (isTRUE(show_outliers)) {
         outliers <- prepare_boxplot_outliers(
           data = df,
           value_col = var,
           label_col = outlier_label_var
         )
-        if (!is.null(outliers) && nrow(outliers) > 0) {
-          single_color <- resolve_single_color(custom_colors)
+        if (has_rows(outliers)) {
           p <- p + geom_point(
             data = outliers,
             aes(x = x, y = y),
@@ -432,8 +430,9 @@ build_descriptive_numeric_boxplot <- function(df,
             size = 2.5,
             show.legend = FALSE
           )
-          label_data <- outliers[!is.na(outliers$label) & nzchar(outliers$label), , drop = FALSE]
-          if (nrow(label_data) > 0) {
+
+          label_data <- filter_labeled_outliers(outliers)
+          if (has_rows(label_data)) {
             p <- p + ggrepel::geom_text_repel(
               data = label_data,
               aes(x = x, y = y, label = label),
@@ -457,7 +456,7 @@ build_descriptive_numeric_boxplot <- function(df,
   # keep only valid ggplots
   plots <- Filter(Negate(is.null), plots)
   if (length(plots) == 0) return(NULL)
-  
+
   n_panels <- length(plots)
   defaults <- list(
     rows = 1L,
@@ -494,6 +493,44 @@ build_descriptive_numeric_boxplot <- function(df,
 }
 
 
+has_rows <- function(x) {
+  is.data.frame(x) && nrow(x) > 0
+}
+
+
+compute_outlier_bounds <- function(values) {
+  if (is.null(values)) return(NULL)
+  values <- values[!is.na(values)]
+  if (!length(values)) return(NULL)
+
+  stats <- stats::quantile(values, probs = c(0.25, 0.75), na.rm = TRUE, names = FALSE)
+  if (anyNA(stats)) return(NULL)
+
+  iqr <- stats[2] - stats[1]
+  list(
+    lower = stats[1] - 1.5 * iqr,
+    upper = stats[2] + 1.5 * iqr
+  )
+}
+
+
+clean_outlier_labels <- function(values) {
+  if (is.null(values)) return(character())
+  out <- as.character(values)
+  out[is.na(out) | trimws(out) == ""] <- NA_character_
+  out
+}
+
+
+filter_labeled_outliers <- function(outliers) {
+  if (!has_rows(outliers) || !"label" %in% names(outliers)) {
+    return(NULL)
+  }
+  labeled <- outliers[!is.na(outliers$label) & nzchar(outliers$label), , drop = FALSE]
+  if (has_rows(labeled)) labeled else NULL
+}
+
+
 validate_outlier_label <- function(label_input) {
   if (is.null(label_input) || !nzchar(label_input)) {
     return(NULL)
@@ -510,78 +547,57 @@ prepare_boxplot_outliers <- function(data,
     return(NULL)
   }
 
-  clean_labels <- function(values) {
-    if (is.null(values)) return(rep(NA_character_, length.out = 0))
-    out <- as.character(values)
-    out[is.na(out) | trimws(out) == ""] <- NA_character_
-    out
+  extract_labels <- function(df, idx) {
+    if (is.null(label_col) || !label_col %in% names(df)) {
+      return(rep(NA_character_, length(idx)))
+    }
+    clean_outlier_labels(df[[label_col]][idx])
   }
 
   if (!is.null(group_col) && group_col %in% names(data)) {
     grouped <- data
     grouped[[group_col]] <- droplevels(as.factor(grouped[[group_col]]))
     group_levels <- levels(grouped[[group_col]])
+    split_data <- split(grouped, grouped[[group_col]], drop = TRUE)
 
     out_list <- lapply(group_levels, function(lvl) {
-      subset <- grouped[grouped[[group_col]] == lvl, , drop = FALSE]
-      values <- subset[[value_col]]
-      values <- values[!is.na(values)]
-      if (length(values) == 0) return(NULL)
-      stats <- stats::quantile(values, probs = c(0.25, 0.75), na.rm = TRUE, names = FALSE)
-      if (anyNA(stats)) return(NULL)
-      iqr <- stats[2] - stats[1]
-      lower <- stats[1] - 1.5 * iqr
-      upper <- stats[2] + 1.5 * iqr
-      idx <- which(subset[[value_col]] < lower | subset[[value_col]] > upper)
-      if (length(idx) == 0) return(NULL)
+      subset <- split_data[[lvl]]
+      if (is.null(subset)) return(NULL)
 
-      labels <- if (!is.null(label_col) && label_col %in% names(subset)) {
-        clean_labels(subset[[label_col]][idx])
-      } else {
-        rep(NA_character_, length(idx))
-      }
+      bounds <- compute_outlier_bounds(subset[[value_col]])
+      if (is.null(bounds)) return(NULL)
+
+      idx <- which(subset[[value_col]] < bounds$lower | subset[[value_col]] > bounds$upper)
+      if (!length(idx)) return(NULL)
 
       data.frame(
         x = factor(rep(lvl, length(idx)), levels = group_levels),
         y = subset[[value_col]][idx],
         group = factor(rep(lvl, length(idx)), levels = group_levels),
-        label = labels,
+        label = extract_labels(subset, idx),
         stringsAsFactors = FALSE
       )
     })
 
-    out_list <- Filter(Negate(is.null), out_list)
-    if (length(out_list) == 0) {
-      return(NULL)
-    }
+    out_list <- Filter(has_rows, out_list)
+    if (!length(out_list)) return(NULL)
+
     outliers <- do.call(rbind, out_list)
     rownames(outliers) <- NULL
     return(outliers)
   }
 
-  values <- data[[value_col]]
-  values <- values[!is.na(values)]
-  if (length(values) == 0) return(NULL)
-  stats <- stats::quantile(values, probs = c(0.25, 0.75), na.rm = TRUE, names = FALSE)
-  if (anyNA(stats)) return(NULL)
-  iqr <- stats[2] - stats[1]
-  lower <- stats[1] - 1.5 * iqr
-  upper <- stats[2] + 1.5 * iqr
-  idx <- which(data[[value_col]] < lower | data[[value_col]] > upper)
-  if (length(idx) == 0) return(NULL)
+  bounds <- compute_outlier_bounds(data[[value_col]])
+  if (is.null(bounds)) return(NULL)
 
-  labels <- if (!is.null(label_col) && label_col %in% names(data)) {
-    clean_values <- clean_labels(data[[label_col]][idx])
-    clean_values
-  } else {
-    rep(NA_character_, length(idx))
-  }
+  idx <- which(data[[value_col]] < bounds$lower | data[[value_col]] > bounds$upper)
+  if (!length(idx)) return(NULL)
 
   data.frame(
     x = factor(rep(1, length(idx))),
     y = data[[value_col]][idx],
     group = NA,
-    label = labels,
+    label = extract_labels(data, idx),
     stringsAsFactors = FALSE
   )
 }
