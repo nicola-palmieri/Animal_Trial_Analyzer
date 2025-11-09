@@ -15,15 +15,10 @@ pairwise_correlation_visualize_ggpairs_ui <- function(id) {
         "Set the height in pixels for each panel of the correlation matrix."
       ))
     ),
-    fluidRow(
-      column(6, with_help_tooltip(
-        numericInput(ns("resp_rows"),    "Grid rows",    NA, 1, 10, 1),
-        "Choose how many rows of panels to use when multiple strata are plotted."
-      )),
-      column(6, with_help_tooltip(
-        numericInput(ns("resp_cols"),    "Grid columns", NA, 1, 10, 1),
-        "Choose how many columns of panels to use when multiple strata are plotted."
-      ))
+    plot_grid_ui(
+      id = ns("plot_grid"),
+      rows_help = "Choose how many rows of panels to use when multiple strata are plotted.",
+      cols_help = "Choose how many columns of panels to use when multiple strata are plotted."
     ),
     fluidRow(
       column(6, add_color_customization_ui(ns, multi_group = TRUE)),
@@ -90,6 +85,8 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
       input = input,
       default = 11
     )
+
+    grid_inputs <- plot_grid_server("plot_grid")
 
     build_ggpairs_plot <- function(data, color_value, title = NULL, base_size_value = 11) {
       validate(need(is.data.frame(data) && nrow(data) > 0, "No data available for plotting."))
@@ -223,8 +220,8 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
         defaults <- compute_default_grid(panel_count)
 
         layout <- basic_grid_layout(
-          rows = suppressWarnings(as.numeric(input$resp_rows)),
-          cols = suppressWarnings(as.numeric(input$resp_cols)),
+          rows = grid_inputs$rows(),
+          cols = grid_inputs$cols(),
           default_rows = defaults$rows,
           default_cols = defaults$cols
         )
@@ -266,18 +263,6 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
       info <- plot_info()
       scale_dimension(plot_height(), info$layout$nrow)
     })
-
-    observeEvent(plot_info(), {
-      info <- plot_info()
-      if (is.null(info) || is.null(info$defaults)) return()
-
-      rows <- info$defaults$rows
-      cols <- info$defaults$cols
-      if (is.null(rows) || is.null(cols)) return()
-
-      sync_numeric_input(session, "resp_rows", input$resp_rows, rows)
-      sync_numeric_input(session, "resp_cols", input$resp_cols, cols)
-    }, ignoreNULL = FALSE)
 
     output$download_plot <- downloadHandler(
       filename = function() paste0("pairwise_correlation_ggpairs_", Sys.Date(), ".png"),

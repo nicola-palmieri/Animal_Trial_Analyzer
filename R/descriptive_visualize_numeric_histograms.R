@@ -19,15 +19,10 @@ visualize_numeric_histograms_ui <- function(id) {
         "Set the height of each histogram panel in pixels."
       ))
     ),
-    fluidRow(
-      column(6, with_help_tooltip(
-        numericInput(ns("resp_rows"), "Grid rows",    value = NA, min = 1, max = 10, step = 1),
-        "Choose how many rows of histograms to display when several charts are shown."
-      )),
-      column(6, with_help_tooltip(
-        numericInput(ns("resp_cols"), "Grid columns", value = NA, min = 1, max = 10, step = 1),
-        "Choose how many columns of histograms to display when several charts are shown."
-      ))
+    plot_grid_ui(
+      id = ns("plot_grid"),
+      rows_help = "Choose how many rows of histograms to display when several charts are shown.",
+      cols_help = "Choose how many columns of histograms to display when several charts are shown."
     ),
     fluidRow(
       column(6, add_color_customization_ui(ns, multi_group = TRUE)),
@@ -128,15 +123,11 @@ visualize_numeric_histograms_server <- function(id, filtered_data, summary_info,
       ignoreNULL = FALSE
     )
 
-    for (field in c("resp_rows", "resp_cols")) {
-      local({
-        key <- field
-        observeEvent(input[[key]], {
-          if (isTRUE(consume_pending_numeric_update(session, key))) return()
-          invalidate_cache()
-        }, ignoreNULL = FALSE)
-      })
-    }
+    grid_inputs <- plot_grid_server("plot_grid")
+
+    observeEvent(grid_inputs$values(), {
+      invalidate_cache()
+    })
 
     compute_plot_info <- function() {
       info <- summary_info()
@@ -156,8 +147,8 @@ visualize_numeric_histograms_server <- function(id, filtered_data, summary_info,
         group_var = group_var,
         strata_levels = strata_levels,
         use_density = isTRUE(input$use_density),
-        nrow_input = input$resp_rows,
-        ncol_input = input$resp_cols,
+        nrow_input = grid_inputs$rows(),
+        ncol_input = grid_inputs$cols(),
         custom_colors = custom_colors(),
         base_size = base_size()
       )
@@ -188,18 +179,6 @@ visualize_numeric_histograms_server <- function(id, filtered_data, summary_info,
         )
       }
     })
-
-    observeEvent(plot_info(), {
-      info <- plot_info()
-      if (is.null(info) || is.null(info$defaults)) return()
-
-      rows <- info$defaults$rows
-      cols <- info$defaults$cols
-      if (is.null(rows) || is.null(cols)) return()
-
-      sync_numeric_input(session, "resp_rows", input$resp_rows, rows)
-      sync_numeric_input(session, "resp_cols", input$resp_cols, cols)
-    }, ignoreNULL = FALSE)
 
     output$grid_warning <- renderUI({
       req(module_active())

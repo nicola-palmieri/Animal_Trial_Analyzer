@@ -229,6 +229,8 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
       default = 14
     )
 
+    facet_grid_inputs <- plot_grid_server("facet_grid")
+
     observeEvent(available_choices(), {
       choices <- available_choices()
       update_input <- function(id, current) {
@@ -258,38 +260,10 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
         return(NULL)
       }
 
-      ns <- session$ns
-      tagList(
-        fluidRow(
-          column(
-            width = 6,
-            with_help_tooltip(
-              numericInput(
-                ns("grid_rows"),
-                "Grid rows",
-                value = isolate(if (is.null(input$grid_rows)) NA else input$grid_rows),
-                min = 1,
-                max = 10,
-                step = 1
-              ),
-              "Decide how many rows of panels to show when faceting the PCA plot."
-            )
-          ),
-          column(
-            width = 6,
-            with_help_tooltip(
-              numericInput(
-                ns("grid_cols"),
-                "Grid columns",
-                value = isolate(if (is.null(input$grid_cols)) NA else input$grid_cols),
-                min = 1,
-                max = 10,
-                step = 1
-              ),
-              "Decide how many columns of panels to show when faceting the PCA plot."
-            )
-          )
-        )
+      plot_grid_ui(
+        id = session$ns("facet_grid"),
+        rows_help = "Decide how many rows of panels to show when faceting the PCA plot.",
+        cols_help = "Decide how many columns of panels to show when faceting the PCA plot."
       )
     })
     empty_facet <- list(var = NULL, levels = NULL, column = NULL)
@@ -473,8 +447,8 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
       defaults <- compute_default_grid(panel_count)
 
       use_custom_layout <- !is.null(facet_var) && panel_count > 1
-      rows_input <- if (use_custom_layout) suppressWarnings(as.numeric(input$grid_rows)) else NA
-      cols_input <- if (use_custom_layout) suppressWarnings(as.numeric(input$grid_cols)) else NA
+      rows_input <- if (use_custom_layout) facet_grid_inputs$rows() else NA
+      cols_input <- if (use_custom_layout) facet_grid_inputs$cols() else NA
 
       layout <- basic_grid_layout(
         rows = rows_input,
@@ -524,19 +498,6 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
 
       list(w = subplot_w * ncol, h = subplot_h * nrow)
     })
-
-    observeEvent(plot_info(), {
-      info <- plot_info()
-      if (is.null(info) || is.null(info$defaults)) return()
-      if (is.null(info$facet_var) || info$panels <= 1) return()
-
-      rows <- info$defaults$rows
-      cols <- info$defaults$cols
-      if (is.null(rows) || is.null(cols)) return()
-
-      sync_numeric_input(session, "grid_rows", input$grid_rows, rows)
-      sync_numeric_input(session, "grid_cols", input$grid_cols, cols)
-    }, ignoreNULL = FALSE)
 
     output$plot_warning <- renderUI({
       info <- plot_info()

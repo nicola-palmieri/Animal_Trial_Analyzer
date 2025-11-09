@@ -23,35 +23,10 @@ visualize_categorical_barplots_ui <- function(id) {
         "Set the height of each categorical plot in pixels."
       ))
     ),
-    fluidRow(
-      column(
-        6,
-        with_help_tooltip(
-          numericInput(
-            ns("resp_rows"),
-            "Grid rows",
-            value = NA,
-            min = 1,
-            max = 10,
-            step = 1
-          ),
-          "Choose how many rows of plots to display when several charts are shown."
-        )
-      ),
-      column(
-        6,
-        with_help_tooltip(
-          numericInput(
-            ns("resp_cols"),
-            "Grid columns",
-            value = NA,
-            min = 1,
-            max = 10,
-            step = 1
-          ),
-          "Choose how many columns of plots to display when several charts are shown."
-        )
-      )
+    plot_grid_ui(
+      id = ns("plot_grid"),
+      rows_help = "Choose how many rows of plots to display when several charts are shown.",
+      cols_help = "Choose how many columns of plots to display when several charts are shown."
     ),
     fluidRow(
       column(6, add_color_customization_ui(ns, multi_group = TRUE)),
@@ -139,6 +114,8 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
     cached_plot_info <- reactiveVal(NULL)
     cache_ready <- reactiveVal(FALSE)
 
+    grid_inputs <- plot_grid_server("plot_grid")
+
     invalidate_cache <- function() {
       cached_plot_info(NULL)
       cache_ready(FALSE)
@@ -160,17 +137,7 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
       ignoreNULL = FALSE
     )
 
-    observeEvent(input$resp_rows, {
-      if (isTRUE(consume_pending_numeric_update(session, "resp_rows"))) {
-        return()
-      }
-      invalidate_cache()
-    }, ignoreNULL = FALSE)
-
-    observeEvent(input$resp_cols, {
-      if (isTRUE(consume_pending_numeric_update(session, "resp_cols"))) {
-        return()
-      }
+    observeEvent(grid_inputs$values(), {
       invalidate_cache()
     }, ignoreNULL = FALSE)
 
@@ -194,8 +161,8 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
         group_var = group_var,
         strata_levels = strata_levels,
         show_proportions = isTRUE(input$show_proportions),
-        nrow_input = input$resp_rows,
-        ncol_input = input$resp_cols,
+        nrow_input = grid_inputs$rows(),
+        ncol_input = grid_inputs$cols(),
         fill_colors = custom_colors(),
         show_value_labels = isTRUE(input$show_value_labels),
         base_size = base_size()
@@ -226,18 +193,6 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
         )
       }
     })
-
-    observeEvent(plot_info(), {
-      info <- plot_info()
-      if (is.null(info) || is.null(info$defaults)) return()
-
-      rows <- info$defaults$rows
-      cols <- info$defaults$cols
-      if (is.null(rows) || is.null(cols)) return()
-
-      sync_numeric_input(session, "resp_rows", input$resp_rows, rows)
-      sync_numeric_input(session, "resp_cols", input$resp_cols, cols)
-    }, ignoreNULL = FALSE)
 
     output$grid_warning <- renderUI({
       req(module_active())

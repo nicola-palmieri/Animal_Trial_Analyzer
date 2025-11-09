@@ -88,6 +88,9 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
       default = 14
     )
 
+    strata_grid <- plot_grid_server("strata_grid")
+    response_grid <- plot_grid_server("response_grid")
+
     cached_results <- reactiveValues(plots = list())
 
     compute_empty_result <- function(message = NULL) {
@@ -167,10 +170,8 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
       list(
         model_info(),
         df(),
-        input$strata_rows,
-        input$strata_cols,
-        input$resp_rows,
-        input$resp_cols,
+        strata_grid$values(),
+        response_grid$values(),
         custom_colors(),
         base_size(),
         input$show_bar_labels
@@ -179,10 +180,10 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
         info <- model_info()
         data <- df()
         layout_inputs <- list(
-          strata_rows = input$strata_rows,
-          strata_cols = input$strata_cols,
-          resp_rows = input$resp_rows,
-          resp_cols = input$resp_cols
+          strata_rows = strata_grid$rows(),
+          strata_cols = strata_grid$cols(),
+          resp_rows = response_grid$rows(),
+          resp_cols = response_grid$cols()
         )
 
         cached_results$plots <- compute_all_plots(
@@ -223,33 +224,6 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
         h = input$plot_height * first_non_null(strata$rows, 1) * first_non_null(responses$rows, 1)
       )
     })
-
-    observeEvent(results(), {
-      valid <- Filter(function(item) !is.null(item$defaults) && !is.null(item$layout), results())
-      if (!length(valid)) {
-        return()
-      }
-
-      defaults <- valid[[1]]$defaults
-
-      sync_from_defaults <- function(section, rows_id, cols_id) {
-        section_defaults <- defaults[[section]]
-        if (is.null(section_defaults)) {
-          return()
-        }
-        rows <- section_defaults$rows
-        cols <- section_defaults$cols
-        if (!is.null(rows)) {
-          sync_numeric_input(session, rows_id, input[[rows_id]], rows)
-        }
-        if (!is.null(cols)) {
-          sync_numeric_input(session, cols_id, input[[cols_id]], cols)
-        }
-      }
-
-      sync_from_defaults("strata", "strata_rows", "strata_cols")
-      sync_from_defaults("responses", "resp_rows", "resp_cols")
-    }, ignoreNULL = FALSE)
 
     output$layout_controls <- renderUI({
       info <- model_info()

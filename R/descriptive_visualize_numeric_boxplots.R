@@ -27,35 +27,11 @@ visualize_numeric_boxplots_ui <- function(id) {
         "Control how tall each boxplot panel should be."
       ))
     ),
-    fluidRow(
-      column(
-        6,
-        with_help_tooltip(
-          numericInput(
-            ns("resp_rows"),
-            "Grid rows",
-            value = NA,
-            min = 1,
-            max = 10,
-            step = 1
-          ),
-          "Choose how many rows of plots to display when multiple charts are shown."
-        )
-      ),
-      column(
-        6,
-        with_help_tooltip(
-          numericInput(
-            ns("resp_cols"),
-            "Grid columns",
-            value = NA,
-            min = 1,
-            max = 100,
-            step = 1
-          ),
-          "Choose how many columns of plots to display when multiple charts are shown."
-        )
-      )
+    plot_grid_ui(
+      id = ns("plot_grid"),
+      rows_help = "Choose how many rows of plots to display when multiple charts are shown.",
+      cols_help = "Choose how many columns of plots to display when multiple charts are shown.",
+      cols_max = 100L
     ),
     fluidRow(
       column(6, add_color_customization_ui(ns, multi_group = TRUE)),
@@ -193,14 +169,11 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
       ignoreNULL = FALSE
     )
 
-    invisible(lapply(c("resp_rows", "resp_cols"), function(id) {
-      observeEvent(input[[id]], {
-        if (isTRUE(consume_pending_numeric_update(session, id))) {
-          return()
-        }
-        invalidate_cache()
-      }, ignoreNULL = FALSE)
-    }))
+    grid_inputs <- plot_grid_server("plot_grid", cols_max = 100L)
+
+    observeEvent(grid_inputs$values(), {
+      invalidate_cache()
+    })
 
     compute_plot_info <- function() {
       info <- summary_info()
@@ -222,8 +195,8 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
         show_points = isTRUE(input$show_points),
         show_outliers = isTRUE(input$show_outliers),
         outlier_label_var = validate_outlier_label(input$outlier_label),
-        nrow_input = input$resp_rows,
-        ncol_input = input$resp_cols,
+        nrow_input = grid_inputs$rows(),
+        ncol_input = grid_inputs$cols(),
         custom_colors = custom_colors(),
         base_size = base_size()
       )
@@ -253,18 +226,6 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
         )
       }
     })
-
-    observeEvent(plot_info(), {
-      info <- plot_info()
-      if (is.null(info) || is.null(info$defaults)) return()
-
-      rows <- info$defaults$rows
-      cols <- info$defaults$cols
-      if (is.null(rows) || is.null(cols)) return()
-
-      sync_numeric_input(session, "resp_rows", input$resp_rows, rows)
-      sync_numeric_input(session, "resp_cols", input$resp_cols, cols)
-    }, ignoreNULL = FALSE)
 
     output$grid_warning <- renderUI({
       req(module_active())
