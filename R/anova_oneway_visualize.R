@@ -88,12 +88,6 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
       default = 14
     )
 
-    last_plot_type <- reactiveVal("lineplot_mean_se")
-
-    observeEvent(input$plot_type, {
-      last_plot_type(input$plot_type)
-    }, ignoreInit = TRUE)
-
     cached_results <- reactiveValues(plots = list())
 
     compute_empty_result <- function(message = NULL) {
@@ -105,24 +99,23 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
       )
     }
 
+    empty_plot_results <- function(message) {
+      list(
+        lineplot_mean_se = compute_empty_result(message),
+        barplot_mean_se = compute_empty_result(message)
+      )
+    }
+
     compute_all_plots <- function(data, info, layout_inputs, colors, base_size_value) {
       if (is.null(info)) {
         return(list())
       }
       if (!identical(info$type, "oneway_anova")) {
-        msg <- "No one-way ANOVA results available for plotting."
-        return(list(
-          lineplot_mean_se = compute_empty_result(msg),
-          barplot_mean_se = compute_empty_result(msg)
-        ))
+        return(empty_plot_results("No one-way ANOVA results available for plotting."))
       }
 
-      if (is.null(data) || (!is.null(data) && nrow(data) == 0)) {
-        msg <- "No data available for plotting."
-        return(list(
-          lineplot_mean_se = compute_empty_result(msg),
-          barplot_mean_se = compute_empty_result(msg)
-        ))
+      if (is.null(data) || nrow(data) == 0) {
+        return(empty_plot_results("No data available for plotting."))
       }
 
       safe_plot <- function(expr) {
@@ -211,65 +204,51 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
     })
 
     plot_obj <- reactive({
-      info <- current_result()
-      if (is.null(info) || !is.null(info$warning) || is.null(info$plot)) {
+      result <- current_result()
+      if (is.null(result) || !is.null(result$warning)) {
         return(NULL)
       }
-      info$plot
+      result$plot
     })
 
+    first_non_null <- function(x, default) if (is.null(x)) default else x
+
     plot_size <- reactive({
-      res <- current_result()
-      layout <- if (!is.null(res)) res$layout else NULL
-      strata_layout <- if (!is.null(layout) && !is.null(layout$strata)) layout$strata else list()
-      response_layout <- if (!is.null(layout) && !is.null(layout$responses)) layout$responses else list()
-      strata_rows <- if (!is.null(strata_layout$rows)) strata_layout$rows else 1
-      strata_cols <- if (!is.null(strata_layout$cols)) strata_layout$cols else 1
-      resp_rows <- if (!is.null(response_layout$rows)) response_layout$rows else 1
-      resp_cols <- if (!is.null(response_layout$cols)) response_layout$cols else 1
+      layout <- first_non_null(current_result()$layout, list())
+      strata <- first_non_null(layout$strata, list(rows = 1, cols = 1))
+      responses <- first_non_null(layout$responses, list(rows = 1, cols = 1))
+
       list(
-        w = input$plot_width * strata_cols * resp_cols,
-        h = input$plot_height * strata_rows * resp_rows
+        w = input$plot_width * first_non_null(strata$cols, 1) * first_non_null(responses$cols, 1),
+        h = input$plot_height * first_non_null(strata$rows, 1) * first_non_null(responses$rows, 1)
       )
     })
 
     observeEvent(results(), {
-      res_list <- results()
-      if (length(res_list) == 0) {
+      valid <- Filter(function(item) !is.null(item$defaults) && !is.null(item$layout), results())
+      if (!length(valid)) {
         return()
       }
 
-      first_valid <- NULL
-      for (item in res_list) {
-        if (!is.null(item$defaults) && !is.null(item$layout)) {
-          first_valid <- item
-          break
+      defaults <- valid[[1]]$defaults
+
+      sync_from_defaults <- function(section, rows_id, cols_id) {
+        section_defaults <- defaults[[section]]
+        if (is.null(section_defaults)) {
+          return()
+        }
+        rows <- section_defaults$rows
+        cols <- section_defaults$cols
+        if (!is.null(rows)) {
+          sync_numeric_input(session, rows_id, input[[rows_id]], rows)
+        }
+        if (!is.null(cols)) {
+          sync_numeric_input(session, cols_id, input[[cols_id]], cols)
         }
       }
 
-      if (is.null(first_valid)) {
-        return()
-      }
-
-      defaults <- first_valid$defaults
-
-      if (!is.null(defaults$strata)) {
-        rows <- defaults$strata$rows
-        cols <- defaults$strata$cols
-        if (!is.null(rows) && !is.null(cols)) {
-          sync_numeric_input(session, "strata_rows", input$strata_rows, rows)
-          sync_numeric_input(session, "strata_cols", input$strata_cols, cols)
-        }
-      }
-
-      if (!is.null(defaults$responses)) {
-        rows <- defaults$responses$rows
-        cols <- defaults$responses$cols
-        if (!is.null(rows) && !is.null(cols)) {
-          sync_numeric_input(session, "resp_rows", input$resp_rows, rows)
-          sync_numeric_input(session, "resp_cols", input$resp_cols, cols)
-        }
-      }
+      sync_from_defaults("strata", "strata_rows", "strata_cols")
+      sync_from_defaults("responses", "resp_rows", "resp_cols")
     }, ignoreNULL = FALSE)
 
     output$layout_controls <- renderUI({
