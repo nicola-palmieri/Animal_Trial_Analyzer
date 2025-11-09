@@ -77,13 +77,8 @@ analysis_server <- function(id, filtered_data) {
     current_mod <- reactive({
       type <- input$analysis_type
       req(type)
-      modules[[type]]
-    })
-    
-    current_ui <- reactive({
-      mod <- current_mod()
+      mod <- modules[[type]]
       req(mod)
-      mod$ui(ns(mod$id))
     })
     
     # ---- Lazy server initialization ----
@@ -99,63 +94,66 @@ analysis_server <- function(id, filtered_data) {
       )
       lookup[[mod_type]] %||% toupper(mod_type)
     }
-    
+
 
     ensure_module_server <- function(mod) {
       key <- mod$id
       if (!is.null(server_cache[[key]])) return(server_cache[[key]])
-      
+
       result <- tryCatch(mod$server(mod$id, df), error = function(e) {
         warning(sprintf("Module '%s' failed to initialize: %s", key, conditionMessage(e)))
         NULL
       })
-      
-      default_type <- normalize_analysis_type(mod$type)
-      
+
+      defaults <- list(
+        analysis_type = normalize_analysis_type(mod$type),
+        type = mod$type,
+        data_used = NULL,
+        summary = NULL,
+        posthoc = NULL,
+        effects = NULL,
+        stats = NULL,
+        metadata = list()
+      )
+
+      fill_defaults <- function(val) {
+        for (name in names(defaults)) {
+          if (is.null(val[[name]])) val[[name]] <- defaults[[name]]
+        }
+        val
+      }
+
       # --- Standardize all outputs to a reactive returning a list ---
       standardized <- reactive({
         val <- if (is.reactive(result)) result() else result
         req(val)
-        
-        val$analysis_type <- val$analysis_type %||% default_type
-        val$type <- val$type %||% mod$type
-        val$data_used <- val$data_used %||% NULL
-        val$summary <- val$summary %||% NULL
-        val$posthoc <- val$posthoc %||% NULL
-        val$effects <- val$effects %||% NULL
-        val$stats <- val$stats %||% NULL
-        val$metadata <- val$metadata %||% list()
-        val
+        fill_defaults(val)
       })
-      
+
       server_cache[[key]] <- standardized
       standardized
     }
-    
-    
+
+
     # ---- Render active submodule UI ----
     output$config_panel <- renderUI({
-      ui <- current_ui()
+      mod <- current_mod()
+      ui <- mod$ui(ns(mod$id))
       req(ui)
       ui$config
     })
-    
+
     output$results_panel <- renderUI({
-      ui <- current_ui()
+      mod <- current_mod()
+      ui <- mod$ui(ns(mod$id))
       req(ui)
       ui$results
     })
-    
-    # ---- Connect the current selected module's server ----
-    current_server <- reactive({
-      mod <- current_mod()
-      req(mod)
-      ensure_module_server(mod)
-    })
-    
+
     # ---- Unified model output ----
     model_out <- reactive({
-      srv <- current_server()
+      mod <- current_mod()
+      srv <- ensure_module_server(mod)
       req(srv)
       srv()
     })
