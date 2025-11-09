@@ -135,7 +135,14 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
           )
         )
       ),
-      add_color_customization_ui(ns, multi_group = TRUE),
+      fluidRow(
+        column(6, add_color_customization_ui(ns, multi_group = TRUE)),
+        column(6, base_size_ui(
+          ns,
+          default = 14,
+          help_text = "Adjust the base font size used for PCA plots."
+        ))
+      ),
       br(),
       with_help_tooltip(
         downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;"),
@@ -219,6 +226,11 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
       data = color_data,
       color_var_reactive = color_var_reactive,
       multi_group = TRUE
+    )
+
+    base_size <- base_size_server(
+      input = input,
+      default = 14
     )
 
     observeEvent(available_choices(), {
@@ -494,7 +506,8 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
           subset_rows = idx,
           color_levels = color_levels,
           x_limits = x_limits,
-          y_limits = y_limits
+          y_limits = y_limits,
+          base_size = base_size()
         )
 
         if (!is.null(facet_var)) {
@@ -640,7 +653,7 @@ build_pca_biplot <- function(pca_obj, data, color_var = NULL, shape_var = NULL,
                              show_loadings = FALSE, loading_scale = 1.2,
                              custom_colors = NULL, subset_rows = NULL,
                              color_levels = NULL, x_limits = NULL,
-                             y_limits = NULL) {
+                             y_limits = NULL, base_size = 14) {
   stopifnot(!is.null(pca_obj$x))
 
   scores <- as.data.frame(pca_obj$x[, 1:2])
@@ -700,7 +713,7 @@ build_pca_biplot <- function(pca_obj, data, color_var = NULL, shape_var = NULL,
       shape = if (is.null(shape_var)) 16 else NULL,
       color = if (is.null(color_var)) single_color else NULL
     ) +
-    theme_minimal(base_size = 14) +
+    theme_minimal(base_size = base_size) +
     labs(
       x = x_lab,
       y = y_lab,

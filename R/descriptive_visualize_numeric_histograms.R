@@ -29,7 +29,14 @@ visualize_numeric_histograms_ui <- function(id) {
         "Choose how many columns of histograms to display when several charts are shown."
       ))
     ),
-    add_color_customization_ui(ns, multi_group = TRUE),
+    fluidRow(
+      column(6, add_color_customization_ui(ns, multi_group = TRUE)),
+      column(6, base_size_ui(
+        ns,
+        default = 13,
+        help_text = "Adjust the base font size used for histogram text elements."
+      ))
+    ),
     hr(),
     with_help_tooltip(
       downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;"),
@@ -102,6 +109,11 @@ visualize_numeric_histograms_server <- function(id, filtered_data, summary_info,
       multi_group = TRUE
     )
 
+    base_size <- base_size_server(
+      input = input,
+      default = 13
+    )
+
     cached_plot_info <- reactiveVal(NULL)
     cache_ready <- reactiveVal(FALSE)
 
@@ -116,7 +128,8 @@ visualize_numeric_histograms_server <- function(id, filtered_data, summary_info,
         summary_info(),
         filtered_data(),
         input$use_density,
-        custom_colors()
+        custom_colors(),
+        base_size()
       ),
       {
         invalidate_cache()
@@ -158,7 +171,8 @@ visualize_numeric_histograms_server <- function(id, filtered_data, summary_info,
         use_density = isTRUE(input$use_density),
         nrow_input = input$resp_rows,
         ncol_input = input$resp_cols,
-        custom_colors = custom_colors()
+        custom_colors = custom_colors(),
+        base_size = base_size()
       )
       validate(need(!is.null(out), "No numeric variables available for plotting."))
       out
@@ -256,7 +270,8 @@ build_descriptive_numeric_histogram <- function(df,
                                                 use_density = FALSE,
                                                 nrow_input = NULL,
                                                 ncol_input = NULL,
-                                                custom_colors = NULL) {
+                                                custom_colors = NULL,
+                                                base_size = 13) {
   if (is.null(df) || !is.data.frame(df) || nrow(df) == 0) return(NULL)
   
   num_vars <- names(df)[vapply(df, is.numeric, logical(1))]
@@ -330,7 +345,7 @@ build_descriptive_numeric_histogram <- function(df,
     }
     
     p +
-      theme_minimal(base_size = 13) +
+      theme_minimal(base_size = base_size) +
       labs(title = var, x = var, y = y_label)
   })
   

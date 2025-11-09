@@ -53,7 +53,14 @@ visualize_categorical_barplots_ui <- function(id) {
         )
       )
     ),
-    add_color_customization_ui(ns, multi_group = TRUE),
+    fluidRow(
+      column(6, add_color_customization_ui(ns, multi_group = TRUE)),
+      column(6, base_size_ui(
+        ns,
+        default = 13,
+        help_text = "Adjust the base font size used for barplot text elements."
+      ))
+    ),
     hr(),
     with_help_tooltip(
       downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;"),
@@ -124,6 +131,11 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
       multi_group = TRUE
     )
 
+    base_size <- base_size_server(
+      input = input,
+      default = 13
+    )
+
     cached_plot_info <- reactiveVal(NULL)
     cache_ready <- reactiveVal(FALSE)
 
@@ -139,7 +151,8 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
         filtered_data(),
         input$show_proportions,
         input$show_value_labels,
-        custom_colors()
+        custom_colors(),
+        base_size()
       ),
       {
         invalidate_cache()
@@ -184,7 +197,8 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
         nrow_input = input$resp_rows,
         ncol_input = input$resp_cols,
         fill_colors = custom_colors(),
-        show_value_labels = isTRUE(input$show_value_labels)
+        show_value_labels = isTRUE(input$show_value_labels),
+        base_size = base_size()
       )
       validate(need(!is.null(out), "No categorical variables available for plotting."))
       out
@@ -283,7 +297,8 @@ build_descriptive_categorical_plot <- function(df,
                                                nrow_input = NULL,
                                                ncol_input = NULL,
                                                fill_colors = NULL,
-                                               show_value_labels = FALSE) {
+                                               show_value_labels = FALSE,
+                                               base_size = 13) {
   if (is.null(df) || !is.data.frame(df) || nrow(df) == 0) return(NULL)
   
   factor_vars <- names(df)[vapply(df, function(x) {
@@ -357,7 +372,7 @@ build_descriptive_categorical_plot <- function(df,
       p <- ggplot(count_df, aes(x = .data[[var]], y = .data$value, fill = .data[[group_col]])) +
         geom_col(position = group_dodge, width = 0.65) +
         scale_fill_manual(values = palette) +
-        theme_minimal(base_size = 13) +
+        theme_minimal(base_size = base_size) +
         labs(title = var, x = NULL, y = y_label, fill = group_col) +
         theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
@@ -428,7 +443,7 @@ build_descriptive_categorical_plot <- function(df,
 
       p <- ggplot(count_df, aes(x = .data[[var]], y = .data$value)) +
         geom_col(fill = single_fill, width = 0.65) +
-        theme_minimal(base_size = 13) +
+        theme_minimal(base_size = base_size) +
         labs(title = var, x = NULL, y = y_label) +
         theme(axis.text.x = element_text(angle = 45, hjust = 1))
 

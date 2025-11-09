@@ -57,7 +57,14 @@ visualize_numeric_boxplots_ui <- function(id) {
         )
       )
     ),
-    add_color_customization_ui(ns, multi_group = TRUE),
+    fluidRow(
+      column(6, add_color_customization_ui(ns, multi_group = TRUE)),
+      column(6, base_size_ui(
+        ns,
+        default = 13,
+        help_text = "Adjust the base font size used for boxplot text elements."
+      ))
+    ),
     hr(),
     with_help_tooltip(
       downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;"),
@@ -130,6 +137,11 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
       multi_group = TRUE
     )
 
+    base_size <- base_size_server(
+      input = input,
+      default = 13
+    )
+
     output$outlier_label_ui <- renderUI({
       dat <- filtered_data()
       cat_cols <- character(0)
@@ -174,7 +186,8 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
         input$show_points,
         input$show_outliers,
         input$outlier_label,
-        custom_colors()
+        custom_colors(),
+        base_size()
       ),
       {
         invalidate_cache()
@@ -218,7 +231,8 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
         outlier_label_var = validate_outlier_label(input$outlier_label),
         nrow_input = input$resp_rows,
         ncol_input = input$resp_cols,
-        custom_colors = custom_colors()
+        custom_colors = custom_colors(),
+        base_size = base_size()
       )
 
       validate(need(!is.null(out), "No numeric variables available for plotting."))
@@ -318,7 +332,8 @@ build_descriptive_numeric_boxplot <- function(df,
                                               outlier_label_var = NULL,
                                               nrow_input = NULL,
                                               ncol_input = NULL,
-                                              custom_colors = NULL) {
+                                              custom_colors = NULL,
+                                              base_size = 13) {
   if (is.null(df) || !is.data.frame(df) || nrow(df) == 0) return(NULL)
 
   num_vars <- names(df)[vapply(df, is.numeric, logical(1))]
@@ -345,7 +360,7 @@ build_descriptive_numeric_boxplot <- function(df,
       p <- ggplot(df, aes(x = .data[[group_var]], y = .data[[var]], fill = .data[[group_var]])) +
         geom_boxplot(outlier.shape = NA, width = 0.6) +
         scale_fill_manual(values = palette) +
-        theme_minimal(base_size = 13) +
+        theme_minimal(base_size = base_size) +
         labs(title = var, x = NULL, y = var) +
         theme(axis.text.x = element_text(angle = 45, hjust = 1))
       added_color_scale <- FALSE
@@ -395,7 +410,7 @@ build_descriptive_numeric_boxplot <- function(df,
       # ✅ always provide an x aesthetic
       p <- ggplot(df, aes(x = factor(1), y = .data[[var]])) +
         geom_boxplot(fill = resolve_single_color(custom_colors), width = 0.3) +
-        theme_minimal(base_size = 13) +
+        theme_minimal(base_size = base_size) +
         labs(title = var, x = NULL, y = var) +
         theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
       if (isTRUE(show_points)) {

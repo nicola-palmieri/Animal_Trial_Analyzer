@@ -25,7 +25,14 @@ pairwise_correlation_visualize_ggpairs_ui <- function(id) {
         "Choose how many columns of panels to use when multiple strata are plotted."
       ))
     ),
-    add_color_customization_ui(ns, multi_group = TRUE),
+    fluidRow(
+      column(6, add_color_customization_ui(ns, multi_group = TRUE)),
+      column(6, base_size_ui(
+        ns,
+        default = 11,
+        help_text = "Adjust the base font size used for the correlation plot."
+      ))
+    ),
     hr(),
     with_help_tooltip(
       downloadButton(ns("download_plot"), "Download Plot", style = "width: 100%;"),
@@ -85,7 +92,12 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
       multi_group = TRUE
     )
 
-    build_ggpairs_plot <- function(data, color_value, title = NULL) {
+    base_size <- base_size_server(
+      input = input,
+      default = 11
+    )
+
+    build_ggpairs_plot <- function(data, color_value, title = NULL, base_size_value = 11) {
       validate(need(is.data.frame(data) && nrow(data) > 0, "No data available for plotting."))
 
       numeric_cols <- data[, vapply(data, is.numeric, logical(1)), drop = FALSE]
@@ -106,7 +118,7 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
           continuous = GGally::wrap("densityDiag", fill = color_value, alpha = 0.4)
         )
       ) +
-        ggplot2::theme_minimal(base_size = 11) +
+        ggplot2::theme_minimal(base_size = base_size_value) +
         ggplot2::theme(
           strip.text = ggplot2::element_text(face = "bold", size = 9),
           panel.grid.minor = ggplot2::element_blank(),
@@ -170,7 +182,7 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
       if (is.null(group_var)) {
         plot_data <- data[, selected_vars, drop = FALSE]
         color_choice <- resolve_single_color(custom_colors())
-        plot_obj <- build_ggpairs_plot(plot_data, color_choice)
+        plot_obj <- build_ggpairs_plot(plot_data, color_choice, base_size_value = base_size())
         defaults <- compute_default_grid(1L)
         layout <- list(nrow = defaults$rows, ncol = defaults$cols)
         list(
@@ -204,7 +216,12 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
             next
           }
           plots[[level]] <- convert_ggmatrix_to_plot(
-            build_ggpairs_plot(subset_data, colors[[level]], title = level)
+            build_ggpairs_plot(
+              subset_data,
+              colors[[level]],
+              title = level,
+              base_size_value = base_size()
+            )
           )
         }
 
