@@ -7,7 +7,7 @@ ggpairs_ui <- function(id) {
   list(
     config = tagList(
       with_help_tooltip(
-        selectInput(ns("vars"), "Numeric variables:", choices = NULL, multiple = TRUE),
+        selectInput(ns("vars"), "Numeric variables", choices = NULL, multiple = TRUE),
         "Help: Choose which numeric columns to include in the correlation matrix."
       ),
       tags$details(

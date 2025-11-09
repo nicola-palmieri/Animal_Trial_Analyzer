@@ -37,9 +37,9 @@ multi_response_server <- function(id, data) {
         selectInput(
           ns("response"),
           label = if (isTRUE(input$multi_resp))
-            "Response variables (numeric):"
+            "Response variables (numeric)"
           else
-            "Response variable (numeric):",
+            "Response variable (numeric)",
           choices = num_vars,
           selected = num_vars[1],
           multiple = isTRUE(input$multi_resp)

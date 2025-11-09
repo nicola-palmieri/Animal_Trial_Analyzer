@@ -13,7 +13,7 @@ visualize_descriptive_ui <- function(id) {
       with_help_tooltip(
         selectInput(
           ns("plot_type"),
-          label = "Select visualization type:",
+          label = "Select visualization type",
           choices = c(
             "Categorical barplots" = "categorical",
             "Numeric boxplots"          = "boxplots",

@@ -54,7 +54,7 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
         req(data())
         types <- reg_detect_types(data())
         with_help_tooltip(
-          selectInput(ns("dep"), "Response variable (numeric):", choices = types$num),
+          selectInput(ns("dep"), "Response variable (numeric)", choices = types$num),
           "Help: Choose the outcome that the model should predict."
         )
       })
@@ -71,7 +71,7 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
       with_help_tooltip(
         selectInput(
           ns("fixed"),
-          "Categorical predictors:",
+          "Categorical predictors",
           choices = types$fac,
           multiple = TRUE
         ),
@@ -99,7 +99,7 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
           with_help_tooltip(
             selectInput(
               ns(paste0("order_", var)),
-              paste("Order of levels (first = reference):", var),
+              paste("Order of levels (first = reference)", var),
               choices = lvls,
               selected = lvls,
               multiple = TRUE
@@ -116,7 +116,7 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
       with_help_tooltip(
         selectInput(
           ns("covar"),
-          "Numeric predictors:",
+          "Numeric predictors",
           choices = types$num,
           multiple = TRUE
         ),
@@ -131,7 +131,7 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
         with_help_tooltip(
           selectInput(
             ns("random"),
-            "Random effect (categorical):",
+            "Random effect (categorical)",
             choices = types$fac,
             selected = NULL
           ),

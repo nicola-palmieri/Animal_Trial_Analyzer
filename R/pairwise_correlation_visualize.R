@@ -13,7 +13,7 @@ visualize_ggpairs_ui <- function(id) {
       with_help_tooltip(
         selectInput(
           ns("plot_type"),
-          label = "Select visualization type:",
+          label = "Select visualization type",
           choices = c("Pairwise scatterplot matrix" = "GGPairs"),
           selected = "GGPairs"
         ),

@@ -13,7 +13,7 @@ upload_ui <- function(id) {
       with_help_tooltip(
         radioButtons(
           ns("data_source"),
-          label = "Data source:",
+          label = "Data source",
           choices = c(
             "Example dataset" = "example",
             "Upload (long format)" = "long",
@@ -126,7 +126,7 @@ upload_server <- function(id) {
       output$validation_msg <- renderText(paste("✅ File loaded:", input$file$name))
       output$sheet_selector <- renderUI(
         with_help_tooltip(
-          selectInput(ns("sheet"), "Select sheet:", choices = sheets),
+          selectInput(ns("sheet"), "Select sheet", choices = sheets),
           "Help: Pick the worksheet inside your Excel file that contains the data."
         )
       )
