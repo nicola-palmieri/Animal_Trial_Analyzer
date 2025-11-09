@@ -34,20 +34,12 @@ two_way_anova_ui <- function(id) {
 two_way_anova_server <- function(id, filtered_data) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
-    
-    # -----------------------------------------------------------
-    # Reactive data
-    # -----------------------------------------------------------
-    df <- filtered_data
-    
-    # -----------------------------------------------------------
-    # Dynamic inputs
-    # -----------------------------------------------------------
-    responses <- multi_response_server("response", df)
+
+    responses <- multi_response_server("response", filtered_data)
 
     output$inputs <- renderUI({
-      req(df())
-      data <- df()
+      req(filtered_data())
+      data <- filtered_data()
       cat_cols <- names(data)[sapply(data, function(x) is.character(x) || is.factor(x))]
 
       tagList(
@@ -73,14 +65,14 @@ two_way_anova_server <- function(id, filtered_data) {
       )
     })
     
-    strat_info <- stratification_server("strat", df)
+    strat_info <- stratification_server("strat", filtered_data)
     
     # -----------------------------------------------------------
     # Level order selections
     # -----------------------------------------------------------
     output$level_order_1 <- renderUI({
-      req(df(), input$factor1)
-      levels1 <- unique(as.character(df()[[input$factor1]]))
+      req(filtered_data(), input$factor1)
+      levels1 <- unique(as.character(filtered_data()[[input$factor1]]))
       with_help_tooltip(
         selectInput(
           ns("order1"),
@@ -94,8 +86,8 @@ two_way_anova_server <- function(id, filtered_data) {
     })
     
     output$level_order_2 <- renderUI({
-      req(df(), input$factor2)
-      levels2 <- unique(as.character(df()[[input$factor2]]))
+      req(filtered_data(), input$factor2)
+      levels2 <- unique(as.character(filtered_data()[[input$factor2]]))
       with_help_tooltip(
         selectInput(
           ns("order2"),
@@ -112,15 +104,15 @@ two_way_anova_server <- function(id, filtered_data) {
     # Model fitting (via shared helper)
     # -----------------------------------------------------------
     models <- eventReactive(input$run, {
-      req(df(), input$factor1, input$order1, input$factor2, input$order2)
+      req(filtered_data(), input$factor1, input$order1, input$factor2, input$order2)
       resp_vals <- responses()
       validate(
         need(length(resp_vals) > 0, "Please select at least one response variable."),
-        need(all(input$order1 %in% unique(df()[[input$factor1]])), "Invalid level order for first factor."),
-        need(all(input$order2 %in% unique(df()[[input$factor2]])), "Invalid level order for second factor.")
+        need(all(input$order1 %in% unique(filtered_data()[[input$factor1]])), "Invalid level order for first factor."),
+        need(all(input$order2 %in% unique(filtered_data()[[input$factor2]])), "Invalid level order for second factor.")
       )
       prepare_stratified_anova(
-        df = df(),
+        df = filtered_data(),
         responses = resp_vals,
         model = "twoway_anova",
         factor1_var = input$factor1,
@@ -130,8 +122,6 @@ two_way_anova_server <- function(id, filtered_data) {
         stratification = strat_info()
       )
     })
-    
-    
 
     # -----------------------------------------------------------
     # Download all results as one combined DOCX
@@ -166,76 +156,37 @@ two_way_anova_server <- function(id, filtered_data) {
     # -----------------------------------------------------------
     bind_anova_outputs(ns, output, models)
 
-    df_final <- reactive({
-      mod <- models()
-      req(mod)
-      mod$data_used
-    })
-
-    model_fit <- reactive({
-      mod <- models()
-      req(mod)
-      mod$models
-    })
-
-    compiled_results <- reactive({
-      mod <- models()
-      req(mod)
-      compile_anova_results(mod)
-    })
-
-    summary_table <- reactive({
-      res <- compiled_results()
-      req(res)
-      res$summary
-    })
-
-    posthoc_results <- reactive({
-      res <- compiled_results()
-      req(res)
-      res$posthoc
-    })
-
-    effect_table <- reactive({
-      res <- compiled_results()
-      req(res)
-      res$effects
-    })
-
-    error_table <- reactive({
-      res <- compiled_results()
-      req(res)
-      res$errors
-    })
-
-    reactive({
+    anova_results <- reactive({
       mod <- models()
       req(mod)
 
-      data_used <- df_final()
+      res <- compile_anova_results(mod)
+      data_used <- mod$data_used
 
       list(
         analysis_type = "ANOVA",
+        type = "twoway_anova",
         data_used = data_used,
-        model = model_fit(),
-        summary = summary_table(),
-        posthoc = posthoc_results(),
-        effects = effect_table(),
+        model = mod$models,
+        summary = res$summary,
+        posthoc = res$posthoc,
+        effects = res$effects,
         stats = if (!is.null(data_used)) list(n = nrow(data_used), vars = names(data_used)) else NULL,
         metadata = list(
           responses = mod$responses,
           strata = mod$strata,
           factors = mod$factors,
           orders = mod$orders,
-          errors = error_table()
+          errors = res$errors
         ),
-        type = "twoway_anova",
-        models = model_fit(),
+        models = mod$models,
         responses = mod$responses,
         strata = mod$strata,
         factors = mod$factors,
         orders = mod$orders
       )
     })
+
+    return(anova_results)
   })
 }
