@@ -24,9 +24,7 @@ descriptive_ui <- function(id) {
       ),
       hr()
     ),
-    results = tagList(
-      verbatimTextOutput(ns("summary_text"))
-    )
+    results = tagList(verbatimTextOutput(ns("summary_text")))
   )
 }
 
@@ -63,19 +61,15 @@ descriptive_server <- function(id, filtered_data) {
     # ------------------------------------------------------------
     summary_data <- eventReactive(input$run, {
       req(df())
-      
+
       local_data <- df()
       selected_vars <- unique(c(input$cat_vars, input$num_vars))
-      
-      validate(
-        need(length(selected_vars) > 0, "Please select at least one variable.")
-      )
-      
+      validate(need(length(selected_vars) > 0, "Please select at least one variable."))
+
       strat_details <- strat_info()
       group_var <- strat_details$var
       data_columns <- selected_vars
-      
-      # --- Handle stratification if present ---
+
       if (!is.null(group_var)) {
         sel <- strat_details$levels
         if (!is.null(sel) && length(sel) > 0) {
@@ -87,26 +81,20 @@ descriptive_server <- function(id, filtered_data) {
         local_data <- droplevels(local_data)
         data_columns <- unique(c(data_columns, group_var))
       }
-      
-      # --- Keep only selected valid columns ---
+
       data_columns <- data_columns[!is.na(data_columns) & nzchar(data_columns)]
       data_columns <- intersect(data_columns, names(local_data))
       local_data <- local_data[, data_columns, drop = FALSE]
-      
-      # --- Identify strata levels (if any) ---
-      strata_levels <- if (!is.null(group_var) && group_var %in% names(local_data)) {
-        levels(local_data[[group_var]])
-      } else {
-        NULL
-      }
-      
-      # --- Compute summary ---
+
+      selected_vars <- selected_vars[!is.na(selected_vars) & nzchar(selected_vars)]
+      selected_vars <- intersect(selected_vars, names(local_data))
+
       list(
         summary = compute_descriptive_summary(local_data, group_var),
         selected_vars = selected_vars,
         group_var = group_var,
         processed_data = local_data,
-        strata_levels = strata_levels
+        strata_levels = if (!is.null(group_var) && group_var %in% names(local_data)) levels(local_data[[group_var]]) else NULL
       )
     })
     
@@ -138,41 +126,17 @@ descriptive_server <- function(id, filtered_data) {
     # ------------------------------------------------------------
     # Return full model info
     # ------------------------------------------------------------
-    df_final <- reactive({
+    extract_detail <- function(field) reactive({
       details <- summary_data()
       req(details)
-      details$processed_data
+      details[[field]]
     })
 
-    model_fit <- reactive(NULL)
-
-    summary_table <- reactive({
-      details <- summary_data()
-      req(details)
-      details$summary
-    })
-
-    posthoc_results <- reactive(NULL)
-
-    effect_table <- reactive(NULL)
-
-    selected_vars_reactive <- reactive({
-      details <- summary_data()
-      req(details)
-      details$selected_vars
-    })
-
-    group_var_reactive <- reactive({
-      details <- summary_data()
-      req(details)
-      details$group_var
-    })
-
-    strata_levels_reactive <- reactive({
-      details <- summary_data()
-      req(details)
-      details$strata_levels
-    })
+    df_final <- extract_detail("processed_data")
+    summary_table <- extract_detail("summary")
+    selected_vars_reactive <- extract_detail("selected_vars")
+    group_var_reactive <- extract_detail("group_var")
+    strata_levels_reactive <- extract_detail("strata_levels")
 
     reactive({
       details <- summary_data()
@@ -183,10 +147,10 @@ descriptive_server <- function(id, filtered_data) {
       list(
         analysis_type = "DESCRIPTIVE",
         data_used = data_used,
-        model = model_fit(),
+        model = NULL,
         summary = summary_table(),
-        posthoc = posthoc_results(),
-        effects = effect_table(),
+        posthoc = NULL,
+        effects = NULL,
         stats = if (!is.null(data_used)) list(n = nrow(data_used), vars = names(data_used)) else NULL,
         metadata = list(
           selected_vars = details$selected_vars,
@@ -207,53 +171,53 @@ descriptive_server <- function(id, filtered_data) {
 
 compute_descriptive_summary <- function(data, group_var = NULL) {
   numeric_vars <- names(data)[sapply(data, is.numeric)]
-  
-  group_data <- if (!is.null(group_var)) group_by(data, .data[[group_var]], .drop = TRUE) else data
-  
-  skim_out <- if (!is.null(group_var)) {
-    group_data %>% skim()
-  } else {
-    skim(data)
+  group_data <- if (!is.null(group_var)) dplyr::group_by(data, .data[[group_var]], .drop = TRUE) else data
+
+  summarise_numeric <- function(.data, vars, suffix, fn) {
+    if (length(vars) == 0) {
+      return(NULL)
+    }
+    .data %>%
+      dplyr::summarise(
+        dplyr::across(
+          dplyr::all_of(vars),
+          fn,
+          .names = paste0(suffix, "_{.col}")
+        ),
+        .groups = "drop"
+      )
   }
-  
-  cv_out <- group_data %>%
-    summarise(across(
-      where(is.numeric),
-      ~ 100 * sd(.x, na.rm = TRUE) / mean(.x, na.rm = TRUE),
-      .names = "cv_{.col}"
-    ), .groups = "drop")
-  
-  outlier_out <- group_data %>%
-    summarise(across(
-      all_of(numeric_vars),
+
+  list(
+    skim = if (!is.null(group_var)) skim(group_data) else skim(data),
+    cv = summarise_numeric(
+      group_data,
+      numeric_vars,
+      "cv",
+      ~ 100 * stats::sd(.x, na.rm = TRUE) / mean(.x, na.rm = TRUE)
+    ),
+    outliers = summarise_numeric(
+      group_data,
+      numeric_vars,
+      "outliers",
       ~ {
-        q <- quantile(.x, probs = c(0.25, 0.75), na.rm = TRUE)
+        q <- stats::quantile(.x, probs = c(0.25, 0.75), na.rm = TRUE)
         iqr <- q[2] - q[1]
         sum(.x < q[1] - 1.5 * iqr | .x > q[2] + 1.5 * iqr, na.rm = TRUE)
-      },
-      .names = "outliers_{.col}"
-    ), .groups = "drop")
-  
-  missing_out <- group_data %>%
-    summarise(across(
-      all_of(numeric_vars),
-      ~ 100 * mean(is.na(.x)),
-      .names = "missing_{.col}"
-    ), .groups = "drop")
-  
-  shapiro_out <- group_data %>%
-    summarise(across(
-      all_of(numeric_vars),
-      ~ tryCatch(shapiro.test(.x)$p.value, error = function(e) NA_real_),
-      .names = "shapiro_{.col}"
-    ), .groups = "drop")
-  
-  list(
-    skim = skim_out,
-    cv = cv_out,
-    outliers = outlier_out,
-    missing = missing_out,
-    shapiro = shapiro_out
+      }
+    ),
+    missing = summarise_numeric(
+      group_data,
+      numeric_vars,
+      "missing",
+      ~ 100 * mean(is.na(.x))
+    ),
+    shapiro = summarise_numeric(
+      group_data,
+      numeric_vars,
+      "shapiro",
+      ~ tryCatch(stats::shapiro.test(.x)$p.value, error = function(e) NA_real_)
+    )
   )
 }
 
@@ -268,77 +232,60 @@ print_summary_sections <- function(results) {
   group_col <- if (!is.null(first_col) && !grepl(metric_prefix, first_col)) first_col else NULL
   
   # 3) Robust long conversion that preserves the real group column name (if any)
-  to_long <- function(df, value_name, group_col) {
+  to_long <- function(df, value_name) {
     if (is.null(df) || ncol(df) == 0) {
-      if (is.null(group_col)) {
-        return(tibble::tibble(variable = character(), !!value_name := numeric()))
-      } else {
-        return(tibble::tibble(!!group_col := character(), variable = character(), !!value_name := numeric()))
+      empty_cols <- list(variable = character())
+      if (!is.null(group_col)) {
+        empty_cols[[group_col]] <- character()
       }
+      empty_cols[[value_name]] <- numeric()
+      return(tibble::as_tibble(empty_cols))
     }
-    if (is.null(group_col)) {
-      out <- tidyr::pivot_longer(df, tidyselect::everything(),
-                                 names_to = "variable", values_to = value_name)
-    } else {
-      out <- tidyr::pivot_longer(df, -dplyr::all_of(group_col),
-                                 names_to = "variable", values_to = value_name)
-    }
-    out$variable <- sub("^(cv_|outliers_|missing_|shapiro_)", "", out$variable)
-    out
+    id_cols <- intersect(names(df), group_col)
+    df |>
+      tidyr::pivot_longer(
+        cols = -tidyselect::any_of(id_cols),
+        names_to = "variable",
+        values_to = value_name
+      ) |>
+      dplyr::mutate(variable = sub(metric_prefix, "", .data$variable))
   }
-  
+
   # 4) Build pieces (no "missing" here)
-  cv_long   <- to_long(results$cv,       "cv",        group_col)
-  out_long  <- to_long(results$outliers, "outliers",  group_col)
-  shap_long <- to_long(results$shapiro,  "shapiro_p", group_col)
-  
+  cv_long   <- to_long(results$cv, "cv")
+  out_long  <- to_long(results$outliers, "outliers")
+  shap_long <- to_long(results$shapiro, "shapiro_p")
+
   # 5) Join by the right keys
-  if (is.null(group_col)) {
-    merged <- dplyr::full_join(cv_long,  out_long,  by = "variable") |>
-      dplyr::full_join(shap_long, by = "variable")
-  } else {
-    merged <- dplyr::full_join(cv_long,  out_long,  by = c(group_col, "variable")) |>
-      dplyr::full_join(shap_long, by = c(group_col, "variable"))
-  }
-  
-  # 6) Round / order by numeric skim order
-  merged <- merged |>
+  join_keys <- c(if (!is.null(group_col)) group_col, "variable")
+  merged <- dplyr::full_join(cv_long, out_long, by = join_keys) |>
+    dplyr::full_join(shap_long, by = join_keys) |>
     dplyr::mutate(
       cv = round(cv, 2),
       shapiro_p = signif(shapiro_p, 3)
     )
-  
+
   numeric_order <- NULL
-  if (is.data.frame(results$skim) &&
-      all(c("skim_type", "skim_variable") %in% names(results$skim))) {
+  if (is.data.frame(results$skim) && all(c("skim_type", "skim_variable") %in% names(results$skim))) {
     numeric_order <- results$skim |>
       dplyr::filter(.data$skim_type == "numeric") |>
       dplyr::pull(.data$skim_variable) |>
       unique()
   }
+
+  arrange_cols <- c(if (!is.null(group_col)) group_col, "variable")
   if (!is.null(numeric_order) && length(numeric_order) > 0) {
     merged$variable <- factor(merged$variable, levels = numeric_order)
-    if (is.null(group_col)) {
-      merged <- dplyr::arrange(merged, .data$variable)
-    } else {
-      merged <- dplyr::arrange(merged, .data[[group_col]], .data$variable)
-    }
+    merged <- dplyr::arrange(merged, !!!rlang::syms(arrange_cols))
     merged$variable <- as.character(merged$variable)
   } else {
-    if (is.null(group_col)) {
-      merged <- dplyr::arrange(merged, .data$variable)
-    } else {
-      merged <- dplyr::arrange(merged, .data[[group_col]], .data$variable)
-    }
+    merged <- dplyr::arrange(merged, !!!rlang::syms(arrange_cols))
   }
-  
+
   # 7) Print with/without group column
   cat("── Numeric variables summary ──\n")
-  if (is.null(group_col)) {
-    final_df <- merged[, c("variable","cv","outliers","shapiro_p"), drop = FALSE]
-  } else {
-    final_df <- merged[, c("variable", group_col, "cv","outliers","shapiro_p"), drop = FALSE]
-  }
+  final_cols <- c("variable", arrange_cols[-length(arrange_cols)], "cv", "outliers", "shapiro_p")
+  final_df <- merged[, final_cols, drop = FALSE]
   print(as.data.frame(final_df), row.names = FALSE)
   
   cat("\nInterpretation:\n")
