@@ -21,7 +21,7 @@ build_anova_layout_controls <- function(ns, input, info) {
               max = 10,
               step = 1
             ),
-            "Help: Set how many rows of plots to use when displaying different strata."
+            "Set how many rows of plots to use when displaying different strata."
           )
         ),
         column(
@@ -35,7 +35,7 @@ build_anova_layout_controls <- function(ns, input, info) {
               max = 10,
               step = 1
             ),
-            "Help: Set how many columns of plots to use when displaying different strata."
+            "Set how many columns of plots to use when displaying different strata."
           )
         )
       )
@@ -59,7 +59,7 @@ build_anova_layout_controls <- function(ns, input, info) {
               max = 10,
               step = 1
             ),
-            "Help: Set the number of plot rows when multiple responses are shown together."
+            "Set the number of plot rows when multiple responses are shown together."
           )
         ),
         column(
@@ -73,7 +73,7 @@ build_anova_layout_controls <- function(ns, input, info) {
               max = 10,
               step = 1
             ),
-            "Help: Set the number of plot columns when multiple responses are shown together."
+            "Set the number of plot columns when multiple responses are shown together."
           )
         )
       )

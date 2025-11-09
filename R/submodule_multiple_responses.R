@@ -11,7 +11,7 @@ multi_response_ui <- function(id) {
         "Allow multiple response variables",
         value = FALSE
       ),
-      "Help: Tick this to analyse several response variables one after another."
+      "Tick this to analyse several response variables one after another."
     ),
     uiOutput(ns("response_ui"))
   )
@@ -44,7 +44,7 @@ multi_response_server <- function(id, data) {
           selected = num_vars[1],
           multiple = isTRUE(input$multi_resp)
         ),
-        "Help: Choose the numeric outcomes the model should process."
+        "Choose the numeric outcomes the model should process."
       )
     })
     

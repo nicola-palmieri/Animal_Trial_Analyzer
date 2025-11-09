@@ -7,20 +7,20 @@ visualize_categorical_barplots_ui <- function(id) {
   tagList(
     with_help_tooltip(
       checkboxInput(ns("show_proportions"), "Show proportions instead of counts", FALSE),
-      "Help: Switch between raw counts and percentages for each category."
+      "Switch between raw counts and percentages for each category."
     ),
     with_help_tooltip(
       checkboxInput(ns("show_value_labels"), "Show value labels on bars", FALSE),
-      "Help: Display the numeric value on top of each bar."
+      "Display the numeric value on top of each bar."
     ),
     fluidRow(
       column(6, with_help_tooltip(
         numericInput(ns("plot_width"),  "Subplot width (px)",  400, 200, 2000, 50),
-        "Help: Set the width of each categorical plot in pixels."
+        "Set the width of each categorical plot in pixels."
       )),
       column(6, with_help_tooltip(
         numericInput(ns("plot_height"), "Subplot height (px)", 300, 200, 2000, 50),
-        "Help: Set the height of each categorical plot in pixels."
+        "Set the height of each categorical plot in pixels."
       ))
     ),
     fluidRow(
@@ -35,7 +35,7 @@ visualize_categorical_barplots_ui <- function(id) {
             max = 10,
             step = 1
           ),
-          "Help: Choose how many rows of plots to display when several charts are shown."
+          "Choose how many rows of plots to display when several charts are shown."
         )
       ),
       column(
@@ -49,7 +49,7 @@ visualize_categorical_barplots_ui <- function(id) {
             max = 10,
             step = 1
           ),
-          "Help: Choose how many columns of plots to display when several charts are shown."
+          "Choose how many columns of plots to display when several charts are shown."
         )
       )
     ),
@@ -57,7 +57,7 @@ visualize_categorical_barplots_ui <- function(id) {
     hr(),
     with_help_tooltip(
       downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;"),
-      "Help: Save the categorical barplots as an image file."
+      "Save the categorical barplots as an image file."
     )
   )
 }

@@ -7,33 +7,33 @@ visualize_numeric_histograms_ui <- function(id) {
   tagList(
     with_help_tooltip(
       checkboxInput(ns("use_density"), "Show density instead of count", FALSE),
-      "Help: Switch between showing counts or densities for each histogram."
+      "Switch between showing counts or densities for each histogram."
     ),
     fluidRow(
       column(6, with_help_tooltip(
         numericInput(ns("plot_width"),  "Subplot width (px)",  400, 200, 2000, 50),
-        "Help: Set the width of each histogram panel in pixels."
+        "Set the width of each histogram panel in pixels."
       )),
       column(6, with_help_tooltip(
         numericInput(ns("plot_height"), "Subplot height (px)", 300, 200, 2000, 50),
-        "Help: Set the height of each histogram panel in pixels."
+        "Set the height of each histogram panel in pixels."
       ))
     ),
     fluidRow(
       column(6, with_help_tooltip(
         numericInput(ns("resp_rows"), "Grid rows",    value = NA, min = 1, max = 10, step = 1),
-        "Help: Choose how many rows of histograms to display when several charts are shown."
+        "Choose how many rows of histograms to display when several charts are shown."
       )),
       column(6, with_help_tooltip(
         numericInput(ns("resp_cols"), "Grid columns", value = NA, min = 1, max = 10, step = 1),
-        "Help: Choose how many columns of histograms to display when several charts are shown."
+        "Choose how many columns of histograms to display when several charts are shown."
       ))
     ),
     add_color_customization_ui(ns, multi_group = TRUE),
     hr(),
     with_help_tooltip(
       downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;"),
-      "Help: Save the histograms as an image file."
+      "Save the histograms as an image file."
     )
   )
 }

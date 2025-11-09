@@ -41,7 +41,7 @@ stratification_server <- function(id, data) {
           choices = c("None", cat_cols),
           selected = "None"
         ),
-        "Help: Pick a categorical variable if you want separate summaries for each group."
+        "Pick a categorical variable if you want separate summaries for each group."
       )
     })
     
@@ -69,7 +69,7 @@ stratification_server <- function(id, data) {
           selected = available_levels,
           multiple = TRUE
         ),
-        "Help: Decide which group levels to include and in what order they should appear."
+        "Decide which group levels to include and in what order they should appear."
       )
     })
     

@@ -24,7 +24,7 @@ visualize_descriptive_ui <- function(id) {
           ),
           selected = "categorical"
         ),
-        "Help: Choose the descriptive chart that best answers your question."
+        "Choose the descriptive chart that best answers your question."
       ),
       uiOutput(ns("sub_controls"))  # controls from active submodule
     ),

@@ -17,11 +17,11 @@ two_way_anova_ui <- function(id) {
       fluidRow(
         column(6, with_help_tooltip(
           actionButton(ns("run"), "Show results", width = "100%"),
-          "Help: Fit the two-way ANOVA with the selected factors and responses."
+          "Fit the two-way ANOVA with the selected factors and responses."
         )),
         column(6, with_help_tooltip(
           downloadButton(ns("download_all"), "Download all results", style = "width: 100%;"),
-          "Help: Save all ANOVA tables, post-hoc results, and diagnostics to disk."
+          "Save all ANOVA tables, post-hoc results, and diagnostics to disk."
         ))
       )
     ),
@@ -59,7 +59,7 @@ two_way_anova_server <- function(id, filtered_data) {
             choices = cat_cols,
             selected = if (length(cat_cols) > 0) cat_cols[1] else NULL
           ),
-          "Help: Select the factor for the x-axis groups in the interaction plot."
+          "Select the factor for the x-axis groups in the interaction plot."
         ),
         with_help_tooltip(
           selectInput(
@@ -68,7 +68,7 @@ two_way_anova_server <- function(id, filtered_data) {
             choices = cat_cols,
             selected = if (length(cat_cols) > 1) cat_cols[2] else NULL
           ),
-          "Help: Select the factor for the lines in the interaction plot."
+          "Select the factor for the lines in the interaction plot."
         )
       )
     })
@@ -89,7 +89,7 @@ two_way_anova_server <- function(id, filtered_data) {
           selected = levels1,
           multiple = TRUE
         ),
-        sprintf("Help: Arrange the levels of %s for the x-axis; the first level is the reference.", input$factor1)
+        sprintf("Arrange the levels of %s for the x-axis; the first level is the reference.", input$factor1)
       )
     })
     
@@ -104,7 +104,7 @@ two_way_anova_server <- function(id, filtered_data) {
           selected = levels2,
           multiple = TRUE
         ),
-        sprintf("Help: Arrange the levels of %s for the line colours; the first level is the reference.", input$factor2)
+        sprintf("Arrange the levels of %s for the line colours; the first level is the reference.", input$factor2)
       )
     })
     

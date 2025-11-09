@@ -26,7 +26,7 @@ render_color_inputs <- function(ns, data, color_var) {
             ncol = 4,
             selected = selected
           ),
-          sprintf("Help: Pick the colour that will represent %s in the plot.", lvls[i])
+          sprintf("Pick the colour that will represent %s in the plot.", lvls[i])
         )
       )
     })

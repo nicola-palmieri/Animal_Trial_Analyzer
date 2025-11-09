@@ -16,11 +16,11 @@ one_way_anova_ui <- function(id) {
       fluidRow(
         column(6, with_help_tooltip(
           actionButton(ns("run"), "Show results", width = "100%"),
-          "Help: Run the ANOVA using the selected response and group variable."
+          "Run the ANOVA using the selected response and group variable."
         )),
         column(6, with_help_tooltip(
           downloadButton(ns("download_all"), "Download all results", style = "width: 100%;"),
-          "Help: Export the ANOVA summaries, post-hoc tests, and diagnostics."
+          "Export the ANOVA summaries, post-hoc tests, and diagnostics."
         ))
       )
     ),
@@ -58,7 +58,7 @@ one_way_anova_server <- function(id, filtered_data) {
             choices = cat_cols,
             selected = if (length(cat_cols) > 0) cat_cols[1] else NULL
           ),
-          "Help: Choose the grouping variable that defines the comparison categories."
+          "Choose the grouping variable that defines the comparison categories."
         )
       )
     })
@@ -79,7 +79,7 @@ one_way_anova_server <- function(id, filtered_data) {
           selected = levels,
           multiple = TRUE
         ),
-        "Help: Arrange the group levels; the first level is used as the reference in outputs."
+        "Arrange the group levels; the first level is used as the reference in outputs."
       )
     })
     

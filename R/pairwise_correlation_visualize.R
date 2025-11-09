@@ -17,7 +17,7 @@ visualize_ggpairs_ui <- function(id) {
           choices = c("Pairwise scatterplot matrix" = "GGPairs"),
           selected = "GGPairs"
         ),
-        "Help: Choose how to visualise the pairwise relationships between variables."
+        "Choose how to visualise the pairwise relationships between variables."
       ),
       hr(),
       uiOutput(ns("sub_controls"))

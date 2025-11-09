@@ -10,18 +10,18 @@ metric_panel_ui <- function(id, default_width = 400, default_height = 300,
     fluidRow(
       column(6, with_help_tooltip(
         numericInput(ns("plot_width"),  "Subplot width (px)",  default_width, 200, 2000, 50),
-        "Help: Set the width of each metric panel in pixels."
+        "Set the width of each metric panel in pixels."
       )),
       column(6, with_help_tooltip(
         numericInput(ns("plot_height"), "Subplot height (px)", default_height, 200, 2000, 50),
-        "Help: Set the height of each metric panel in pixels."
+        "Set the height of each metric panel in pixels."
       ))
     ),
     add_color_customization_ui(ns, multi_group = TRUE),
     hr(),
     with_help_tooltip(
       downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;"),
-      "Help: Save the metric charts as an image file."
+      "Save the metric charts as an image file."
     )
   )
 }

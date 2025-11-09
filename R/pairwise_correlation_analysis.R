@@ -8,7 +8,7 @@ ggpairs_ui <- function(id) {
     config = tagList(
       with_help_tooltip(
         selectInput(ns("vars"), "Numeric variables", choices = NULL, multiple = TRUE),
-        "Help: Choose which numeric columns to include in the correlation matrix."
+        "Choose which numeric columns to include in the correlation matrix."
       ),
       tags$details(
         tags$summary(strong("Advanced options")),
@@ -18,11 +18,11 @@ ggpairs_ui <- function(id) {
       fluidRow(
         column(6, with_help_tooltip(
           actionButton(ns("run"), "Show correlation matrix", width = "100%"),
-          "Help: Calculate the correlation coefficients for the selected variables."
+          "Calculate the correlation coefficients for the selected variables."
         )),
         column(6, with_help_tooltip(
           downloadButton(ns("download_model"), "Download all results", style = "width: 100%;"),
-          "Help: Export the correlation matrices and any messages to a text file."
+          "Export the correlation matrices and any messages to a text file."
         ))
       )
     ),

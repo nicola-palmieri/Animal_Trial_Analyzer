@@ -21,7 +21,7 @@ upload_ui <- function(id) {
           ),
           selected = "example"
         ),
-        "Help: Decide whether to explore the built-in example data or load your own table."
+        "Decide whether to explore the built-in example data or load your own table."
       ),
       uiOutput(ns("layout_example")),
       with_help_tooltip(
@@ -30,7 +30,7 @@ upload_ui <- function(id) {
           "Upload Excel file (.xlsx / .xls / .xlsm)",
           accept = c(".xlsx", ".xls", ".xlsm")
         ),
-        "Help: Provide the Excel workbook that stores your study measurements."
+        "Provide the Excel workbook that stores your study measurements."
       ),
       uiOutput(ns("sheet_selector")),
       uiOutput(ns("type_selectors"))
@@ -127,7 +127,7 @@ upload_server <- function(id) {
       output$sheet_selector <- renderUI(
         with_help_tooltip(
           selectInput(ns("sheet"), "Select sheet", choices = sheets),
-          "Help: Pick the worksheet inside your Excel file that contains the data."
+          "Pick the worksheet inside your Excel file that contains the data."
         )
       )
     }, ignoreInit = TRUE)
@@ -219,7 +219,7 @@ upload_server <- function(id) {
                 selected = "Numeric",
                 width = "100%"
               ),
-              "Help: Tell the app whether this column should be treated as numbers or as groups."
+              "Tell the app whether this column should be treated as numbers or as groups."
             )
           })
         )

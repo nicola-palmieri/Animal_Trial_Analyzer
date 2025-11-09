@@ -8,28 +8,28 @@ pairwise_correlation_visualize_ggpairs_ui <- function(id) {
     fluidRow(
       column(6, with_help_tooltip(
         numericInput(ns("plot_width"),  "Subplot width (px)",  800, 200, 2000, 50),
-        "Help: Set the width in pixels for each panel of the correlation matrix."
+        "Set the width in pixels for each panel of the correlation matrix."
       )),
       column(6, with_help_tooltip(
         numericInput(ns("plot_height"), "Subplot height (px)", 600, 200, 2000, 50),
-        "Help: Set the height in pixels for each panel of the correlation matrix."
+        "Set the height in pixels for each panel of the correlation matrix."
       ))
     ),
     fluidRow(
       column(6, with_help_tooltip(
         numericInput(ns("resp_rows"),    "Grid rows",    NA, 1, 10, 1),
-        "Help: Choose how many rows of panels to use when multiple strata are plotted."
+        "Choose how many rows of panels to use when multiple strata are plotted."
       )),
       column(6, with_help_tooltip(
         numericInput(ns("resp_cols"),    "Grid columns", NA, 1, 10, 1),
-        "Help: Choose how many columns of panels to use when multiple strata are plotted."
+        "Choose how many columns of panels to use when multiple strata are plotted."
       ))
     ),
     add_color_customization_ui(ns, multi_group = TRUE),
     hr(),
     with_help_tooltip(
       downloadButton(ns("download_plot"), "Download Plot", style = "width: 100%;"),
-      "Help: Save the current correlation figure as an image file."
+      "Save the current correlation figure as an image file."
     )
   )
 }

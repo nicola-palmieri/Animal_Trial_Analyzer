@@ -7,11 +7,11 @@ visualize_numeric_boxplots_ui <- function(id) {
   tagList(
     with_help_tooltip(
       checkboxInput(ns("show_points"), "Show individual data points", TRUE),
-      "Help: Add the raw observations on top of each boxplot."
+      "Add the raw observations on top of each boxplot."
     ),
     with_help_tooltip(
       checkboxInput(ns("show_outliers"), "Highlight boxplot outliers", FALSE),
-      "Help: Highlight points that fall outside the typical range."
+      "Highlight points that fall outside the typical range."
     ),
     conditionalPanel(
       condition = sprintf("input['%s']", ns("show_outliers")),
@@ -20,11 +20,11 @@ visualize_numeric_boxplots_ui <- function(id) {
     fluidRow(
       column(6, with_help_tooltip(
         numericInput(ns("plot_width"),  "Subplot width (px)",  200, 200, 2000, 50),
-        "Help: Control how wide each boxplot panel should be."
+        "Control how wide each boxplot panel should be."
       )),
       column(6, with_help_tooltip(
         numericInput(ns("plot_height"), "Subplot height (px)", 800, 200, 2000, 50),
-        "Help: Control how tall each boxplot panel should be."
+        "Control how tall each boxplot panel should be."
       ))
     ),
     fluidRow(
@@ -39,7 +39,7 @@ visualize_numeric_boxplots_ui <- function(id) {
             max = 10,
             step = 1
           ),
-          "Help: Choose how many rows of plots to display when multiple charts are shown."
+          "Choose how many rows of plots to display when multiple charts are shown."
         )
       ),
       column(
@@ -53,7 +53,7 @@ visualize_numeric_boxplots_ui <- function(id) {
             max = 100,
             step = 1
           ),
-          "Help: Choose how many columns of plots to display when multiple charts are shown."
+          "Choose how many columns of plots to display when multiple charts are shown."
         )
       )
     ),
@@ -61,7 +61,7 @@ visualize_numeric_boxplots_ui <- function(id) {
     hr(),
     with_help_tooltip(
       downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;"),
-      "Help: Save the boxplots as an image file."
+      "Save the boxplots as an image file."
     )
   )
 }
@@ -154,7 +154,7 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
           choices = c("None" = "", stats::setNames(cat_cols, cat_cols)),
           selected = current
         ),
-        "Help: Choose a column to annotate the highlighted outliers."
+        "Choose a column to annotate the highlighted outliers."
       )
     })
 

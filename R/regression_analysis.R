@@ -233,7 +233,7 @@ build_response_content <- function(ns, idx, fit_entry) {
       br(),
       with_help_tooltip(
         downloadButton(ns(paste0("download_", idx)), "Download results", style = "width: 100%;"),
-        "Help: Save the model summary and diagnostics for this response."
+        "Save the model summary and diagnostics for this response."
       )
     )
   } else {
@@ -258,7 +258,7 @@ build_response_content <- function(ns, idx, fit_entry) {
           br(),
           with_help_tooltip(
             downloadButton(ns(paste0("download_", idx, "_", j)), "Download results", style = "width: 100%;"),
-            "Help: Save the model summary and diagnostics for this stratum."
+            "Save the model summary and diagnostics for this stratum."
           )
         )
       } else {
@@ -370,11 +370,11 @@ regression_ui <- function(id, engine = c("lm", "lmm"), allow_multi_response = FA
       fluidRow(
         column(6, with_help_tooltip(
           actionButton(ns("run"), "Show results", width = "100%"),
-          "Help: Fit the model using the chosen predictors and options."
+          "Fit the model using the chosen predictors and options."
         )),
         column(6, with_help_tooltip(
           downloadButton(ns("download_model"), "Download all results", style = "width: 100%;"),
-          "Help: Export the model outputs, tables, and summaries to your computer."
+          "Export the model outputs, tables, and summaries to your computer."
         ))
       )
     ),
@@ -400,7 +400,7 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
         types <- reg_detect_types(data())
         with_help_tooltip(
           selectInput(ns("dep"), "Response variable (numeric)", choices = types$num),
-          "Help: Choose the outcome that the model should predict."
+          "Choose the outcome that the model should predict."
         )
       })
 
@@ -420,7 +420,7 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
           choices = types$fac,
           multiple = TRUE
         ),
-        "Help: Pick factor variables that might explain differences in the response."
+        "Pick factor variables that might explain differences in the response."
       )
     })
 
@@ -449,7 +449,7 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
               selected = lvls,
               multiple = TRUE
             ),
-            sprintf("Help: Arrange the levels of %s; the first level becomes the model reference.", var)
+            sprintf("Arrange the levels of %s; the first level becomes the model reference.", var)
           )
         })
       )
@@ -465,7 +465,7 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
           choices = types$num,
           multiple = TRUE
         ),
-        "Help: Pick numeric predictors that could help explain the response."
+        "Pick numeric predictors that could help explain the response."
       )
     })
 
@@ -480,7 +480,7 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
             choices = types$fac,
             selected = NULL
           ),
-          "Help: Choose a grouping factor for random intercepts in the mixed model."
+          "Choose a grouping factor for random intercepts in the mixed model."
         )
       })
     }

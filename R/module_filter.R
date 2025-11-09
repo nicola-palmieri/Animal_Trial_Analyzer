@@ -36,7 +36,7 @@ filter_server <- function(id, uploaded_data) {
           choices = names(df()),
           multiple = TRUE
         ),
-        "Help: Choose which variables you want to filter before running analyses."
+        "Choose which variables you want to filter before running analyses."
       )
     })
     
@@ -58,7 +58,7 @@ filter_server <- function(id, uploaded_data) {
                 ns(paste0("min_", col)), paste(col, "(min)"),
                 value = rng[1], min = rng[1], max = rng[2], step = step_val
               ),
-              sprintf("Help: Enter the smallest value to keep for %s.", col)
+              sprintf("Enter the smallest value to keep for %s.", col)
             )
           ),
           column(
@@ -68,7 +68,7 @@ filter_server <- function(id, uploaded_data) {
                 ns(paste0("max_", col)), paste(col, "(max)"),
                 value = rng[2], min = rng[1], max = rng[2], step = step_val
               ),
-              sprintf("Help: Enter the largest value to keep for %s.", col)
+              sprintf("Enter the largest value to keep for %s.", col)
             )
           )
         )
@@ -80,7 +80,7 @@ filter_server <- function(id, uploaded_data) {
             ns(paste0("filter_", col)), label = col,
             choices = c(TRUE, FALSE), selected = c(TRUE, FALSE), inline = TRUE
           ),
-          sprintf("Help: Tick the logical values you want to keep for %s.", col)
+          sprintf("Tick the logical values you want to keep for %s.", col)
         )
       }
       
@@ -91,7 +91,7 @@ filter_server <- function(id, uploaded_data) {
             ns(paste0("filter_", col)), label = col,
             choices = choices, multiple = TRUE, selected = choices
           ),
-          sprintf("Help: Choose which categories should remain for %s.", col)
+          sprintf("Choose which categories should remain for %s.", col)
         )
       }
       

@@ -20,7 +20,7 @@ visualize_twoway_ui <- function(id) {
           ),
           selected = "lineplot_mean_se"
         ),
-        "Help: Pick the chart style you prefer for viewing group means and uncertainty."
+        "Pick the chart style you prefer for viewing group means and uncertainty."
       ),
       uiOutput(ns("layout_controls")),
       conditionalPanel(
@@ -31,24 +31,24 @@ visualize_twoway_ui <- function(id) {
             "Show value labels on bars",
             value = FALSE
           ),
-          "Help: Turn on labels to display the mean value on each bar."
+          "Turn on labels to display the mean value on each bar."
         )
       ),
       fluidRow(
         column(6, with_help_tooltip(
           numericInput(ns("plot_width"),  "Subplot width (px)",  value = 400, min = 200, max = 1200, step = 50),
-          "Help: Set how wide each subplot should be in pixels."
+          "Set how wide each subplot should be in pixels."
         )),
         column(6, with_help_tooltip(
           numericInput(ns("plot_height"), "Subplot height (px)", value = 300, min = 200, max = 1200, step = 50),
-          "Help: Set how tall each subplot should be in pixels."
+          "Set how tall each subplot should be in pixels."
         ))
       ),
       add_color_customization_ui(ns, multi_group = TRUE),
       br(),
       with_help_tooltip(
         downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;"),
-        "Help: Save the current figure as an image file."
+        "Save the current figure as an image file."
       )
     ),
     mainPanel(

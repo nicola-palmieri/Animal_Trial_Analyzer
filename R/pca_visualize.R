@@ -39,7 +39,7 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
           choices = c("PCA biplot" = "biplot"),
           selected = "biplot"
         ),
-        "Help: Pick how the PCA results should be displayed."
+        "Pick how the PCA results should be displayed."
       ),
       with_help_tooltip(
         selectInput(
@@ -48,7 +48,7 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
           choices = choices,
           selected = "None"
         ),
-        "Help: Colour the samples using a grouping variable to spot patterns."
+        "Colour the samples using a grouping variable to spot patterns."
       ),
       with_help_tooltip(
         selectInput(
@@ -57,7 +57,7 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
           choices = choices,
           selected = "None"
         ),
-        "Help: Change the point shapes using a grouping variable for extra contrast."
+        "Change the point shapes using a grouping variable for extra contrast."
       ),
       with_help_tooltip(
         selectInput(
@@ -66,7 +66,7 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
           choices = choices,
           selected = "None"
         ),
-        "Help: Add text labels from a column to identify each sample."
+        "Add text labels from a column to identify each sample."
       ),
       with_help_tooltip(
         selectInput(
@@ -75,7 +75,7 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
           choices = choices,
           selected = "None"
         ),
-        "Help: Split the plot into small multiples based on a grouping variable."
+        "Split the plot into small multiples based on a grouping variable."
       ),
       uiOutput(ns("layout_controls")),
       with_help_tooltip(
@@ -87,7 +87,7 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
           max = 6,
           step = 0.5
         ),
-        "Help: Control how large the point labels appear on the plot."
+        "Control how large the point labels appear on the plot."
       ),
       with_help_tooltip(
         checkboxInput(
@@ -95,7 +95,7 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
           label = "Show loadings",
           value = FALSE
         ),
-        "Help: Display arrows that show how each original variable contributes to the components."
+        "Display arrows that show how each original variable contributes to the components."
       ),
       with_help_tooltip(
         numericInput(
@@ -103,7 +103,7 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
           label = "Loading arrow scale",
           value = 1.2, min = 0.1, max = 5, step = 0.1
         ),
-        "Help: Stretch or shrink the loading arrows to make them easier to read."
+        "Stretch or shrink the loading arrows to make them easier to read."
       ),
       fluidRow(
         column(
@@ -117,7 +117,7 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
               max = 2000,
               step = 50
             ),
-            "Help: Set the width of the PCA plot in pixels."
+            "Set the width of the PCA plot in pixels."
           )
         ),
         column(
@@ -131,7 +131,7 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
               max = 2000,
               step = 50
             ),
-            "Help: Set the height of the PCA plot in pixels."
+            "Set the height of the PCA plot in pixels."
           )
         )
       ),
@@ -139,7 +139,7 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
       br(),
       with_help_tooltip(
         downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;"),
-        "Help: Save the PCA figure as an image file."
+        "Save the PCA figure as an image file."
       )
     ),
     mainPanel(
@@ -269,7 +269,7 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
                 max = 10,
                 step = 1
               ),
-              "Help: Decide how many rows of panels to show when faceting the PCA plot."
+              "Decide how many rows of panels to show when faceting the PCA plot."
             )
           ),
           column(
@@ -283,7 +283,7 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
                 max = 10,
                 step = 1
               ),
-              "Help: Decide how many columns of panels to show when faceting the PCA plot."
+              "Decide how many columns of panels to show when faceting the PCA plot."
             )
           )
         )
