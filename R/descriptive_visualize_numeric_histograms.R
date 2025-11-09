@@ -73,15 +73,12 @@ visualize_numeric_histograms_server <- function(id, filtered_data, summary_info,
       }
     })
 
-    plot_width <- reactive({
-      w <- input$plot_width
-      if (is.null(w) || !is.numeric(w) || is.na(w)) 400 else w
-    })
+    normalize_dimension <- function(value, default) {
+      if (is.null(value) || !is.numeric(value) || is.na(value)) default else value
+    }
 
-    plot_height <- reactive({
-      h <- input$plot_height
-      if (is.null(h) || !is.numeric(h) || is.na(h)) 300 else h
-    })
+    plot_width  <- reactive(normalize_dimension(input$plot_width, 400))
+    plot_height <- reactive(normalize_dimension(input$plot_height, 300))
 
     color_var_reactive <- reactive({
       info <- summary_info()
@@ -115,13 +112,7 @@ visualize_numeric_histograms_server <- function(id, filtered_data, summary_info,
     )
 
     cached_plot_info <- reactiveVal(NULL)
-    cache_ready <- reactiveVal(FALSE)
-
-    invalidate_cache <- function() {
-      cached_plot_info(NULL)
-      cache_ready(FALSE)
-      invisible(TRUE)
-    }
+    invalidate_cache <- function() cached_plot_info(NULL)
 
     observeEvent(
       list(
@@ -137,19 +128,15 @@ visualize_numeric_histograms_server <- function(id, filtered_data, summary_info,
       ignoreNULL = FALSE
     )
 
-    observeEvent(input$resp_rows, {
-      if (isTRUE(consume_pending_numeric_update(session, "resp_rows"))) {
-        return()
-      }
-      invalidate_cache()
-    }, ignoreNULL = FALSE)
-
-    observeEvent(input$resp_cols, {
-      if (isTRUE(consume_pending_numeric_update(session, "resp_cols"))) {
-        return()
-      }
-      invalidate_cache()
-    }, ignoreNULL = FALSE)
+    for (field in c("resp_rows", "resp_cols")) {
+      local({
+        key <- field
+        observeEvent(input[[key]], {
+          if (isTRUE(consume_pending_numeric_update(session, key))) return()
+          invalidate_cache()
+        }, ignoreNULL = FALSE)
+      })
+    }
 
     compute_plot_info <- function() {
       info <- summary_info()
@@ -180,11 +167,12 @@ visualize_numeric_histograms_server <- function(id, filtered_data, summary_info,
 
     plot_info <- reactive({
       req(module_active())
-      if (!isTRUE(cache_ready())) {
-        cached_plot_info(compute_plot_info())
-        cache_ready(TRUE)
+      info <- cached_plot_info()
+      if (is.null(info)) {
+        info <- compute_plot_info()
+        cached_plot_info(info)
       }
-      cached_plot_info()
+      info
     })
 
 
@@ -273,17 +261,19 @@ build_descriptive_numeric_histogram <- function(df,
                                                 custom_colors = NULL,
                                                 base_size = 13) {
   if (is.null(df) || !is.data.frame(df) || nrow(df) == 0) return(NULL)
-  
-  num_vars <- names(df)[vapply(df, is.numeric, logical(1))]
+
+  num_vars <- names(Filter(is.numeric, df))
   if (!is.null(selected_vars) && length(selected_vars) > 0) {
     num_vars <- intersect(num_vars, selected_vars)
   }
   if (length(num_vars) == 0) return(NULL)
-  
-  if (!is.null(group_var) && group_var %in% names(df)) {
+
+  if (is.null(group_var) || !group_var %in% names(df)) {
+    group_var <- NULL
+  } else {
     df[[group_var]] <- as.character(df[[group_var]])
     df[[group_var]][is.na(df[[group_var]]) | trimws(df[[group_var]]) == ""] <- "Missing"
-    
+
     if (!is.null(strata_levels) && length(strata_levels) > 0) {
       keep_levels <- unique(strata_levels)
       df <- df[df[[group_var]] %in% keep_levels, , drop = FALSE]
@@ -292,40 +282,36 @@ build_descriptive_numeric_histogram <- function(df,
     } else {
       df[[group_var]] <- factor(df[[group_var]], levels = unique(df[[group_var]]))
     }
-  } else {
-    group_var <- NULL
   }
-  
+
   plots <- lapply(num_vars, function(var) {
-    cols <- c(var, group_var)
-    cols <- cols[cols %in% names(df)]
+    cols <- intersect(c(var, group_var), names(df))
     plot_data <- df[, cols, drop = FALSE]
-    
+
     keep <- is.finite(plot_data[[var]])
     keep[is.na(keep)] <- FALSE
     plot_data <- plot_data[keep, , drop = FALSE]
     if (nrow(plot_data) == 0) return(NULL)
-    
+
     if (!is.null(group_var)) {
       plot_data[[group_var]] <- droplevels(plot_data[[group_var]])
     }
 
     density_mode <- isTRUE(use_density) && length(unique(plot_data[[var]])) > 1
-    
     base <- ggplot(plot_data, aes(x = .data[[var]]))
     y_label <- if (density_mode) "Density" else "Count"
-    
+
     if (!is.null(group_var)) {
       group_levels <- levels(plot_data[[group_var]])
       palette <- resolve_palette_for_levels(group_levels, custom = custom_colors)
       if (density_mode) {
-        p <- base +
+        base <- base +
           geom_density(aes(color = .data[[group_var]], fill = .data[[group_var]]), alpha = 0.3) +
           scale_color_manual(values = palette) +
           scale_fill_manual(values = palette) +
           labs(color = group_var, fill = group_var)
       } else {
-        p <- base +
+        base <- base +
           geom_histogram(
             aes(fill = .data[[group_var]]),
             position = "identity",
@@ -338,40 +324,38 @@ build_descriptive_numeric_histogram <- function(df,
     } else {
       single_color <- resolve_single_color(custom_colors)
       if (density_mode) {
-        p <- base + geom_density(fill = single_color, color = single_color, alpha = 0.35)
+        base <- base + geom_density(fill = single_color, color = single_color, alpha = 0.35)
       } else {
-        p <- base + geom_histogram(fill = single_color, color = single_color, bins = 30)
+        base <- base + geom_histogram(fill = single_color, color = single_color, bins = 30)
       }
     }
-    
-    p +
+
+    base +
       theme_minimal(base_size = base_size) +
       labs(title = var, x = var, y = y_label)
   })
-  
+
   plots <- Filter(Negate(is.null), plots)
   if (length(plots) == 0) return(NULL)
-  
+
   n_panels <- length(plots)
   defaults <- compute_default_grid(n_panels)
-
   layout <- basic_grid_layout(
     rows = suppressWarnings(as.numeric(nrow_input)),
     cols = suppressWarnings(as.numeric(ncol_input)),
     default_rows = defaults$rows,
     default_cols = defaults$cols
   )
-
   layout <- adjust_grid_layout(n_panels, layout)
 
   validation <- validate_grid(n_panels, layout$nrow, layout$ncol)
-
-  combined <- NULL
-  if (isTRUE(validation$valid)) {
-    combined <- patchwork::wrap_plots(plots, nrow = layout$nrow, ncol = layout$ncol) +
+  combined <- if (isTRUE(validation$valid)) {
+    patchwork::wrap_plots(plots, nrow = layout$nrow, ncol = layout$ncol) +
       patchwork::plot_annotation(
         theme = theme(plot.title = element_text(size = 16, face = "bold"))
       )
+  } else {
+    NULL
   }
 
   list(
