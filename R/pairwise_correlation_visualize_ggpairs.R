@@ -46,16 +46,12 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
-    resolve_input_value <- function(x) {
-      if (is.null(x)) return(NULL)
-      if (is.reactive(x)) x() else x
-    }
+    resolve_input_value <- function(x) if (is.reactive(x)) x() else x
 
     sanitize_numeric <- function(value, default, min_val, max_val) {
       v <- suppressWarnings(as.numeric(value))
-      if (length(v) == 0 || is.na(v)) return(default)
-      v <- max(min_val, min(max_val, v))
-      v
+      if (!length(v) || is.na(v)) return(default)
+      max(min_val, min(max_val, v))
     }
 
     plot_width <- reactive({
@@ -71,14 +67,12 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
       if (is.null(info)) return(NULL)
 
       group_var <- resolve_input_value(info$group_var)
-      if (is.null(group_var) || identical(group_var, "") || identical(group_var, "None")) {
-        return(NULL)
-      }
+      if (is.null(group_var)) return(NULL)
+      group_var <- as.character(group_var)[1]
+      if (identical(group_var, "None") || !nzchar(group_var)) return(NULL)
 
       dat <- filtered_data()
-      if (is.null(dat) || !is.data.frame(dat) || !group_var %in% names(dat)) {
-        return(NULL)
-      }
+      if (!is.data.frame(dat) || !group_var %in% names(dat)) return(NULL)
 
       group_var
     })
@@ -166,14 +160,16 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
 
       selected_vars <- resolve_input_value(results$selected_vars)
       if (is.null(selected_vars) || length(selected_vars) < 2) {
-        numeric_vars <- names(data)[vapply(data, is.numeric, logical(1))]
-        selected_vars <- numeric_vars
+        selected_vars <- names(data)[vapply(data, is.numeric, logical(1))]
       }
 
       validate(need(length(selected_vars) >= 2, "Need at least two numeric columns for GGPairs plot."))
 
       group_var <- resolve_input_value(info$group_var)
-      if (is.null(group_var) || identical(group_var, "None") || identical(group_var, "")) {
+      if (!is.null(group_var)) {
+        group_var <- as.character(group_var)[1]
+      }
+      if (is.null(group_var) || identical(group_var, "None") || !nzchar(group_var)) {
         group_var <- NULL
       }
 
@@ -193,14 +189,11 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
           defaults = defaults
         )
       } else {
-        available_levels <- NULL
-        if (!is.null(results$matrices)) {
-          available_levels <- names(results$matrices)
-        }
-        if (is.null(available_levels) || length(available_levels) == 0) {
+        available_levels <- names(results$matrices)
+        if (!length(available_levels)) {
           available_levels <- unique(as.character(data[[group_var]]))
         }
-        if (!is.null(strata_order) && length(strata_order) > 0) {
+        if (length(strata_order)) {
           available_levels <- strata_order[strata_order %in% available_levels]
         }
         available_levels <- available_levels[nzchar(available_levels)]
@@ -208,14 +201,12 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
 
         colors <- resolve_palette_for_levels(available_levels, custom = custom_colors())
 
-        plots <- list()
-        for (level in available_levels) {
+        plots <- lapply(stats::setNames(available_levels, available_levels), function(level) {
           subset_rows <- !is.na(data[[group_var]]) & as.character(data[[group_var]]) == level
           subset_data <- data[subset_rows, selected_vars, drop = FALSE]
-          if (nrow(subset_data) == 0) {
-            next
-          }
-          plots[[level]] <- convert_ggmatrix_to_plot(
+          if (!nrow(subset_data)) return(NULL)
+
+          convert_ggmatrix_to_plot(
             build_ggpairs_plot(
               subset_data,
               colors[[level]],
@@ -223,7 +214,8 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
               base_size_value = base_size()
             )
           )
-        }
+        })
+        plots <- Filter(Negate(is.null), plots)
 
         validate(need(length(plots) > 0, "No data available for the selected strata."))
 
@@ -260,24 +252,19 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
       }
     })
 
+    scale_dimension <- function(size, multiplier) {
+      if (is.null(multiplier)) return(size)
+      size * max(1L, as.integer(multiplier))
+    }
+
     plot_width_total <- reactive({
       info <- plot_info()
-      layout <- info$layout
-      w <- plot_width()
-      if (!is.null(layout$ncol)) {
-        w <- w * max(1L, as.integer(layout$ncol))
-      }
-      w
+      scale_dimension(plot_width(), info$layout$ncol)
     })
 
     plot_height_total <- reactive({
       info <- plot_info()
-      layout <- info$layout
-      h <- plot_height()
-      if (!is.null(layout$nrow)) {
-        h <- h * max(1L, as.integer(layout$nrow))
-      }
-      h
+      scale_dimension(plot_height(), info$layout$nrow)
     })
 
     observeEvent(plot_info(), {
