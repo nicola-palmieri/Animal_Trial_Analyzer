@@ -159,10 +159,25 @@ plot_grid_server <- function(id,
     rows <- reactive(sanitize_value(input$rows, rows_min, rows_max))
     cols <- reactive(sanitize_value(input$cols, cols_min, cols_max))
 
+    combined_values <- reactiveVal(NULL)
+
+    observeEvent(
+      list(rows = rows(), cols = cols()),
+      {
+        new_values <- list(rows = rows(), cols = cols())
+        if (!identical(new_values, combined_values())) {
+          combined_values(new_values)
+        }
+      },
+      ignoreNULL = FALSE
+    )
+
+    values <- reactive(combined_values())
+
     list(
       rows = rows,
       cols = cols,
-      values = reactive(list(rows = rows(), cols = cols()))
+      values = values
     )
   })
 }
