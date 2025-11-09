@@ -115,6 +115,7 @@ consume_pending_numeric_update <- function(session, input_id) {
 schedule_numeric_update <- function(session, input_id, value) {
   mark_pending_numeric_update(session, input_id)
   session$onFlushed(function() {
+    freezeReactiveValue(session$input, input_id)
     updateNumericInput(session, input_id, value = value)
   }, once = TRUE)
 }
