@@ -13,6 +13,31 @@ reg_diagnostic_explanation <- paste(
 fit_all_models <- function(df, responses, rhs, strat_details, engine, allow_multi_response) {
   safe_fit <- purrr::safely(reg_fit_model)
 
+  make_entry <- function(label = NULL, display = label, model = NULL, error = NULL) {
+    list(label = label, display = display, model = model, error = error)
+  }
+
+  record_success <- function(resp, model_obj, model_key, stratum_label = NULL) {
+    success_resps <<- c(success_resps, resp)
+    current <- success_models[[resp]]
+    if (is.null(current)) current <- list()
+    current[[model_key]] <- model_obj
+    success_models[[resp]] <<- current
+
+    flat_models[[length(flat_models) + 1]] <<- list(
+      response = resp,
+      stratum = stratum_label,
+      model = model_obj
+    )
+    if (is.null(primary_model)) primary_model <<- model_obj
+  }
+
+  record_error <- function(resp, message) {
+    error_resps <<- c(error_resps, resp)
+    error_messages[[resp]] <<- message
+    if (is.null(primary_error)) primary_error <<- message
+  }
+
   fits <- list()
   success_resps <- character(0)
   error_resps <- character(0)
@@ -25,87 +50,50 @@ fit_all_models <- function(df, responses, rhs, strat_details, engine, allow_mult
   for (resp in responses) {
     if (is.null(strat_details$var)) {
       result <- safe_fit(resp, rhs, df, engine = engine)
-      entry <- list(
-        stratified = FALSE,
-        strata = list(list(
-          label = NULL,
-          display = "Overall",
-          model = if (is.null(result$error)) result$result else NULL,
-          error = if (!is.null(result$error)) result$error$message else NULL
-        ))
-      )
-      fits[[resp]] <- entry
+      strata_entry <- make_entry(display = "Overall")
 
       if (is.null(result$error)) {
-        success_resps <- c(success_resps, resp)
-        success_models[[resp]] <- list(Overall = result$result)
-        flat_models[[length(flat_models) + 1]] <- list(
-          response = resp,
-          stratum = NULL,
-          model = result$result
-        )
-        if (is.null(primary_model)) primary_model <- result$result
+        strata_entry$model <- result$result
+        record_success(resp, result$result, "Overall")
       } else {
-        error_resps <- c(error_resps, resp)
-        error_messages[[resp]] <- result$error$message
-        if (is.null(primary_error)) primary_error <- result$error$message
+        strata_entry$error <- result$error$message
+        record_error(resp, strata_entry$error)
       }
+
+      fits[[resp]] <- list(stratified = FALSE, strata = list(strata_entry))
     } else {
       strata_entries <- list()
       successful_strata <- list()
 
       for (level in strat_details$levels) {
+        entry <- make_entry(label = level, display = level)
         subset_data <- df[df[[strat_details$var]] == level, , drop = FALSE]
+
         if (nrow(subset_data) == 0) {
-          msg <- paste0("No observations available for stratum '", level, "'.")
-          strata_entries[[length(strata_entries) + 1]] <- list(
-            label = level,
-            display = level,
-            model = NULL,
-            error = msg
-          )
-          next
+          entry$error <- paste0("No observations available for stratum '", level, "'.")
+        } else {
+          result <- safe_fit(resp, rhs, subset_data, engine = engine)
+          if (is.null(result$error)) {
+            entry$model <- result$result
+            successful_strata[[level]] <- result$result
+            record_success(resp, result$result, level, stratum_label = level)
+          } else {
+            entry$error <- result$error$message
+          }
         }
 
-        result <- safe_fit(resp, rhs, subset_data, engine = engine)
-        if (!is.null(result$error)) {
-          strata_entries[[length(strata_entries) + 1]] <- list(
-            label = level,
-            display = level,
-            model = NULL,
-            error = result$error$message
-          )
-        } else {
-          strata_entries[[length(strata_entries) + 1]] <- list(
-            label = level,
-            display = level,
-            model = result$result,
-            error = NULL
-          )
-          successful_strata[[level]] <- result$result
-          flat_models[[length(flat_models) + 1]] <- list(
-            response = resp,
-            stratum = level,
-            model = result$result
-          )
-          if (is.null(primary_model)) primary_model <- result$result
-        }
+        strata_entries[[length(strata_entries) + 1]] <- entry
       }
 
-      fits[[resp]] <- list(
-        stratified = TRUE,
-        strata = strata_entries
-      )
+      fits[[resp]] <- list(stratified = TRUE, strata = strata_entries)
 
       if (length(successful_strata) > 0) {
-        success_resps <- c(success_resps, resp)
         success_models[[resp]] <- successful_strata
       } else {
-        error_resps <- c(error_resps, resp)
         errors_vec <- vapply(
           strata_entries,
           function(entry) {
-            if (!is.null(entry$error)) {
+            if (!is.null(entry$error) && nzchar(entry$error)) {
               paste0(entry$display, ": ", entry$error)
             } else {
               NA_character_
@@ -114,10 +102,12 @@ fit_all_models <- function(df, responses, rhs, strat_details, engine, allow_mult
           character(1)
         )
         errors_vec <- errors_vec[!is.na(errors_vec)]
-        combined_error <- paste(errors_vec, collapse = "\n")
-        if (!nzchar(combined_error)) combined_error <- "Model fitting failed."
-        error_messages[[resp]] <- combined_error
-        if (is.null(primary_error)) primary_error <- combined_error
+        combined_error <- if (length(errors_vec) > 0) {
+          paste(errors_vec, collapse = "\n")
+        } else {
+          "Model fitting failed."
+        }
+        record_error(resp, combined_error)
       }
     }
   }
@@ -196,10 +186,11 @@ assign_download_handler <- function(output, id, engine, response, stratum_displa
 }
 
 assign_model_outputs <- function(output, engine, response, idx, model_obj, stratum_idx = NULL, stratum_display = NULL) {
-  summary_id <- if (is.null(stratum_idx)) paste0("summary_", idx) else paste0("summary_", idx, "_", stratum_idx)
-  resid_id <- if (is.null(stratum_idx)) paste0("resid_", idx) else paste0("resid_", idx, "_", stratum_idx)
-  qq_id <- if (is.null(stratum_idx)) paste0("qq_", idx) else paste0("qq_", idx, "_", stratum_idx)
-  download_id <- if (is.null(stratum_idx)) paste0("download_", idx) else paste0("download_", idx, "_", stratum_idx)
+  suffix <- if (is.null(stratum_idx)) idx else paste(idx, stratum_idx, sep = "_")
+  summary_id <- paste0("summary_", suffix)
+  resid_id <- paste0("resid_", suffix)
+  qq_id <- paste0("qq_", suffix)
+  download_id <- paste0("download_", suffix)
 
   output[[summary_id]] <- renderPrint({
     render_model_summary(engine, model_obj)
@@ -216,63 +207,50 @@ assign_model_outputs <- function(output, engine, response, idx, model_obj, strat
   assign_download_handler(output, download_id, engine, response, stratum_display, model_obj)
 }
 
+build_diagnostic_block <- function(ns, suffix, tooltip_text) {
+  tagList(
+    verbatimTextOutput(ns(paste0("summary_", suffix))),
+    br(),
+    h5("Diagnostics"),
+    br(),
+    fluidRow(
+      column(6, plotOutput(ns(paste0("resid_", suffix)))),
+      column(6, plotOutput(ns(paste0("qq_", suffix))))
+    ),
+    br(),
+    helpText(reg_diagnostic_explanation),
+    br(),
+    br(),
+    with_help_tooltip(
+      downloadButton(ns(paste0("download_", suffix)), "Download results", style = "width: 100%;"),
+      tooltip_text
+    )
+  )
+}
+
 build_response_content <- function(ns, idx, fit_entry) {
   if (!isTRUE(fit_entry$stratified)) {
-    tagList(
-      verbatimTextOutput(ns(paste0("summary_", idx))),
-      br(),
-      h5("Diagnostics"),
-      br(),
-      fluidRow(
-        column(6, plotOutput(ns(paste0("resid_", idx)))),
-        column(6, plotOutput(ns(paste0("qq_", idx))))
-      ),
-      br(),
-      helpText(reg_diagnostic_explanation),
-      br(),
-      br(),
-      with_help_tooltip(
-        downloadButton(ns(paste0("download_", idx)), "Download results", style = "width: 100%;"),
-        "Save the model summary and diagnostics for this response."
-      )
-    )
-  } else {
-    strata <- fit_entry$strata
-    stratum_tabs <- lapply(seq_along(strata), function(j) {
-      stratum <- strata[[j]]
-      label <- if (!is.null(stratum$display)) stratum$display else paste("Stratum", j)
-
-      content <- if (!is.null(stratum$model)) {
-        tagList(
-          verbatimTextOutput(ns(paste0("summary_", idx, "_", j))),
-          br(),
-          h5("Diagnostics"),
-          br(),
-          fluidRow(
-            column(6, plotOutput(ns(paste0("resid_", idx, "_", j)))),
-            column(6, plotOutput(ns(paste0("qq_", idx, "_", j))))
-          ),
-          br(),
-          helpText(reg_diagnostic_explanation),
-          br(),
-          br(),
-          with_help_tooltip(
-            downloadButton(ns(paste0("download_", idx, "_", j)), "Download results", style = "width: 100%;"),
-            "Save the model summary and diagnostics for this stratum."
-          )
-        )
-      } else {
-        tags$pre(format_safe_error_message("Model fitting failed", stratum$error))
-      }
-
-      tabPanel(title = label, content)
-    })
-
-    do.call(
-      tabsetPanel,
-      c(list(id = ns(paste0("strata_tabs_", idx))), stratum_tabs)
-    )
+    return(build_diagnostic_block(ns, idx, "Save the model summary and diagnostics for this response."))
   }
+
+  strata <- fit_entry$strata
+  stratum_tabs <- lapply(seq_along(strata), function(j) {
+    stratum <- strata[[j]]
+    label <- if (!is.null(stratum$display)) stratum$display else paste("Stratum", j)
+
+    content <- if (!is.null(stratum$model)) {
+      build_diagnostic_block(ns, paste(idx, j, sep = "_"), "Save the model summary and diagnostics for this stratum.")
+    } else {
+      tags$pre(format_safe_error_message("Model fitting failed", stratum$error))
+    }
+
+    tabPanel(title = label, content)
+  })
+
+  do.call(
+    tabsetPanel,
+    c(list(id = ns(paste0("strata_tabs_", idx))), stratum_tabs)
+  )
 }
 
 build_model_ui <- function(ns, models_info) {
@@ -329,20 +307,22 @@ render_model_outputs <- function(output, models_info, engine) {
   for (idx in seq_along(success_resps)) {
     response <- success_resps[idx]
     fit_entry <- fits[[response]]
+    strata <- fit_entry$strata
 
-    if (!isTRUE(fit_entry$stratified)) {
-      stratum <- fit_entry$strata[[1]]
-      model_obj <- stratum$model
-      if (!is.null(model_obj)) {
-        assign_model_outputs(output, engine, response, idx, model_obj)
-      }
-    } else {
-      strata <- fit_entry$strata
-      for (j in seq_along(strata)) {
-        stratum <- strata[[j]]
-        if (is.null(stratum$model)) next
-        assign_model_outputs(output, engine, response, idx, stratum$model, stratum_idx = j, stratum_display = stratum$display)
-      }
+    for (j in seq_along(strata)) {
+      stratum <- strata[[j]]
+      if (is.null(stratum$model)) next
+      is_stratified <- isTRUE(fit_entry$stratified)
+      assign_model_outputs(
+        output,
+        engine,
+        response,
+        idx,
+        stratum$model,
+        stratum_idx = if (is_stratified) j else NULL,
+        stratum_display = if (is_stratified) stratum$display else NULL
+      )
+      if (!is_stratified) break
     }
   }
 }
