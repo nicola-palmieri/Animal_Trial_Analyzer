@@ -48,6 +48,31 @@ pca_server <- function(id, filtered_data) {
       updateSelectInput(session, "vars", choices = num_vars, selected = num_vars)
     })
 
+    `%||%` <- function(x, y) if (is.null(x)) y else x
+
+    format_usage_line <- function(entry) {
+      sprintf(
+        "Rows used for PCA: %d of %d (excluded %d due to missing values in the selected variables).\n\n",
+        entry$used_n %||% 0,
+        entry$original_n %||% 0,
+        entry$excluded_n %||% 0
+      )
+    }
+
+    append_row_numbers <- function(rows, keep) {
+      if (!any(!keep)) {
+        return(NULL)
+      }
+
+      excluded_rows <- rows[!keep, , drop = FALSE]
+      out <- cbind(
+        data.frame(`Row #` = seq_len(nrow(rows))[!keep], check.names = FALSE),
+        excluded_rows
+      )
+      rownames(out) <- NULL
+      out
+    }
+
     run_pca_on_subset <- function(subset_data, selected_vars) {
       if (is.null(subset_data) || nrow(subset_data) == 0) {
         return(list(model = NULL, data = subset_data, message = "No data available for PCA."))
@@ -57,60 +82,46 @@ pca_server <- function(id, filtered_data) {
       complete_idx <- stats::complete.cases(numeric_subset)
       numeric_subset <- numeric_subset[complete_idx, , drop = FALSE]
       plot_data <- subset_data[complete_idx, , drop = FALSE]
-      original_n <- nrow(subset_data)
-      used_n <- nrow(plot_data)
-      excluded_n <- original_n - used_n
 
-      excluded_rows <- subset_data[!complete_idx, , drop = FALSE]
-      if (excluded_n > 0) {
-        excluded_rows <- cbind(
-          data.frame(`Row #` = seq_len(nrow(subset_data))[!complete_idx], check.names = FALSE),
-          excluded_rows
-        )
-        rownames(excluded_rows) <- NULL
-      } else {
-        excluded_rows <- NULL
-      }
+      details <- list(
+        original_n = nrow(subset_data),
+        used_n = nrow(plot_data)
+      )
+      details$excluded_n <- details$original_n - details$used_n
+      details$excluded_rows <- append_row_numbers(subset_data, complete_idx)
 
       if (nrow(numeric_subset) < 2) {
-        return(list(
-          model = NULL,
-          data = plot_data,
-          message = "Not enough complete observations to compute PCA.",
-          original_n = original_n,
-          used_n = used_n,
-          excluded_n = excluded_n,
-          excluded_rows = excluded_rows
+        return(c(
+          list(
+            model = NULL,
+            data = plot_data,
+            message = "Not enough complete observations to compute PCA."
+          ),
+          details
         ))
       }
 
-      safe_prcomp <- purrr::safely(function(mat) {
-        prcomp(mat, center = TRUE, scale. = TRUE)
-      })
-
-      model <- safe_prcomp(numeric_subset)
+      model <- purrr::safely(prcomp)(numeric_subset, center = TRUE, scale. = TRUE)
 
       if (!is.null(model$error)) {
-        return(list(
-          model = NULL,
-          data = plot_data,
-          message = conditionMessage(model$error),
-          message_title = "PCA computation failed",
-          original_n = original_n,
-          used_n = used_n,
-          excluded_n = excluded_n,
-          excluded_rows = excluded_rows
+        return(c(
+          list(
+            model = NULL,
+            data = plot_data,
+            message = conditionMessage(model$error),
+            message_title = "PCA computation failed"
+          ),
+          details
         ))
       }
 
-      list(
-        model = model$result,
-        data = plot_data,
-        message = NULL,
-        original_n = original_n,
-        used_n = used_n,
-        excluded_n = excluded_n,
-        excluded_rows = excluded_rows
+      c(
+        list(
+          model = model$result,
+          data = plot_data,
+          message = NULL
+        ),
+        details
       )
     }
 
@@ -141,17 +152,7 @@ pca_server <- function(id, filtered_data) {
 
       entry <- results$result
       if (is.null(entry) || is.null(entry$model)) {
-        if (!is.null(entry)) {
-          used_n <- if (!is.null(entry$used_n)) entry$used_n else 0
-          original_n <- if (!is.null(entry$original_n)) entry$original_n else 0
-          excluded_n <- if (!is.null(entry$excluded_n)) entry$excluded_n else 0
-          cat(sprintf(
-            "Rows used for PCA: %d of %d (excluded %d due to missing values in the selected variables).\n\n",
-            used_n,
-            original_n,
-            excluded_n
-          ))
-        }
+        if (!is.null(entry)) cat(format_usage_line(entry))
 
         if (!is.null(entry) && !is.null(entry$message) && nzchar(entry$message)) {
           if (!is.null(entry$message_title)) {
@@ -166,12 +167,7 @@ pca_server <- function(id, filtered_data) {
       }
 
       model <- entry$model
-      cat(sprintf(
-        "Rows used for PCA: %d of %d (excluded %d due to missing values in the selected variables).\n\n",
-        entry$used_n,
-        entry$original_n,
-        entry$excluded_n
-      ))
+      cat(format_usage_line(entry))
       cat("── PCA Summary ──\n")
       print(summary(model))
       cat("\n── PCA Loadings (rotation matrix) ──\n")
@@ -195,25 +191,16 @@ pca_server <- function(id, filtered_data) {
         on.exit(sink(), add = TRUE)
 
         entry <- results$result
-        if (!is.null(entry)) {
-          used_n <- if (!is.null(entry$used_n)) entry$used_n else 0
-          original_n <- if (!is.null(entry$original_n)) entry$original_n else 0
-          excluded_n <- if (!is.null(entry$excluded_n)) entry$excluded_n else 0
-          cat(sprintf(
-            "Rows used for PCA: %d of %d (excluded %d due to missing values in the selected variables).\n\n",
-            used_n,
-            original_n,
-            excluded_n
-          ))
-        }
+        if (!is.null(entry)) cat(format_usage_line(entry))
 
         if (is.null(entry) || is.null(entry$model)) {
           if (!is.null(entry) && !is.null(entry$message) && nzchar(entry$message)) {
-            if (!is.null(entry$message_title)) {
-              cat(format_safe_error_message(entry$message_title, entry$message), "\n", sep = "")
+            msg <- if (!is.null(entry$message_title)) {
+              format_safe_error_message(entry$message_title, entry$message)
             } else {
-              cat(entry$message, "\n", sep = "")
+              entry$message
             }
+            cat(msg, "\n", sep = "")
           } else {
             cat("Not enough data to compute PCA.\n")
           }
@@ -231,64 +218,6 @@ pca_server <- function(id, filtered_data) {
         cat("\n")
       }
     )
-
-    # Return structured reactive for integration
-    df_final <- reactive({
-      details <- pca_result()
-      if (is.null(details)) return(NULL)
-      details$data_used
-    })
-
-    model_fit <- reactive({
-      details <- pca_result()
-      if (is.null(details)) return(NULL)
-      details$result
-    })
-
-    compiled_tables <- reactive({
-      details <- pca_result()
-      if (is.null(details)) return(NULL)
-
-      entry <- details$result
-      if (is.null(entry)) return(NULL)
-
-      messages_list <- if (!is.null(entry$message)) list(PCA = entry$message) else NULL
-
-      model <- entry$model
-      if (is.null(model)) {
-        return(list(summary = NULL, effects = NULL, messages = messages_list))
-      }
-
-      rotation_tbl <- as.data.frame(as.table(model$rotation), stringsAsFactors = FALSE)
-      colnames(rotation_tbl) <- c("Variable", "Component", "Loading")
-
-      variance_vals <- 100 * model$sdev^2 / sum(model$sdev^2)
-      variance_tbl <- data.frame(
-        Component = paste0("PC", seq_along(variance_vals)),
-        Variance = variance_vals,
-        stringsAsFactors = FALSE
-      )
-
-      list(
-        summary = list(PCA = rotation_tbl),
-        effects = list(PCA = variance_tbl),
-        messages = messages_list
-      )
-    })
-
-    summary_table <- reactive({
-      res <- compiled_tables()
-      if (is.null(res)) return(NULL)
-      res$summary
-    })
-
-    effect_table <- reactive({
-      res <- compiled_tables()
-      if (is.null(res)) return(NULL)
-      res$effects
-    })
-
-    posthoc_results <- reactive(NULL)
 
     analysis_result <- reactive({
       details <- pca_result()
@@ -320,20 +249,41 @@ pca_server <- function(id, filtered_data) {
         ))
       }
 
-      data_used <- df_final()
-
-      compiled <- compiled_tables()
-      messages <- if (!is.null(compiled)) compiled$messages else NULL
-
       entry <- details$result
+
+      data_used <- details$data_used
+
+      compiled <- NULL
+      messages <- NULL
+      if (!is.null(entry)) {
+        messages <- if (!is.null(entry$message)) list(PCA = entry$message) else NULL
+
+        if (!is.null(entry$model)) {
+          model <- entry$model
+          rotation_tbl <- as.data.frame(as.table(model$rotation), stringsAsFactors = FALSE)
+          colnames(rotation_tbl) <- c("Variable", "Component", "Loading")
+
+          variance_vals <- 100 * model$sdev^2 / sum(model$sdev^2)
+          variance_tbl <- data.frame(
+            Component = paste0("PC", seq_along(variance_vals)),
+            Variance = variance_vals,
+            stringsAsFactors = FALSE
+          )
+
+          compiled <- list(
+            summary = list(PCA = rotation_tbl),
+            effects = list(PCA = variance_tbl)
+          )
+        }
+      }
 
       list(
         analysis_type = "PCA",
         data_used = data_used,
-        model = model_fit(),
-        summary = summary_table(),
-        posthoc = posthoc_results(),
-        effects = effect_table(),
+        model = entry,
+        summary = if (!is.null(compiled)) compiled$summary else NULL,
+        posthoc = NULL,
+        effects = if (!is.null(compiled)) compiled$effects else NULL,
         stats = if (!is.null(data_used)) list(n = nrow(data_used), vars = names(data_used)) else NULL,
         metadata = list(
           selected_vars = details$selected_vars,
