@@ -19,7 +19,6 @@ visualize_ggpairs_ui <- function(id) {
         ),
         "Choose how to visualise the pairwise relationships between variables."
       ),
-      hr(),
       uiOutput(ns("sub_controls"))
     ),
     mainPanel(
