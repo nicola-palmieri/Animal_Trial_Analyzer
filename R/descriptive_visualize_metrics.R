@@ -34,15 +34,7 @@ metric_panel_ui <- function(id, default_width = 400, default_height = 300,
 }
 
 
-visualize_cv_ui <- function(id) {
-  metric_panel_ui(id, default_width = 400, default_height = 320, default_rows = 2, default_cols = 3)
-}
-
-visualize_outliers_ui <- function(id) {
-  metric_panel_ui(id, default_width = 400, default_height = 320, default_rows = 2, default_cols = 3)
-}
-
-visualize_missing_ui <- function(id) {
+visualize_cv_ui <- visualize_outliers_ui <- visualize_missing_ui <- function(id) {
   metric_panel_ui(id, default_width = 400, default_height = 320, default_rows = 2, default_cols = 3)
 }
 
@@ -54,17 +46,7 @@ metric_plot_ui <- function(id) {
   )
 }
 
-visualize_cv_plot_ui <- function(id) {
-  metric_plot_ui(id)
-}
-
-visualize_outliers_plot_ui <- function(id) {
-  metric_plot_ui(id)
-}
-
-visualize_missing_plot_ui <- function(id) {
-  metric_plot_ui(id)
-}
+visualize_cv_plot_ui <- visualize_outliers_plot_ui <- visualize_missing_plot_ui <- metric_plot_ui
 
 
 # ---- Shared computation helpers ----
@@ -227,22 +209,15 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
-    plot_width <- reactive({
-      w <- input$plot_width
-      if (is.null(w) || !is.numeric(w) || is.na(w)) 400 else w
-    })
+    resolve_dimension <- function(value, default) {
+      if (is.null(value) || !is.numeric(value) || is.na(value)) default else value
+    }
 
-    plot_height <- reactive({
-      h <- input$plot_height
-      if (is.null(h) || !is.numeric(h) || is.na(h)) 300 else h
-    })
+    plot_width <- reactive(resolve_dimension(input$plot_width, 400))
+    plot_height <- reactive(resolve_dimension(input$plot_height, 300))
 
     module_active <- reactive({
-      if (is.null(is_active)) {
-        TRUE
-      } else {
-        isTRUE(is_active())
-      }
+      if (is.null(is_active)) TRUE else isTRUE(is_active())
     })
 
     color_var_reactive <- reactive({
@@ -250,14 +225,10 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
       if (is.null(info)) return(NULL)
 
       group_var <- resolve_metric_input(info$group_var)
-      if (is.null(group_var) || identical(group_var, "") || identical(group_var, "None")) {
-        return(NULL)
-      }
+      if (is.null(group_var) || group_var %in% c("", "None")) return(NULL)
 
       dat <- filtered_data()
-      if (is.null(dat) || !is.data.frame(dat) || !group_var %in% names(dat)) {
-        return(NULL)
-      }
+      if (is.null(dat) || !is.data.frame(dat) || !group_var %in% names(dat)) return(NULL)
 
       group_var
     })
@@ -277,11 +248,9 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
     )
 
     cached_plot_details <- reactiveVal(NULL)
-    cache_ready <- reactiveVal(FALSE)
 
     invalidate_cache <- function() {
       cached_plot_details(NULL)
-      cache_ready(FALSE)
     }
 
     observeEvent(
@@ -345,11 +314,12 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
 
     plot_details <- reactive({
       req(module_active())
-      if (!isTRUE(cache_ready())) {
-        cached_plot_details(compute_plot_details())
-        cache_ready(TRUE)
+      details <- cached_plot_details()
+      if (is.null(details)) {
+        details <- compute_plot_details()
+        cached_plot_details(details)
       }
-      cached_plot_details()
+      details
     })
 
     plot_size <- reactive({
@@ -396,41 +366,25 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
 }
 
 
-visualize_cv_server <- function(id, filtered_data, summary_info, is_active = NULL) {
-  metric_module_server(
-    id = id,
-    filtered_data = filtered_data,
-    summary_info = summary_info,
-    metric_key = "cv",
-    y_label = "CV (%)",
-    title = "",
-    filename_prefix = "cv_summary",
-    is_active = is_active
-  )
+metric_server_factory <- function(metric_key, y_label, filename_prefix) {
+  force(metric_key)
+  force(y_label)
+  force(filename_prefix)
+
+  function(id, filtered_data, summary_info, is_active = NULL) {
+    metric_module_server(
+      id = id,
+      filtered_data = filtered_data,
+      summary_info = summary_info,
+      metric_key = metric_key,
+      y_label = y_label,
+      title = "",
+      filename_prefix = filename_prefix,
+      is_active = is_active
+    )
+  }
 }
 
-visualize_outliers_server <- function(id, filtered_data, summary_info, is_active = NULL) {
-  metric_module_server(
-    id = id,
-    filtered_data = filtered_data,
-    summary_info = summary_info,
-    metric_key = "outliers",
-    y_label = "Outlier Count",
-    title = "",
-    filename_prefix = "outlier_summary",
-    is_active = is_active
-  )
-}
-
-visualize_missing_server <- function(id, filtered_data, summary_info, is_active = NULL) {
-  metric_module_server(
-    id = id,
-    filtered_data = filtered_data,
-    summary_info = summary_info,
-    metric_key = "missing",
-    y_label = "Missing (%)",
-    title = "",
-    filename_prefix = "missing_summary",
-    is_active = is_active
-  )
-}
+visualize_cv_server <- metric_server_factory("cv", "CV (%)", "cv_summary")
+visualize_outliers_server <- metric_server_factory("outliers", "Outlier Count", "outlier_summary")
+visualize_missing_server <- metric_server_factory("missing", "Missing (%)", "missing_summary")
