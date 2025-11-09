@@ -83,7 +83,7 @@ ui <- navbarPage(
           h1("Welcome to Table Analyzer"),
           p(
             class = "lead text-muted",
-            "Explore, clean, and interpret tabular data in a calm, guided workspace."
+            "Turn your tabular data into publication-ready tables and plots in a single afternoon."
           ),
           br(),
           div(
@@ -95,7 +95,7 @@ ui <- navbarPage(
                 div(
                   icon("upload", class = "fa-2x text-primary mb-2"),
                   h5("1. Upload"),
-                  p("Bring in spreadsheets or CSV files with ease.")
+                  p("Bring in spreadsheets with ease.")
                 )
               ),
               column(
@@ -127,7 +127,7 @@ ui <- navbarPage(
           br(),
           tags$hr(class = "my-4"),
           p(
-            em("Developed by the Data Insights Lab for transparent, reproducible analysis."),
+            em("Developed by Nicola Palmieri"),
             class = "text-muted small"
           )
         )
