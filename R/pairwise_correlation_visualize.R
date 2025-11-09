@@ -34,6 +34,7 @@ visualize_ggpairs_ui <- function(id) {
 visualize_ggpairs_server <- function(id, filtered_data, model_fit) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
+
     correlation_info <- reactive({
       info <- model_fit()
       if (is.null(info) || is.null(info$type) || info$type != "pairs") {
@@ -42,7 +43,24 @@ visualize_ggpairs_server <- function(id, filtered_data, model_fit) {
       info
     })
 
-    active <- reactiveVal(NULL)
+    ggpairs_handle <- pairwise_correlation_visualize_ggpairs_server(
+      "ggpairs",
+      filtered_data,
+      correlation_info
+    )
+
+    active_handle <- reactive({
+      info <- correlation_info()
+      type <- input$plot_type
+
+      if (is.null(info) || is.null(type)) {
+        return(NULL)
+      }
+
+      switch(type,
+             "GGPairs" = ggpairs_handle,
+             NULL)
+    })
 
     output$sub_controls <- renderUI({
       info <- correlation_info()
@@ -50,53 +68,37 @@ visualize_ggpairs_server <- function(id, filtered_data, model_fit) {
         helpText("Run the pairwise correlation analysis to configure plots.")
       } else if (identical(input$plot_type, "GGPairs")) {
         pairwise_correlation_visualize_ggpairs_ui(ns("ggpairs"))
-      } else {
-        NULL
       }
     })
 
-    observeEvent(list(input$plot_type, correlation_info()), {
-      info <- correlation_info()
-      type <- input$plot_type
-
-      if (is.null(info) || is.null(type)) {
-        active(NULL)
-        return()
-      }
-
-      handle <- switch(type,
-                       "GGPairs" = pairwise_correlation_visualize_ggpairs_server("ggpairs", filtered_data, correlation_info),
-                       NULL)
-      active(handle)
-    }, ignoreNULL = FALSE)
-
     output$plot_warning <- renderUI({
-      h <- active()
-      if (is.null(h)) return(NULL)
-      warning_text <- h$warning()
+      handle <- active_handle()
+      if (is.null(handle)) return(NULL)
+
+      warning_text <- handle$warning()
       if (!is.null(warning_text)) {
         div(class = "alert alert-warning", HTML(warning_text))
-      } else {
-        NULL
       }
     })
 
     output$plot <- renderPlot({
-      h <- active()
-      req(h)
-      warning_text <- h$warning()
+      handle <- active_handle()
+      req(handle)
+
+      warning_text <- handle$warning()
       if (!is.null(warning_text)) return(NULL)
-      plot_obj <- h$plot()
+
+      plot_obj <- handle$plot()
       validate(need(!is.null(plot_obj), "No plot available."))
       print(plot_obj)
     },
     width = function() {
-      h <- active()
-      if (is.null(h)) 800 else h$width()
+      handle <- active_handle()
+      if (is.null(handle)) 800 else handle$width()
     },
     height = function() {
-      h <- active()
-      if (is.null(h)) 600 else h$height()
+      handle <- active_handle()
+      if (is.null(handle)) 600 else handle$height()
     },
     res = 96)
   })
