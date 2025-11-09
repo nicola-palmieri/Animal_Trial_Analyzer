@@ -99,58 +99,75 @@ reg_fit_model <- function(dep, rhs, data, engine = c("lm","lmm")) {
 # Output composition
 # ---------------------------------------------------------------
 
-reg_display_lm_summary <- function(m) {
-  aout <- capture.output(car::Anova(m, type = 3))
-  signif_idx <- grep("^Signif\\. codes", aout)
-  if (length(signif_idx) > 0) {
-    remove_idx <- c(signif_idx - 1, signif_idx)
-    aout <- aout[-remove_idx]
+reg_display_summary <- function(model, engine = c("lm", "lmm")) {
+  engine <- match.arg(engine)
+
+  if (engine == "lm") {
+    aout <- capture.output(car::Anova(model, type = 3))
+    signif_idx <- grep("^Signif\\. codes", aout)
+    if (length(signif_idx) > 0) {
+      remove_idx <- c(signif_idx - 1, signif_idx)
+      aout <- aout[-remove_idx]
+    }
+    cat(paste(aout, collapse = "\n"), "\n\n")
+
+    sout <- capture.output(summary(model))
+    start <- grep("^Residuals:", sout)[1]
+    stop  <- grep("^Signif\\. codes", sout)[1]
+    if (!is.na(start)) {
+      if (!is.na(stop)) sout <- sout[start:(stop - 2)]
+      else sout <- sout[start:length(sout)]
+    }
+    cat(paste(sout, collapse = "\n"))
+  } else {
+    aout <- capture.output(anova(model, type = 3))
+    cat(paste(aout, collapse = "\n"), "\n\n")
+
+    sout <- capture.output(summary(model))
+    start <- grep("^Scaled residuals:", sout)[1]
+    stop  <- grep("^Correlation of Fixed Effects:", sout)[1]
+    if (!is.na(start)) {
+      if (!is.na(stop)) sout <- sout[start:(stop - 1)]
+      else sout <- sout[start:length(sout)]
+    }
+
+    icc_df <- compute_icc(model)
+    if (!is.null(icc_df) && nrow(icc_df) > 0) {
+      icc_line <- paste(paste0("ICC (", icc_df$Group, "): ", icc_df$ICC), collapse = "; ")
+      random_idx <- grep("^Random effects:", sout)[1]
+      if (!is.na(random_idx)) sout <- append(sout, paste0("\n", icc_line), after = random_idx + 4)
+      else sout <- c(sout, icc_line)
+    }
+    cat(paste(sout, collapse = "\n"))
   }
-  cat(paste(aout, collapse = "\n"), "\n\n")
-  
-  sout <- capture.output(summary(m))
-  start <- grep("^Residuals:", sout)[1]
-  stop  <- grep("^Signif\\. codes", sout)[1]
-  if (!is.na(start)) {
-    if (!is.na(stop)) sout <- sout[start:(stop - 2)]
-    else sout <- sout[start:length(sout)]
-  }
-  cat(paste(sout, collapse = "\n"))
 }
 
-reg_display_lmm_summary <- function(m) {
-  aout <- capture.output(anova(m, type = 3))
-  cat(paste(aout, collapse = "\n"), "\n\n")
+reg_display_lm_summary <- function(m) reg_display_summary(m, "lm")
 
-  sout <- capture.output(summary(m))
-  start <- grep("^Scaled residuals:", sout)[1]
-  stop  <- grep("^Correlation of Fixed Effects:", sout)[1]
-  if (!is.na(start)) {
-    if (!is.na(stop)) sout <- sout[start:(stop - 1)]
-    else sout <- sout[start:length(sout)]
-  }
-  
-  icc_df <- compute_icc(m)
-  if (!is.null(icc_df) && nrow(icc_df) > 0) {
-    icc_line <- paste(paste0("ICC (", icc_df$Group, "): ", icc_df$ICC), collapse = "; ")
-    random_idx <- grep("^Random effects:", sout)[1]
-    if (!is.na(random_idx)) sout <- append(sout, paste0("\n", icc_line), after = random_idx + 4)
-    else sout <- c(sout, icc_line)
-  }
-  cat(paste(sout, collapse = "\n"))
-}
+reg_display_lmm_summary <- function(m) reg_display_summary(m, "lmm")
 
 # ---------------------------------------------------------------
 # Summaries for standardized regression outputs
 # ---------------------------------------------------------------
 
 clean_regression_coef_names <- function(nms) {
+  lookup <- c(
+    "estimate" = "estimate",
+    "std. error" = "std_error",
+    "std error" = "std_error",
+    "t value" = "statistic",
+    "z value" = "statistic",
+    "f value" = "statistic",
+    "df" = "df",
+    "dendf" = "dendf",
+    "numdf" = "numdf"
+  )
+
   vapply(nms, function(name) {
     name_trim <- trimws(name)
-    if (identical(name_trim, "Estimate")) return("estimate")
-    if (name_trim %in% c("Std. Error", "Std Error", "Std. error")) return("std_error")
-    if (tolower(name_trim) %in% c("t value", "z value", "f value")) return("statistic")
-    if (tolower(name_trim) %in% c("df", "dendf", "numdf")) return(tolower(name_trim))
+    key <- tolower(name_trim)
+    val <- if (!is.na(key) && key %in% names(lookup)) lookup[[key]] else NULL
+    if (!is.null(val)) return(val)
     if (grepl("^Pr\\(>", name_trim)) return("p_value")
     cleaned <- tolower(name_trim)
     cleaned <- gsub("[^[:alnum:]]+", "_", cleaned)
