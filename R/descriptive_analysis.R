@@ -194,7 +194,7 @@ compute_descriptive_summary <- function(data, group_var = NULL) {
       group_data,
       numeric_vars,
       "cv",
-      ~ 100 * stats::sd(.x, na.rm = TRUE) / stats::mean(.x, na.rm = TRUE)
+      ~ 100 * stats::sd(.x, na.rm = TRUE) / mean(.x, na.rm = TRUE)
     ),
     outliers = summarise_numeric(
       group_data,
