@@ -13,7 +13,7 @@ home_ui <- function(id) {
         h1("Welcome to Table Analyzer"),
         p(
           class = "lead text-muted",
-          "Turn your tabular data into publication-ready summary tables and plots."
+          "Turn your tabular data into publication-ready tables and plots."
         ),
         br(),
         div(
