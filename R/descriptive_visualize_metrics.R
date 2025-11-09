@@ -17,7 +17,14 @@ metric_panel_ui <- function(id, default_width = 400, default_height = 300,
         "Set the height of each metric panel in pixels."
       ))
     ),
-    add_color_customization_ui(ns, multi_group = TRUE),
+    fluidRow(
+      column(6, add_color_customization_ui(ns, multi_group = TRUE)),
+      column(6, base_size_ui(
+        ns,
+        default = 13,
+        help_text = "Adjust the base font size used for metric plot text elements."
+      ))
+    ),
     hr(),
     with_help_tooltip(
       downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;"),
@@ -184,7 +191,11 @@ tidy_descriptive_metric <- function(df, prefix) {
 }
 
 
-build_metric_plot <- function(metric_info, y_label, title, custom_colors = NULL) {
+build_metric_plot <- function(metric_info,
+                              y_label,
+                              title,
+                              custom_colors = NULL,
+                              base_size = 13) {
   df <- metric_info$data
   has_group <- isTRUE(metric_info$has_group)
 
@@ -202,7 +213,7 @@ build_metric_plot <- function(metric_info, y_label, title, custom_colors = NULL)
   }
   
   p +
-    theme_minimal(base_size = 13) +
+    theme_minimal(base_size = base_size) +
     labs(x = NULL, y = y_label, title = title) +
     theme(
       axis.text.x = element_text(angle = 45, hjust = 1),
@@ -260,6 +271,11 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
       multi_group = TRUE
     )
 
+    base_size <- base_size_server(
+      input = input,
+      default = 13
+    )
+
     cached_plot_details <- reactiveVal(NULL)
     cache_ready <- reactiveVal(FALSE)
 
@@ -272,7 +288,8 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
       list(
         summary_info(),
         filtered_data(),
-        custom_colors()
+        custom_colors(),
+        base_size()
       ),
       {
         invalidate_cache()
@@ -316,7 +333,13 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
       }
 
       list(
-        plot = build_metric_plot(metric_info, y_label, title, custom_colors = custom_colors())
+        plot = build_metric_plot(
+          metric_info,
+          y_label,
+          title,
+          custom_colors = custom_colors(),
+          base_size = base_size()
+        )
       )
     }
 

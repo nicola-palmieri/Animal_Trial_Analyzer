@@ -989,7 +989,13 @@ finalize_anova_plot_result <- function(response_plots,
   )
 }
 
-build_line_plot_panel <- function(stats_df, title_text, y_limits, factor1, factor2, line_colors) {
+build_line_plot_panel <- function(stats_df,
+                                  title_text,
+                                  y_limits,
+                                  factor1,
+                                  factor2,
+                                  line_colors,
+                                  base_size = 14) {
   if (is.null(factor2) || !factor2 %in% names(stats_df)) {
     color_value <- if (!is.null(line_colors) && length(line_colors) > 0) {
       unname(line_colors)[1]
@@ -1004,7 +1010,7 @@ build_line_plot_panel <- function(stats_df, title_text, y_limits, factor1, facto
         width = 0.15,
         color = color_value
       ) +
-      theme_minimal(base_size = 14) +
+      theme_minimal(base_size = base_size) +
       labs(x = factor1, y = "Mean ± SE") +
       theme(
         panel.grid.minor = element_blank(),
@@ -1031,7 +1037,7 @@ build_line_plot_panel <- function(stats_df, title_text, y_limits, factor1, facto
         aes(ymin = mean - se, ymax = mean + se),
         width = 0.15
       ) +
-      theme_minimal(base_size = 14) +
+      theme_minimal(base_size = base_size) +
       labs(
         x = factor1,
         y = "Mean ± SE",
@@ -1052,7 +1058,11 @@ build_line_plot_panel <- function(stats_df, title_text, y_limits, factor1, facto
     theme(plot.title = element_text(size = 12, face = "bold"))
 }
 
-plot_anova_lineplot_meanse <- function(data, info, layout_values, line_colors = NULL) {
+plot_anova_lineplot_meanse <- function(data,
+                                       info,
+                                       layout_values,
+                                       line_colors = NULL,
+                                       base_size = 14) {
   context <- initialize_anova_plot_context(data, info, layout_values)
   data <- context$data
   factor1 <- context$factor1
@@ -1101,7 +1111,8 @@ plot_anova_lineplot_meanse <- function(data, info, layout_values, line_colors = 
           y_limits = y_limits,
           factor1 = factor1,
           factor2 = factor2,
-          line_colors = line_colors
+          line_colors = line_colors,
+          base_size = base_size
         )
       })
 
@@ -1141,7 +1152,8 @@ plot_anova_lineplot_meanse <- function(data, info, layout_values, line_colors = 
         y_limits = y_limits,
         factor1 = factor1,
         factor2 = factor2,
-        line_colors = line_colors
+        line_colors = line_colors,
+        base_size = base_size
       )
     }
   }
@@ -1161,7 +1173,8 @@ build_bar_plot_panel <- function(stats_df,
                                  line_colors,
                                  base_fill,
                                  signif_df = NULL,
-                                 show_value_labels = FALSE) {
+                                 show_value_labels = FALSE,
+                                 base_size = 14) {
   format_numeric_labels <- scales::label_number(accuracy = 0.01, trim = TRUE)
 
   if (is.null(factor2) || !factor2 %in% names(stats_df)) {
@@ -1173,7 +1186,7 @@ build_bar_plot_panel <- function(stats_df,
         color = "gray40",
         linewidth = 0.5
       ) +
-      theme_minimal(base_size = 14) +
+      theme_minimal(base_size = base_size) +
       labs(
         x = factor1,
         y = "Mean ± SE",
@@ -1282,7 +1295,7 @@ build_bar_plot_panel <- function(stats_df,
       color = "gray40",
       linewidth = 0.5
     ) +
-    theme_minimal(base_size = 14) +
+    theme_minimal(base_size = base_size) +
     labs(
       x = factor1,
       y = "Mean ± SE",
@@ -1532,7 +1545,8 @@ plot_anova_barplot_meanse <- function(data,
                                       layout_values = list(),
                                       line_colors = NULL,
                                       posthoc_all = NULL,
-                                      show_value_labels = FALSE) {
+                                      show_value_labels = FALSE,
+                                      base_size = 14) {
   context <- initialize_anova_plot_context(data, info, layout_values)
   data <- context$data
   factor1 <- context$factor1
@@ -1587,7 +1601,8 @@ plot_anova_barplot_meanse <- function(data,
           line_colors = line_colors,
           base_fill = base_fill,
           signif_df = signif_df,
-          show_value_labels = show_value_labels
+          show_value_labels = show_value_labels,
+          base_size = base_size
         )
       }
 
@@ -1628,7 +1643,8 @@ plot_anova_barplot_meanse <- function(data,
         line_colors = line_colors,
         base_fill = base_fill,
         signif_df = signif_df,
-        show_value_labels = show_value_labels
+        show_value_labels = show_value_labels,
+        base_size = base_size
       )
     }
   }

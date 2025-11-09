@@ -44,7 +44,14 @@ visualize_twoway_ui <- function(id) {
           "Set how tall each subplot should be in pixels."
         ))
       ),
-      add_color_customization_ui(ns, multi_group = TRUE),
+      fluidRow(
+        column(6, add_color_customization_ui(ns, multi_group = TRUE)),
+        column(6, base_size_ui(
+          ns,
+          default = 14,
+          help_text = "Adjust the base font size used for the ANOVA plots."
+        ))
+      ),
       br(),
       with_help_tooltip(
         downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;"),
@@ -82,6 +89,11 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
       multi_group = TRUE
     )
 
+    base_size <- base_size_server(
+      input = input,
+      default = 14
+    )
+
     last_plot_type <- reactiveVal("lineplot_mean_se")
     
     observeEvent(input$plot_type, {
@@ -99,7 +111,7 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
       )
     }
 
-    compute_all_plots <- function(data, info, layout_inputs, colors) {
+    compute_all_plots <- function(data, info, layout_inputs, colors, base_size_value) {
       if (is.null(info)) {
         return(list())
       }
@@ -145,7 +157,8 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
           data,
           info,
           layout_inputs,
-          line_colors = line_colors
+          line_colors = line_colors,
+          base_size = base_size_value
         )
       )
 
@@ -161,7 +174,8 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
           layout_values = layout_inputs,
           line_colors = line_colors,
           posthoc_all = posthoc_data,
-          show_value_labels = isTRUE(input$show_bar_labels)
+          show_value_labels = isTRUE(input$show_bar_labels),
+          base_size = base_size_value
         )
       )
 
@@ -177,6 +191,7 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
         input$resp_rows,
         input$resp_cols,
         custom_colors(),
+        base_size(),
         input$show_bar_labels
       ),
       {
@@ -189,7 +204,13 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
           resp_cols = input$resp_cols
         )
 
-        cached_results$plots <- compute_all_plots(data, info, layout_inputs, custom_colors())
+        cached_results$plots <- compute_all_plots(
+          data,
+          info,
+          layout_inputs,
+          custom_colors(),
+          base_size()
+        )
       },
       ignoreNULL = FALSE
     )
