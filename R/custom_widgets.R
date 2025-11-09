@@ -154,9 +154,63 @@ color_dropdown_input <- function(ns, id = "color_choice", palette = basic_color_
 # ===============================================================
 
 with_help_tooltip <- function(widget, text) {
-  tags$div(
-    class = "ta-help-tooltip",
-    title = text,
-    widget
+  clean_text <- if (is.null(text)) "" else text
+  clean_text <- trimws(sub("^\\s*Help\\s*[:\u2013\u2014\-]?\\s*", "", clean_text))
+
+  build_icon <- function(extra_class = NULL) {
+    classes <- paste(c("ta-help-icon", extra_class), collapse = " ")
+    span_args <- list(
+      class = trimws(classes),
+      icon("info-circle", class = "ta-help-icon-symbol"),
+      tags$span(class = "ta-help-icon-text", "Help")
+    )
+
+    if (nzchar(clean_text)) {
+      span_args <- append(span_args, list(title = clean_text), after = 1)
+    }
+
+    do.call(tags$span, span_args)
+  }
+
+  inline_icon <- build_icon("ta-help-icon--inline")
+  appended <- FALSE
+
+  append_icon <- function(tag) {
+    if (appended) {
+      return(tag)
+    }
+
+    if (inherits(tag, "shiny.tag")) {
+      if (identical(tag$name, "label")) {
+        appended <<- TRUE
+        tag$children <- c(tag$children, list(inline_icon))
+        return(tag)
+      }
+
+      if (length(tag$children)) {
+        tag$children <- lapply(tag$children, append_icon)
+      }
+
+      return(tag)
+    }
+
+    if (inherits(tag, "shiny.tag.list")) {
+      tag[] <- lapply(tag, append_icon)
+      return(tag)
+    }
+
+    tag
+  }
+
+  widget <- append_icon(widget)
+
+  icon_element <- if (appended) NULL else build_icon("ta-help-icon--block")
+
+  do.call(
+    tags$div,
+    c(
+      list(class = "ta-help-tooltip"),
+      Filter(Negate(is.null), list(widget, icon_element))
+    )
   )
 }

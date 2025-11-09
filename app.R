@@ -49,7 +49,12 @@ ui <- navbarPage(
       .empty-state { max-width: 420px; margin-left: auto; margin-right: auto; }
       .empty-state-icon { font-size: 3rem; line-height: 1; }
       .empty-state h4 { font-weight: 600; }
-      .ta-help-tooltip { cursor: help; display: inline-block; width: 100%; }
+      .ta-help-tooltip { width: 100%; }
+      .ta-help-tooltip label { display: inline-flex; align-items: center; gap: 0.35rem; width: 100%; }
+      .ta-help-icon { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.85em; color: #0d6efd; cursor: help; font-weight: 500; line-height: 1; }
+      .ta-help-icon-symbol { font-size: 1rem; }
+      .ta-help-icon-text { font-size: 0.85em; }
+      .ta-help-icon--block { margin-top: 0.35rem; }
     "))
   ),
   
