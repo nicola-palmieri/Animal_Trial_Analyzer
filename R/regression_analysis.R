@@ -15,12 +15,12 @@ regression_ui <- function(id, engine = c("lm", "lmm"), allow_multi_response = FA
       uiOutput(ns("covar_selector")),
       if (engine == "lmm") uiOutput(ns("random_selector")),
       uiOutput(ns("interaction_select")),
+      uiOutput(ns("formula_preview")),
+      br(),
       tags$details(
         tags$summary(strong("Advanced options")),
         stratification_ui("strat", ns)
       ),
-      hr(),
-      uiOutput(ns("formula_preview")),
       br(),
       fluidRow(
         column(6, with_help_tooltip(

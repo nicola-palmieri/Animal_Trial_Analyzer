@@ -24,7 +24,6 @@ upload_ui <- function(id) {
         "Help: Decide whether to explore the built-in example data or load your own table."
       ),
       uiOutput(ns("layout_example")),
-      hr(),
       with_help_tooltip(
         fileInput(
           ns("file"),
@@ -34,7 +33,6 @@ upload_ui <- function(id) {
         "Help: Provide the Excel workbook that stores your study measurements."
       ),
       uiOutput(ns("sheet_selector")),
-      hr(),
       uiOutput(ns("type_selectors"))
     ),
     mainPanel(

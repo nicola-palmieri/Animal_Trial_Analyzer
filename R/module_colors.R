@@ -19,7 +19,6 @@ add_color_customization_server <- function(ns, input, output, data, color_var_re
     # Single color UI shown when multi-group off or no color_var available
     if (!isTRUE(multi_group) || color_var %in% c("", "None")) {
       tagList(
-        br(),
         h5("Color"),
         with_help_tooltip(
           color_dropdown_input(ns, "single_color", basic_color_palette, ncol = 4),

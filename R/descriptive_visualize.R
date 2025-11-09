@@ -26,7 +26,6 @@ visualize_descriptive_ui <- function(id) {
         ),
         "Help: Choose the descriptive chart that best answers your question."
       ),
-      hr(),
       uiOutput(ns("sub_controls"))  # controls from active submodule
     ),
     mainPanel(

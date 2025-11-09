@@ -11,7 +11,6 @@ filter_ui <- function(id) {
       p("Select the columns to focus on and adjust the filters to refine the dataset for analysis."),
       hr(),
       uiOutput(ns("column_selector")),
-      hr(),
       uiOutput(ns("filter_widgets"))
     ),
     mainPanel(

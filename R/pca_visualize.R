@@ -41,7 +41,6 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
         ),
         "Help: Pick how the PCA results should be displayed."
       ),
-      hr(),
       with_help_tooltip(
         selectInput(
           ns("pca_color"),
@@ -137,7 +136,7 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
         )
       ),
       add_color_customization_ui(ns, multi_group = TRUE),
-      hr(),
+      br(),
       with_help_tooltip(
         downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;"),
         "Help: Save the PCA figure as an image file."

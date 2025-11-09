@@ -22,7 +22,6 @@ visualize_twoway_ui <- function(id) {
         ),
         "Help: Pick the chart style you prefer for viewing group means and uncertainty."
       ),
-      hr(),
       uiOutput(ns("layout_controls")),
       conditionalPanel(
         condition = sprintf("input['%s'] === 'barplot_mean_se'", ns("plot_type")),
@@ -46,7 +45,7 @@ visualize_twoway_ui <- function(id) {
         ))
       ),
       add_color_customization_ui(ns, multi_group = TRUE),
-      hr(),
+      br(),
       with_help_tooltip(
         downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;"),
         "Help: Save the current figure as an image file."

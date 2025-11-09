@@ -42,8 +42,6 @@ analysis_ui <- function(id) {
         ),
         "Help: Choose the statistical method you want to run on the filtered data."
       ),
-      
-      hr(),
       uiOutput(ns("config_panel"))
     ),
     

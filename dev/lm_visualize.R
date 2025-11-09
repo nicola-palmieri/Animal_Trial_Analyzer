@@ -20,20 +20,17 @@ visualize_lm_ui <- function(id) {
         ),
         selected = "auto"
       ),
-      hr(),
       # Dynamic sub-controls depending on plot type
       uiOutput(ns("sub_controls")),
-      hr(),
       # Layout controls (strata/response grids), same pattern as ANOVA
       uiOutput(ns("layout_controls")),
       fluidRow(
         column(6, numericInput(ns("plot_width"),  "Subplot width (px)",  400, 200, 2000, 50)),
         column(6, numericInput(ns("plot_height"), "Subplot height (px)", 300, 200, 2000, 50))
       ),
-      hr(),
       # Color customization; auto-switch between single / grouped
       add_color_customization_ui(ns, multi_group = TRUE),  # server decides when it's single/group
-      hr(),
+      br(),
       downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;")
     ),
     mainPanel(

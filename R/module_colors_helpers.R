@@ -12,8 +12,7 @@ render_color_inputs <- function(ns, data, color_var) {
   default_palette <- rep(basic_color_palette, length.out = length(lvls))
 
   tagList(
-    br(),
-    h5(paste("Colors for", color_var)),
+    h5("Colors"),
     lapply(seq_along(lvls), function(i) {
       selected <- default_palette[i]
       tags$div(
