@@ -6,86 +6,55 @@ build_anova_layout_controls <- function(ns, input, info) {
   has_strata <- !is.null(info$strata) && !is.null(info$strata$var)
   n_responses <- if (!is.null(info$responses)) length(info$responses) else 0
 
+  make_grid_input <- function(id, label, help_text) {
+    with_help_tooltip(
+      numericInput(
+        ns(id),
+        label,
+        value = isolate(if (is.null(input[[id]])) NA else input[[id]]),
+        min = 1,
+        max = 10,
+        step = 1
+      ),
+      help_text
+    )
+  }
+
+  build_grid_section <- function(title, row_id, col_id, row_help, col_help) {
+    tagList(
+      h5(title),
+      fluidRow(
+        column(width = 6, make_grid_input(row_id, "Grid rows", row_help)),
+        column(width = 6, make_grid_input(col_id, "Grid columns", col_help))
+      )
+    )
+  }
+
   strata_inputs <- if (has_strata) {
-    tagList(
-      h5("Across strata:"),
-      fluidRow(
-        column(
-          width = 6,
-          with_help_tooltip(
-            numericInput(
-              ns("strata_rows"),
-              "Grid rows",
-              value = isolate(if (is.null(input$strata_rows)) NA else input$strata_rows),
-              min = 1,
-              max = 10,
-              step = 1
-            ),
-            "Set how many rows of plots to use when displaying different strata."
-          )
-        ),
-        column(
-          width = 6,
-          with_help_tooltip(
-            numericInput(
-              ns("strata_cols"),
-              "Grid columns",
-              value = isolate(if (is.null(input$strata_cols)) NA else input$strata_cols),
-              min = 1,
-              max = 10,
-              step = 1
-            ),
-            "Set how many columns of plots to use when displaying different strata."
-          )
-        )
-      )
+    build_grid_section(
+      title = "Across strata:",
+      row_id = "strata_rows",
+      col_id = "strata_cols",
+      row_help = "Set how many rows of plots to use when displaying different strata.",
+      col_help = "Set how many columns of plots to use when displaying different strata."
     )
   } else {
     NULL
   }
-  
+
   response_inputs <- if (!is.null(n_responses) && n_responses > 1) {
-    tagList(
-      h5("Across responses:"),
-      fluidRow(
-        column(
-          width = 6,
-          with_help_tooltip(
-            numericInput(
-              ns("resp_rows"),
-              "Grid rows",
-              value = isolate(if (is.null(input$resp_rows)) NA else input$resp_rows),
-              min = 1,
-              max = 10,
-              step = 1
-            ),
-            "Set the number of plot rows when multiple responses are shown together."
-          )
-        ),
-        column(
-          width = 6,
-          with_help_tooltip(
-            numericInput(
-              ns("resp_cols"),
-              "Grid columns",
-              value = isolate(if (is.null(input$resp_cols)) NA else input$resp_cols),
-              min = 1,
-              max = 10,
-              step = 1
-            ),
-            "Set the number of plot columns when multiple responses are shown together."
-          )
-        )
-      )
+    build_grid_section(
+      title = "Across responses:",
+      row_id = "resp_rows",
+      col_id = "resp_cols",
+      row_help = "Set the number of plot rows when multiple responses are shown together.",
+      col_help = "Set the number of plot columns when multiple responses are shown together."
     )
   } else {
     NULL
   }
-  
-  tagList(
-    strata_inputs,
-    response_inputs
-  )
+
+  tagList(strata_inputs, response_inputs)
 }
 
 
@@ -115,97 +84,73 @@ prepare_stratified_anova <- function(
       strata_order <- stratification$levels
     }
   }
-  
-  if (!is.null(factor1_var) && !is.null(factor1_order)) {
-    df[[factor1_var]] <- factor(as.character(df[[factor1_var]]), levels = factor1_order)
-  }
-  
-  if (!is.null(factor2_var) && !is.null(factor2_order)) {
-    df[[factor2_var]] <- factor(as.character(df[[factor2_var]]), levels = factor2_order)
-  }
-  
-  if (!is.null(stratify_var) && stratify_var %in% names(df)) {
-    if (!is.null(strata_order) && length(strata_order) > 0) {
-      df[[stratify_var]] <- factor(as.character(df[[stratify_var]]), levels = strata_order)
-    } else {
-      df[[stratify_var]] <- as.factor(as.character(df[[stratify_var]]))
+
+  set_factor_levels <- function(data, var, levels = NULL, default_factor = FALSE) {
+    if (is.null(var) || !var %in% names(data)) return(data)
+    if (!is.null(levels)) {
+      data[[var]] <- factor(as.character(data[[var]]), levels = levels)
+    } else if (default_factor) {
+      data[[var]] <- as.factor(as.character(data[[var]]))
     }
+    data
   }
-  
+
+  df <- df |>
+    set_factor_levels(factor1_var, factor1_order) |>
+    set_factor_levels(factor2_var, factor2_order) |>
+    set_factor_levels(stratify_var, strata_order, default_factor = TRUE)
+
   strata <- if (!is.null(stratify_var) && stratify_var %in% names(df)) {
     levels(df[[stratify_var]])
   } else {
     NULL
   }
-  
-  build_rhs <- function() {
-    if (model == "oneway_anova") {
-      factor1_var
-    } else if (model == "twoway_anova") {
-      if (!is.null(factor1_var) && !is.null(factor2_var)) {
-        paste(factor1_var, factor2_var, sep = " *")
-      } else {
-        factor1_var
-      }
+
+  rhs <- switch(
+    model,
+    oneway_anova = factor1_var,
+    twoway_anova = if (!is.null(factor1_var) && !is.null(factor2_var)) {
+      paste(factor1_var, factor2_var, sep = " *")
     } else {
       factor1_var
-    }
-  }
-  
-  build_formula <- function(resp) {
-    rhs <- build_rhs()
-    if (is.null(rhs) || rhs == "") rhs <- "1"
-    as.formula(paste(resp, "~", rhs))
-  }
-  
-  fit_fn <- function(fml, data) {
-    stats::aov(fml, data = data)
-  }
-  safe_fit <- purrr::safely(fit_fn)
-  
-  if (is.null(strata)) {
-    out <- list()
-    for (resp in responses) {
-      fit_result <- safe_fit(build_formula(resp), df)
-      out[[resp]] <- list(
+    },
+    factor1_var
+  )
+  rhs <- if (is.null(rhs) || rhs == "") "1" else rhs
+
+  build_formula <- function(resp) stats::as.formula(paste(resp, "~", rhs))
+  safe_fit <- purrr::safely(function(fml, data) stats::aov(fml, data = data))
+
+  fit_models_for_data <- function(data) {
+    lapply(responses, function(resp) {
+      fit_result <- safe_fit(build_formula(resp), data)
+      list(
         model = fit_result$result,
         error = if (!is.null(fit_result$error)) conditionMessage(fit_result$error) else NULL
       )
-    }
-    return(list(
-      type = model,
-      models = out,
-      responses = responses,
-      strata = NULL,
-      factors = list(factor1 = factor1_var, factor2 = factor2_var),
-      orders = list(order1 = factor1_order, order2 = factor2_order),
-      data_used = df
-    ))
+    }) |>
+      stats::setNames(responses)
   }
-  
-  out <- list()
-  for (s in strata) {
-    sub <- df[df[[stratify_var]] == s, , drop = FALSE]
-    sub_models <- list()
-    for (resp in responses) {
-      fit_result <- safe_fit(build_formula(resp), sub)
-      sub_models[[resp]] <- list(
-        model = fit_result$result,
-        error = if (!is.null(fit_result$error)) conditionMessage(fit_result$error) else NULL
-      )
-    }
-    out[[s]] <- sub_models
-  }
-  
-  list(
+
+  base_info <- list(
     type = model,
-    models = out,
     responses = responses,
-    strata = list(var = stratify_var, levels = strata),
     factors = list(factor1 = factor1_var, factor2 = factor2_var),
     orders = list(order1 = factor1_order, order2 = factor2_order),
     data_used = df
   )
+
+  if (is.null(strata)) {
+    return(c(base_info, list(models = fit_models_for_data(df), strata = NULL)))
+  }
+
+  models <- lapply(strata, function(s) {
+    subset_rows <- df[[stratify_var]] == s & !is.na(df[[stratify_var]])
+    fit_models_for_data(df[subset_rows, , drop = FALSE])
+  })
+  names(models) <- strata
+
+  c(base_info, list(models = models, strata = list(var = stratify_var, levels = strata)))
 }
 
 
