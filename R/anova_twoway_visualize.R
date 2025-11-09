@@ -94,13 +94,9 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
       default = 14
     )
 
-    last_plot_type <- reactiveVal("lineplot_mean_se")
-    
-    observeEvent(input$plot_type, {
-      last_plot_type(input$plot_type)
-    }, ignoreInit = TRUE)
-
     cached_results <- reactiveValues(plots = list())
+
+    plot_types <- c("lineplot_mean_se", "barplot_mean_se")
 
     compute_empty_result <- function(message = NULL) {
       list(
@@ -111,25 +107,39 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
       )
     }
 
+    empty_results <- function(message) {
+      setNames(rep(list(compute_empty_result(message)), length(plot_types)), plot_types)
+    }
+
+    extract_or <- function(x, name, default) {
+      if (is.null(x)) return(default)
+      value <- x[[name]]
+      if (is.null(value)) default else value
+    }
+
+    update_layout_inputs <- function(section, rows_id, cols_id) {
+      if (is.null(section)) return()
+      rows <- section$rows
+      cols <- section$cols
+      if (!is.null(rows)) {
+        sync_numeric_input(session, rows_id, input[[rows_id]], rows)
+      }
+      if (!is.null(cols)) {
+        sync_numeric_input(session, cols_id, input[[cols_id]], cols)
+      }
+    }
+
     compute_all_plots <- function(data, info, layout_inputs, colors, base_size_value) {
       if (is.null(info)) {
         return(list())
       }
 
       if (!identical(info$type, "twoway_anova")) {
-        msg <- "No two-way ANOVA results available for plotting."
-        return(list(
-          lineplot_mean_se = compute_empty_result(msg),
-          barplot_mean_se = compute_empty_result(msg)
-        ))
+        return(empty_results("No two-way ANOVA results available for plotting."))
       }
 
-      if (is.null(data) || (!is.null(data) && nrow(data) == 0)) {
-        msg <- "No data available for plotting."
-        return(list(
-          lineplot_mean_se = compute_empty_result(msg),
-          barplot_mean_se = compute_empty_result(msg)
-        ))
+      if (is.null(data) || nrow(data) == 0) {
+        return(empty_results("No data available for plotting."))
       }
 
       safe_plot <- function(expr) {
@@ -145,41 +155,35 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
         })
       }
 
-      line_colors <- colors
-      if (is.null(line_colors) || length(line_colors) == 0) {
-        line_colors <- NULL
-      }
-
-      results <- list()
-
-      results$lineplot_mean_se <- safe_plot(
-        plot_anova_lineplot_meanse(
-          data,
-          info,
-          layout_inputs,
-          line_colors = line_colors,
-          base_size = base_size_value
-        )
-      )
+      line_colors <- if (length(colors) == 0) NULL else colors
 
       posthoc_data <- tryCatch(
         compile_anova_results(info)$posthoc,
         error = function(e) NULL
       )
 
-      results$barplot_mean_se <- safe_plot(
-        plot_anova_barplot_meanse(
-          data,
-          info,
-          layout_values = layout_inputs,
-          line_colors = line_colors,
-          posthoc_all = posthoc_data,
-          show_value_labels = isTRUE(input$show_bar_labels),
-          base_size = base_size_value
+      list(
+        lineplot_mean_se = safe_plot(
+          plot_anova_lineplot_meanse(
+            data,
+            info,
+            layout_inputs,
+            line_colors = line_colors,
+            base_size = base_size_value
+          )
+        ),
+        barplot_mean_se = safe_plot(
+          plot_anova_barplot_meanse(
+            data,
+            info,
+            layout_values = layout_inputs,
+            line_colors = line_colors,
+            posthoc_all = posthoc_data,
+            show_value_labels = isTRUE(input$show_bar_labels),
+            base_size = base_size_value
+          )
         )
       )
-
-      results
     }
 
     observeEvent(
@@ -219,29 +223,25 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
 
     current_result <- reactive({
       res <- results()
-      if (length(res) == 0) {
-        return(NULL)
-      }
+      if (!length(res)) return(NULL)
       res[[input$plot_type]]
     })
 
     plot_obj <- reactive({
       info <- current_result()
-      if (is.null(info) || !is.null(info$warning) || is.null(info$plot)) {
-        return(NULL)
-      }
+      if (is.null(info) || !is.null(info$warning)) return(NULL)
       info$plot
     })
 
     plot_size <- reactive({
       res <- current_result()
-      layout <- if (!is.null(res)) res$layout else NULL
-      strata_layout <- if (!is.null(layout) && !is.null(layout$strata)) layout$strata else list()
-      response_layout <- if (!is.null(layout) && !is.null(layout$responses)) layout$responses else list()
-      strata_rows <- if (!is.null(strata_layout$rows)) strata_layout$rows else 1
-      strata_cols <- if (!is.null(strata_layout$cols)) strata_layout$cols else 1
-      resp_rows <- if (!is.null(response_layout$rows)) response_layout$rows else 1
-      resp_cols <- if (!is.null(response_layout$cols)) response_layout$cols else 1
+      layout <- if (is.null(res)) list() else extract_or(res, "layout", list())
+      strata_layout <- extract_or(layout, "strata", list(rows = 1, cols = 1))
+      response_layout <- extract_or(layout, "responses", list(rows = 1, cols = 1))
+      strata_rows <- extract_or(strata_layout, "rows", 1)
+      strata_cols <- extract_or(strata_layout, "cols", 1)
+      resp_rows <- extract_or(response_layout, "rows", 1)
+      resp_cols <- extract_or(response_layout, "cols", 1)
       list(
         w = input$plot_width * strata_cols * resp_cols,
         h = input$plot_height * strata_rows * resp_rows
@@ -250,41 +250,14 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
 
     observeEvent(results(), {
       res_list <- results()
-      if (length(res_list) == 0) {
-        return()
-      }
+      if (!length(res_list)) return()
 
-      first_valid <- NULL
-      for (item in res_list) {
-        if (!is.null(item$defaults) && !is.null(item$layout)) {
-          first_valid <- item
-          break
-        }
-      }
+      valid <- Filter(function(item) !is.null(item$defaults) && !is.null(item$layout), res_list)
+      if (!length(valid)) return()
 
-      if (is.null(first_valid)) {
-        return()
-      }
-
-      defaults <- first_valid$defaults
-
-      if (!is.null(defaults$strata)) {
-        rows <- defaults$strata$rows
-        cols <- defaults$strata$cols
-        if (!is.null(rows) && !is.null(cols)) {
-          sync_numeric_input(session, "strata_rows", input$strata_rows, rows)
-          sync_numeric_input(session, "strata_cols", input$strata_cols, cols)
-        }
-      }
-
-      if (!is.null(defaults$responses)) {
-        rows <- defaults$responses$rows
-        cols <- defaults$responses$cols
-        if (!is.null(rows) && !is.null(cols)) {
-          sync_numeric_input(session, "resp_rows", input$resp_rows, rows)
-          sync_numeric_input(session, "resp_cols", input$resp_cols, cols)
-        }
-      }
+      defaults <- valid[[1]]$defaults
+      update_layout_inputs(defaults$strata, "strata_rows", "strata_cols")
+      update_layout_inputs(defaults$responses, "resp_rows", "resp_cols")
     }, ignoreNULL = FALSE)
 
     output$layout_controls <- renderUI({
@@ -295,19 +268,13 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
 
     output$plot_warning <- renderUI({
       info <- current_result()
-      if (is.null(info)) {
-        return(NULL)
-      }
-      if (!is.null(info$warning)) {
-        div(class = "alert alert-warning", HTML(info$warning))
-      } else {
-        NULL
-      }
+      if (is.null(info) || is.null(info$warning)) return(NULL)
+      div(class = "alert alert-warning", HTML(info$warning))
     })
 
     output$plot <- renderPlot({
       plot <- plot_obj()
-      if (is.null(plot)) return(NULL)
+      req(plot)
       plot
     },
     width = function() plot_size()$w,
