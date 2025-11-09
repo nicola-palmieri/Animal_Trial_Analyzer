@@ -318,11 +318,14 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
           verbatimTextOutput(ns(paste0("summary_", idx))),
           br(),
           h5("Diagnostics"),
-          helpText(reg_diagnostic_explanation),
+          br(),
           fluidRow(
             column(6, plotOutput(ns(paste0("resid_", idx)))),
             column(6, plotOutput(ns(paste0("qq_", idx))))
           ),
+          br(),
+          helpText(reg_diagnostic_explanation),
+          br(),
           br(),
           with_help_tooltip(
             downloadButton(ns(paste0("download_", idx)), "Download results", style = "width: 100%;"),
@@ -339,11 +342,14 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
                 verbatimTextOutput(ns(paste0("summary_", idx, "_", j))),
                 br(),
                 h5("Diagnostics"),
-                helpText(reg_diagnostic_explanation),
+                br(),
                 fluidRow(
                   column(6, plotOutput(ns(paste0("resid_", idx, "_", j)))),
                   column(6, plotOutput(ns(paste0("qq_", idx, "_", j))))
                 ),
+                br(),
+                helpText(reg_diagnostic_explanation),
+                br(),
                 br(),
                 with_help_tooltip(
                   downloadButton(ns(paste0("download_", idx, "_", j)), "Download results", style = "width: 100%;"),
