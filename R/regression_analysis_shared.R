@@ -6,6 +6,23 @@
 # UI setup
 # ---------------------------------------------------------------
 
+compact_chr <- function(x) {
+  if (is.null(x) || length(x) == 0) return(character(0))
+  x
+}
+
+trim_output_section <- function(lines, start_pattern, end_pattern = NULL, end_offset = 0) {
+  start <- grep(start_pattern, lines)[1]
+  if (is.na(start)) return(lines)
+  end <- if (is.null(end_pattern)) NA_integer_ else grep(end_pattern, lines)[1]
+  if (!is.na(end)) {
+    end <- max(start, end - end_offset)
+    lines[start:end]
+  } else {
+    lines[start:length(lines)]
+  }
+}
+
 reg_detect_types <- function(df) {
   num_vars <- names(df)[sapply(df, is.numeric)]
   fac_vars <- names(df)[sapply(df, function(x) is.factor(x) || is.character(x))]
@@ -61,10 +78,7 @@ reg_interactions_ui <- function(ns, fixed, fac_vars) {
 
 reg_compose_rhs <- function(fixed, covar, interactions, random = NULL, engine = c("lm","lmm")) {
   engine <- match.arg(engine)
-  rhs <- character(0)
-  if (!is.null(fixed) && length(fixed) > 0) rhs <- c(rhs, fixed)
-  if (!is.null(covar) && length(covar) > 0) rhs <- c(rhs, covar)
-  if (!is.null(interactions) && length(interactions) > 0) rhs <- c(rhs, interactions)
+  rhs <- c(compact_chr(fixed), compact_chr(covar), compact_chr(interactions))
   if (engine == "lmm" && !is.null(random) && nzchar(random)) {
     rhs <- c(rhs, paste0("(1|", random, ")"))
   }
@@ -112,24 +126,14 @@ reg_display_summary <- function(model, engine = c("lm", "lmm")) {
     cat(paste(aout, collapse = "\n"), "\n\n")
 
     sout <- capture.output(summary(model))
-    start <- grep("^Residuals:", sout)[1]
-    stop  <- grep("^Signif\\. codes", sout)[1]
-    if (!is.na(start)) {
-      if (!is.na(stop)) sout <- sout[start:(stop - 2)]
-      else sout <- sout[start:length(sout)]
-    }
+    sout <- trim_output_section(sout, "^Residuals:", "^Signif\\. codes", 2)
     cat(paste(sout, collapse = "\n"))
   } else {
     aout <- capture.output(anova(model, type = 3))
     cat(paste(aout, collapse = "\n"), "\n\n")
 
     sout <- capture.output(summary(model))
-    start <- grep("^Scaled residuals:", sout)[1]
-    stop  <- grep("^Correlation of Fixed Effects:", sout)[1]
-    if (!is.na(start)) {
-      if (!is.na(stop)) sout <- sout[start:(stop - 1)]
-      else sout <- sout[start:length(sout)]
-    }
+    sout <- trim_output_section(sout, "^Scaled residuals:", "^Correlation of Fixed Effects:", 1)
 
     icc_df <- compute_icc(model)
     if (!is.null(icc_df) && nrow(icc_df) > 0) {
@@ -196,7 +200,6 @@ tidy_regression_model <- function(model, engine) {
     names(coef_df) <- c("term", clean_regression_coef_names(original_names[-1]))
   }
 
-  metrics <- NULL
   if (inherits(model, "lm")) {
     sm <- summary(model)
     metrics <- data.frame(
@@ -250,20 +253,23 @@ compile_regression_results <- function(model_info, engine) {
     fit_entry <- model_info$fits[[resp]]
     if (is.null(fit_entry)) next
 
+    store_results <- function(label, stratum) {
+      tidy <- tidy_regression_model(stratum$model, engine)
+      if (is.null(summary_list[[resp]])) summary_list[[resp]] <<- list()
+      if (is.null(effects_list[[resp]])) effects_list[[resp]] <<- list()
+      summary_list[[resp]][[label]] <<- tidy$summary
+      effects_list[[resp]][[label]] <<- tidy$effects
+      if (!is.null(stratum$error)) {
+        if (is.null(errors_list[[resp]])) errors_list[[resp]] <<- list()
+        errors_list[[resp]][[label]] <<- stratum$error
+      }
+    }
+
     if (isTRUE(fit_entry$stratified)) {
-      strata_entries <- fit_entry$strata
-      for (stratum in strata_entries) {
+      for (stratum in fit_entry$strata) {
         label <- if (!is.null(stratum$display)) stratum$display else stratum$label
         if (is.null(label) || !nzchar(label)) label <- "Stratum"
-        tidy <- tidy_regression_model(stratum$model, engine)
-        if (is.null(summary_list[[resp]])) summary_list[[resp]] <- list()
-        if (is.null(effects_list[[resp]])) effects_list[[resp]] <- list()
-        summary_list[[resp]][[label]] <- tidy$summary
-        effects_list[[resp]][[label]] <- tidy$effects
-        if (!is.null(stratum$error)) {
-          if (is.null(errors_list[[resp]])) errors_list[[resp]] <- list()
-          errors_list[[resp]][[label]] <- stratum$error
-        }
+        store_results(label, stratum)
       }
     } else {
       stratum <- fit_entry$strata[[1]]
@@ -284,10 +290,14 @@ compile_regression_results <- function(model_info, engine) {
 # ===============================================================
 
 write_lm_docx <- function(model, file, subtitle = NULL) {
-  
+
   # Determine model type
   is_lmm <- inherits(model, "merMod")
   dep_var <- all.vars(formula(model))[1]
+
+  add_blank_line <- function(doc, text = "", style = "Normal") {
+    body_add_par(doc, text, style = style)
+  }
 
   # Helper for consistent table formatting
   format_table <- function(df, bold_p = TRUE) {
@@ -328,7 +338,7 @@ write_lm_docx <- function(model, file, subtitle = NULL) {
 
   # Create new Word document
   doc <- read_docx()
-  
+
   # ---- Title ----
   title_text <- sprintf(
     "%s Results — %s",
@@ -339,7 +349,7 @@ write_lm_docx <- function(model, file, subtitle = NULL) {
     doc,
     fpar(ftext(title_text, prop = fp_text(bold = TRUE, font.size = 12)))
   )
-  
+
   # ---- Subtitle (Stratum, if any) ----
   if (!is.null(subtitle) && nzchar(subtitle)) {
     subtitle_text <- ftext(
@@ -348,14 +358,14 @@ write_lm_docx <- function(model, file, subtitle = NULL) {
     )
     doc <- body_add_fpar(doc, fpar(subtitle_text))
   }
-  
-  doc <- body_add_par(doc, "")
-  
+
+  doc <- add_blank_line(doc)
+
   # ==========================================================
   # 🔹 ANOVA (Type III)
   # ==========================================================
   doc <- body_add_fpar(doc, fpar(ftext("ANOVA (Type III)", prop = fp_text(bold = TRUE))))
-  doc <- body_add_par(doc, "")
+  doc <- add_blank_line(doc)
 
   if (is_lmm) {
     anova_tbl <- as.data.frame(anova(model, type = 3))
@@ -375,7 +385,7 @@ write_lm_docx <- function(model, file, subtitle = NULL) {
 
   ft_anova <- format_table(anova_tbl)
   doc <- body_add_flextable(doc, ft_anova)
-  doc <- body_add_par(doc, "")
+  doc <- add_blank_line(doc)
 
   # ==========================================================
   # 🔹 Random Effects & ICC (LMM only)
@@ -383,7 +393,7 @@ write_lm_docx <- function(model, file, subtitle = NULL) {
   if (is_lmm) {
     # ---- Random Effects ----
     doc <- body_add_fpar(doc, fpar(ftext("Random Effects", prop = fp_text(bold = TRUE))))
-    doc <- body_add_par(doc, "")
+    doc <- add_blank_line(doc)
 
     rand_df <- as.data.frame(lme4::VarCorr(model))
     if (nrow(rand_df) > 0) {
@@ -395,7 +405,7 @@ write_lm_docx <- function(model, file, subtitle = NULL) {
       ft_rand <- format_table(rand_df, bold_p = FALSE)
       doc <- body_add_flextable(doc, ft_rand)
     } else {
-      doc <- body_add_par(doc, "No random-effect variance components were estimated.", style = "Normal")
+      doc <- add_blank_line(doc, "No random-effect variance components were estimated.")
     }
 
     # ---- ICC ----
@@ -405,22 +415,22 @@ write_lm_docx <- function(model, file, subtitle = NULL) {
       icc_df <- NULL
     }
     if (!is.null(icc_df) && nrow(icc_df) > 0) {
-      doc <- body_add_par(doc, "")
+      doc <- add_blank_line(doc)
       doc <- body_add_fpar(doc, fpar(ftext("Intraclass Correlation (ICC)", prop = fp_text(bold = TRUE))))
-      doc <- body_add_par(doc, "")
+      doc <- add_blank_line(doc)
       icc_df$ICC <- round(icc_df$ICC, 3)
       ft_icc <- format_table(icc_df, bold_p = FALSE)
       doc <- body_add_flextable(doc, ft_icc)
     }
 
-    doc <- body_add_par(doc, "")
+    doc <- add_blank_line(doc)
   }
 
   # ==========================================================
   # 🔹 Model Coefficients
   # ==========================================================
   doc <- body_add_fpar(doc, fpar(ftext("Model Coefficients", prop = fp_text(bold = TRUE))))
-  doc <- body_add_par(doc, "")
+  doc <- add_blank_line(doc)
 
   coef_tbl <- as.data.frame(summary(model)$coefficients)
   coef_tbl <- tibble::rownames_to_column(coef_tbl, "Term")
@@ -437,9 +447,9 @@ write_lm_docx <- function(model, file, subtitle = NULL) {
   # ==========================================================
   # 🔹 Footer
   # ==========================================================
-  doc <- body_add_par(doc, "")
-  doc <- body_add_par(doc, "Significance level: p < 0.05 (bold values).", style = "Normal")
-  doc <- body_add_par(doc, sprintf("Generated by Table Analyzer on %s", Sys.Date()))
+  doc <- add_blank_line(doc)
+  doc <- add_blank_line(doc, "Significance level: p < 0.05 (bold values).")
+  doc <- add_blank_line(doc, sprintf("Generated by Table Analyzer on %s", Sys.Date()))
 
   # Save file
   print(doc, target = file)
