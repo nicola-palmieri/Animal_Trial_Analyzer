@@ -166,7 +166,7 @@ clean_regression_coef_names <- function(nms) {
   vapply(nms, function(name) {
     name_trim <- trimws(name)
     key <- tolower(name_trim)
-    val <- lookup[[key]]
+    val <- if (!is.na(key) && key %in% names(lookup)) lookup[[key]] else NULL
     if (!is.null(val)) return(val)
     if (grepl("^Pr\\(>", name_trim)) return("p_value")
     cleaned <- tolower(name_trim)
