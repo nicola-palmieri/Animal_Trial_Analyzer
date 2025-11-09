@@ -54,7 +54,7 @@ one_way_anova_server <- function(id, filtered_data) {
         with_help_tooltip(
           selectInput(
             ns("group"),
-            "Categorical predictor:",
+            "Categorical predictor",
             choices = cat_cols,
             selected = if (length(cat_cols) > 0) cat_cols[1] else NULL
           ),
@@ -74,7 +74,7 @@ one_way_anova_server <- function(id, filtered_data) {
       with_help_tooltip(
         selectInput(
           ns("order"),
-          "Order of levels (first = reference):",
+          "Order of levels (first = reference)",
           choices = levels,
           selected = levels,
           multiple = TRUE

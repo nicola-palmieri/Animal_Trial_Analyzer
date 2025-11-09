@@ -7,7 +7,7 @@ pca_ui <- function(id) {
   list(
     config = tagList(
       with_help_tooltip(
-        selectInput(ns("vars"), "Numeric variables:", choices = NULL, multiple = TRUE),
+        selectInput(ns("vars"), "Numeric variables", choices = NULL, multiple = TRUE),
         "Help: Pick the numeric variables whose combined patterns you want PCA to capture."
       ),
       tags$details(

@@ -150,7 +150,7 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
       with_help_tooltip(
         selectInput(
           ns("outlier_label"),
-          label = "Label outliers by:",
+          label = "Label outliers by",
           choices = c("None" = "", stats::setNames(cat_cols, cat_cols)),
           selected = current
         ),

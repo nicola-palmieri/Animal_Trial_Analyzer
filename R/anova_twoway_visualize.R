@@ -13,7 +13,7 @@ visualize_twoway_ui <- function(id) {
       with_help_tooltip(
         selectInput(
           ns("plot_type"),
-          label = "Select visualization type:",
+          label = "Select visualization type",
           choices = c(
             "Lineplots (mean ± SE)" = "lineplot_mean_se",
             "Barplots (mean ± SE)"  = "barplot_mean_se"

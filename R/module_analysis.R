@@ -23,7 +23,7 @@ analysis_ui <- function(id) {
       with_help_tooltip(
         selectInput(
           ns("analysis_type"),
-          "Select analysis type:",
+          "Select analysis type",
           choices = list(
             " " = "",
             "Descriptive" = c("Descriptive Statistics" = "Descriptive Statistics"),

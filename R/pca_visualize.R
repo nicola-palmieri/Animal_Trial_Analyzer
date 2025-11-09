@@ -35,7 +35,7 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
       with_help_tooltip(
         selectInput(
           ns("plot_type"),
-          label = "Select visualization type:",
+          label = "Select visualization type",
           choices = c("PCA biplot" = "biplot"),
           selected = "biplot"
         ),
@@ -44,7 +44,7 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
       with_help_tooltip(
         selectInput(
           ns("pca_color"),
-          label = "Color points by:",
+          label = "Color points by",
           choices = choices,
           selected = "None"
         ),
@@ -53,7 +53,7 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
       with_help_tooltip(
         selectInput(
           ns("pca_shape"),
-          label = "Shape points by:",
+          label = "Shape points by",
           choices = choices,
           selected = "None"
         ),
@@ -62,7 +62,7 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
       with_help_tooltip(
         selectInput(
           ns("pca_label"),
-          label = "Label points by:",
+          label = "Label points by",
           choices = choices,
           selected = "None"
         ),
@@ -71,7 +71,7 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
       with_help_tooltip(
         selectInput(
           ns("facet_var"),
-          label = "Facet by variable:",
+          label = "Facet by variable",
           choices = choices,
           selected = "None"
         ),
@@ -81,7 +81,7 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
       with_help_tooltip(
         numericInput(
           ns("pca_label_size"),
-          label = "Label size:",
+          label = "Label size",
           value = 2,
           min = 0.5,
           max = 6,

@@ -32,7 +32,7 @@ filter_server <- function(id, uploaded_data) {
       with_help_tooltip(
         selectInput(
           ns("columns"),
-          "Select columns to filter:",
+          "Select columns to filter",
           choices = names(df()),
           multiple = TRUE
         ),

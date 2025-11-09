@@ -37,7 +37,7 @@ stratification_server <- function(id, data) {
       with_help_tooltip(
         selectInput(
           ns("stratify_var"),
-          "Stratify by:",
+          "Stratify by",
           choices = c("None", cat_cols),
           selected = "None"
         ),
@@ -64,7 +64,7 @@ stratification_server <- function(id, data) {
       with_help_tooltip(
         selectInput(
           ns("strata_order"),
-          "Order of levels:",
+          "Order of levels",
           choices = available_levels,
           selected = available_levels,
           multiple = TRUE

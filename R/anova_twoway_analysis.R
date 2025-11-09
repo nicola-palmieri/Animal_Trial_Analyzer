@@ -55,7 +55,7 @@ two_way_anova_server <- function(id, filtered_data) {
         with_help_tooltip(
           selectInput(
             ns("factor1"),
-            "Categorical predictor 1 (x-axis):",
+            "Categorical predictor 1 (x-axis)",
             choices = cat_cols,
             selected = if (length(cat_cols) > 0) cat_cols[1] else NULL
           ),
@@ -64,7 +64,7 @@ two_way_anova_server <- function(id, filtered_data) {
         with_help_tooltip(
           selectInput(
             ns("factor2"),
-            "Categorical predictor 2 (lines):",
+            "Categorical predictor 2 (lines)",
             choices = cat_cols,
             selected = if (length(cat_cols) > 1) cat_cols[2] else NULL
           ),
@@ -84,7 +84,7 @@ two_way_anova_server <- function(id, filtered_data) {
       with_help_tooltip(
         selectInput(
           ns("order1"),
-          paste("Order of levels (first = reference):", input$factor1, "(x-axis)"),
+          paste("Order of levels (first = reference)", input$factor1, "(x-axis)"),
           choices = levels1,
           selected = levels1,
           multiple = TRUE
@@ -99,7 +99,7 @@ two_way_anova_server <- function(id, filtered_data) {
       with_help_tooltip(
         selectInput(
           ns("order2"),
-          paste("Order of levels (first = reference):", input$factor2, "(lines)"),
+          paste("Order of levels (first = reference)", input$factor2, "(lines)"),
           choices = levels2,
           selected = levels2,
           multiple = TRUE
