@@ -71,9 +71,9 @@ visualize_oneway_ui <- function(id) {
 visualize_oneway_server <- function(id, filtered_data, model_info) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
-
+    
     df <- reactive(filtered_data())
-
+    
     custom_colors <- add_color_customization_server(
       ns = ns,
       input = input,
@@ -82,187 +82,125 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
       color_var_reactive = reactive(NULL),
       multi_group = FALSE
     )
-
-    base_size <- base_size_server(
-      input = input,
-      default = 14
-    )
-
+    
+    base_size <- base_size_server(input = input, default = 14)
+    
     strata_grid <- plot_grid_server("strata_grid")
     response_grid <- plot_grid_server("response_grid")
-
-    cached_results <- reactiveValues(plots = list())
-
-    compute_empty_result <- function(message = NULL) {
+    
+    module_active <- reactive(TRUE)
+    
+    state <- reactive({
       list(
-        plot = NULL,
-        warning = message,
-        layout = NULL,
-        defaults = NULL
+        data          = df(),
+        info          = model_info(),
+        strata_rows   = strata_grid$rows(),
+        strata_cols   = strata_grid$cols(),
+        resp_rows     = response_grid$rows(),
+        resp_cols     = response_grid$cols(),
+        colors        = custom_colors(),
+        base_size     = base_size(),
+        show_labels   = isTRUE(input$show_bar_labels),
+        plot_type     = input$plot_type
       )
-    }
-
-    empty_plot_results <- function(message) {
+    })
+    
+    compute_all_plots <- function(data, info, layout_inputs, colors, base_size_value, show_labels) {
+      if (is.null(info) || !identical(info$type, "oneway_anova") || is.null(data) || nrow(data) == 0) {
+        return(list(
+          lineplot_mean_se = list(plot = NULL, warning = "No data or results available.", layout = NULL),
+          barplot_mean_se  = list(plot = NULL, warning = "No data or results available.", layout = NULL)
+        ))
+      }
+      
       list(
-        lineplot_mean_se = compute_empty_result(message),
-        barplot_mean_se = compute_empty_result(message)
-      )
-    }
-
-    compute_all_plots <- function(data, info, layout_inputs, colors, base_size_value) {
-      if (is.null(info)) {
-        return(list())
-      }
-      if (!identical(info$type, "oneway_anova")) {
-        return(empty_plot_results("No one-way ANOVA results available for plotting."))
-      }
-
-      if (is.null(data) || nrow(data) == 0) {
-        return(empty_plot_results("No data available for plotting."))
-      }
-
-      safe_plot <- function(expr) {
-        tryCatch({
-          result <- expr
-          if (is.null(result)) {
-            compute_empty_result("Unable to generate plot.")
-          } else {
-            result
-          }
-        }, error = function(e) {
-          compute_empty_result(e$message)
-        })
-      }
-
-      results <- list()
-
-      results$lineplot_mean_se <- safe_plot(
-        plot_anova_lineplot_meanse(
+        lineplot_mean_se = plot_anova_lineplot_meanse(
           data,
           info,
           layout_inputs,
           line_colors = colors,
           base_size = base_size_value
-        )
-      )
-
-      results$barplot_mean_se <- safe_plot(
-        plot_anova_barplot_meanse(
+        ),
+        barplot_mean_se = plot_anova_barplot_meanse(
           data,
           info,
           layout_values = layout_inputs,
           line_colors = colors,
-          show_value_labels = isTRUE(input$show_bar_labels),
+          show_value_labels = show_labels,
           base_size = base_size_value,
           posthoc_all = info$posthoc
         )
       )
-
-      results
     }
-
-    observeEvent(
-      list(
-        model_info(),
-        df(),
-        strata_grid$values(),
-        response_grid$values(),
-        custom_colors(),
-        base_size(),
-        input$show_bar_labels
-      ),
-      {
-        info <- model_info()
-        data <- df()
-        layout_inputs <- list(
-          strata_rows = strata_grid$rows(),
-          strata_cols = strata_grid$cols(),
-          resp_rows = response_grid$rows(),
-          resp_cols = response_grid$cols()
-        )
-
-        cached_results$plots <- compute_all_plots(
-          data,
-          info,
-          layout_inputs,
-          custom_colors(),
-          base_size()
-        )
-      },
-      ignoreNULL = FALSE
-    )
-
-    results <- reactive(cached_results$plots)
-
-    current_result <- reactive({
-      res <- results()
-      res[[input$plot_type]]
-    })
-
-    plot_obj <- reactive({
-      result <- current_result()
-      if (is.null(result) || !is.null(result$warning)) {
-        return(NULL)
-      }
-      result$plot
-    })
-
-    first_non_null <- function(x, default) if (is.null(x)) default else x
-
-    plot_size <- reactive({
-      layout <- first_non_null(current_result()$layout, list())
-      strata <- first_non_null(layout$strata, list(rows = 1, cols = 1))
-      responses <- first_non_null(layout$responses, list(rows = 1, cols = 1))
-
-      list(
-        w = input$plot_width * first_non_null(strata$cols, 1) * first_non_null(responses$cols, 1),
-        h = input$plot_height * first_non_null(strata$rows, 1) * first_non_null(responses$rows, 1)
+    
+    plot_info <- reactive({
+      req(module_active())
+      s <- state()
+      req(!is.null(s$data), !is.null(s$info))
+      layout_inputs <- list(
+        strata_rows = s$strata_rows,
+        strata_cols = s$strata_cols,
+        resp_rows   = s$resp_rows,
+        resp_cols   = s$resp_cols
       )
+      res <- compute_all_plots(s$data, s$info, layout_inputs, s$colors, s$base_size, s$show_labels)
+      res[[if (!is.null(s$plot_type) && s$plot_type %in% names(res)) s$plot_type else "lineplot_mean_se"]]
     })
-
+    
+    
+    size_val <- reactiveVal(list(w = 400, h = 300))
+    
+    observeEvent(plot_info(), {
+      req(module_active())
+      info <- plot_info()
+      layout <- info$layout
+      if (is.null(layout)) {
+        size_val(list(w = input$plot_width, h = input$plot_height))
+      } else {
+        strata <- layout$strata
+        responses <- layout$responses
+        nrow_l <- (strata$rows %||% 1L) * (responses$rows %||% 1L)
+        ncol_l <- (strata$cols %||% 1L) * (responses$cols %||% 1L)
+        size_val(list(
+          w = input$plot_width  * ncol_l,
+          h = input$plot_height * nrow_l
+        ))
+      }
+    }, ignoreInit = FALSE)
+    
     output$layout_controls <- renderUI({
       info <- model_info()
       req(info)
       build_anova_layout_controls(ns, input, info)
     })
-
+    
     output$plot_warning <- renderUI({
-      info <- current_result()
-      if (is.null(info) || is.null(info$warning)) {
-        return(NULL)
-      }
-      div(class = "alert alert-warning", HTML(info$warning))
+      info <- plot_info()
+      if (!is.null(info$warning)) div(class = "alert alert-warning", HTML(info$warning)) else NULL
     })
-
-    output$plot <- renderPlot(
-      {
-        plot <- plot_obj()
-        if (is.null(plot)) {
-          return(NULL)
-        }
-        plot
-      },
-      width = function() plot_size()$w,
-      height = function() plot_size()$h,
-      res = 96
-    )
-
+    
+    output$plot <- renderPlot({
+      info <- plot_info()
+      if (is.null(info$plot)) return(NULL)
+      info$plot
+    },
+    width  = function() size_val()$w,
+    height = function() size_val()$h,
+    res = 96)
+    
     output$download_plot <- downloadHandler(
       filename = function() paste0("anova_plot_", Sys.Date(), ".png"),
       content = function(file) {
-        res <- current_result()
-        req(res)
-        req(is.null(res$warning))
-        plot <- plot_obj()
-        req(plot)
-        size <- plot_size()
+        info <- plot_info()
+        req(info$plot, is.null(info$warning))
+        s <- size_val()
         ggsave(
           filename = file,
-          plot = plot,
+          plot = info$plot,
           device = "png",
           dpi = 300,
-          width = size$w / 96,
-          height = size$h / 96,
+          width  = s$w / 96,
+          height = s$h / 96,
           units = "in",
           limitsize = FALSE
         )
@@ -270,6 +208,7 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
     )
   })
 }
+
 
 extract_tukey_for_signif <- function(posthoc_entry) {
   if (is.null(posthoc_entry) || !is.data.frame(posthoc_entry)) return(NULL)
