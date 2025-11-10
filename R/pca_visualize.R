@@ -15,6 +15,24 @@
   keep <- vapply(data, .is_categorical, logical(1))
   cat_cols <- names(data)[keep]
 
+  if (length(cat_cols) > 0) {
+    max_levels <- 16L
+    within_limit <- vapply(cat_cols, function(column_name) {
+      column <- data[[column_name]]
+      if (is.null(column)) {
+        return(FALSE)
+      }
+      if (is.factor(column)) {
+        levels_count <- length(levels(base::droplevels(column)))
+      } else {
+        unique_values <- unique(as.character(column[!is.na(column)]))
+        levels_count <- length(unique_values)
+      }
+      levels_count <= max_levels
+    }, logical(1))
+    cat_cols <- cat_cols[within_limit]
+  }
+
   if (length(cat_cols) == 0) {
     return(c("None" = "None"))
   }
@@ -48,7 +66,7 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
           choices = choices,
           selected = "None"
         ),
-        "Colour the samples using a grouping variable to spot patterns."
+        "Colour the samples using a grouping variable to spot patterns. Only variables with 16 or fewer categories are available."
       ),
       with_help_tooltip(
         selectInput(
@@ -380,9 +398,18 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
       if (!is.null(color_var) && color_var %in% names(data)) {
         color_column <- data[[color_var]]
         color_levels <- if (is.factor(color_column)) {
-          levels(droplevels(color_column))
+          levels(base::droplevels(color_column))
         } else {
           unique(as.character(color_column[!is.na(color_column)]))
+        }
+        color_levels <- color_levels[!is.na(color_levels) & nzchar(color_levels)]
+        if (length(color_levels) > 16) {
+          message <- sprintf(
+            "Cannot colour points by '%s' because it has %d categories. Choose a variable with 16 or fewer categories.",
+            color_var,
+            length(color_levels)
+          )
+          return(empty_result(message))
         }
       }
 
