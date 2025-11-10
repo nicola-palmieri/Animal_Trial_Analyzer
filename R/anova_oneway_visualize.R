@@ -146,18 +146,12 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
         )
       )
 
-      posthoc_data <- tryCatch(
-        compile_anova_results(info)$posthoc,
-        error = function(e) NULL
-      )
-
       results$barplot_mean_se <- safe_plot(
         plot_anova_barplot_meanse(
           data,
           info,
           layout_values = layout_inputs,
           line_colors = colors,
-          posthoc_all = posthoc_data,
           show_value_labels = isTRUE(input$show_bar_labels),
           base_size = base_size_value
         )

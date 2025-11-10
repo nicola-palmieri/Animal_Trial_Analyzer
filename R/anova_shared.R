@@ -167,24 +167,22 @@ prepare_anova_outputs <- function(model_obj, factor_names) {
   rownames(anova_df) <- NULL
   anova_df <- anova_df[, c("Effect", setdiff(names(anova_df), "Effect"))]
   
-  # --- format p-values and round numeric columns ---
+  # --- round numeric columns and keep raw p-values ---
   p_col <- grep("^Pr", names(anova_df), value = TRUE)
   p_col <- if (length(p_col) > 0) p_col[1] else NULL
   raw_p <- if (!is.null(p_col)) anova_df[[p_col]] else rep(NA_real_, nrow(anova_df))
-  
+
   for (col in names(anova_df)) {
     if (is.numeric(anova_df[[col]])) {
       anova_df[[col]] <- round(anova_df[[col]], 2)
     }
   }
-  
+
   anova_significant <- !is.na(raw_p) & raw_p < 0.05
   if (!is.null(p_col)) {
-    formatted_p <- format_p_value(raw_p)
-    anova_df[[p_col]] <- add_significance_marker(formatted_p, raw_p)
     names(anova_df)[names(anova_df) == p_col] <- "p.value"
   } else {
-    anova_df$p.value <- NA_character_
+    anova_df$p.value <- NA_real_
   }
   
   # --- Post-hoc Tukey for each factor ---
@@ -223,8 +221,6 @@ prepare_anova_outputs <- function(model_obj, factor_names) {
     if ("p.value" %in% names(posthoc_combined)) {
       raw_posthoc_p <- posthoc_combined$p.value
       posthoc_significant <- !is.na(raw_posthoc_p) & raw_posthoc_p < 0.05
-      formatted_posthoc_p <- format_p_value(raw_posthoc_p)
-      posthoc_combined$p.value <- add_significance_marker(formatted_posthoc_p, raw_posthoc_p)
     } else {
       posthoc_significant <- rep(FALSE, nrow(posthoc_combined))
     }
@@ -1102,7 +1098,6 @@ build_bar_plot_panel <- function(stats_df,
                                  factor2,
                                  line_colors,
                                  base_fill,
-                                 signif_df = NULL,
                                  show_value_labels = FALSE,
                                  base_size = 14) {
   format_numeric_labels <- scales::label_number(accuracy = 0.01, trim = TRUE)
@@ -1151,48 +1146,6 @@ build_bar_plot_panel <- function(stats_df,
           inherit.aes = FALSE
         ) +
         scale_y_continuous(expand = expansion(mult = c(0.05, 0.12)))
-    }
-
-    if (!is.null(signif_df) && nrow(signif_df) > 0) {
-      signif_df <- signif_df |>
-        dplyr::filter(p.value < 0.05)
-      if (nrow(signif_df) > 0) {
-        max_y <- suppressWarnings(max(stats_df$mean + stats_df$se, na.rm = TRUE))
-        if (!is.finite(max_y)) {
-          max_y <- 0
-        }
-        step <- if (isTRUE(all.equal(max_y, 0))) 0.1 else abs(max_y) * 0.08
-        start <- max_y + step
-        signif_df <- signif_df |>
-          dplyr::mutate(
-            y_position = seq(
-              from = start,
-              by = step,
-              length.out = dplyr::n()
-            ),
-            label = format_significance_label(p.value),
-            xmin = group1,
-            xmax = group2,
-            .group_id = seq_len(dplyr::n())
-          )
-
-        plot_obj <- plot_obj + ggsignif::geom_signif(
-          data = signif_df,
-          aes(
-            xmin = xmin,
-            xmax = xmax,
-            annotations = label,
-            y_position = y_position,
-            group = .group_id
-          ),
-          manual = TRUE,
-          inherit.aes = FALSE,
-          tip_length = 0.01,
-          textsize = 3.8,
-          vjust = 0.5,
-          color = "gray30"
-        )
-      }
     }
 
     return(plot_obj)
@@ -1267,204 +1220,13 @@ build_bar_plot_panel <- function(stats_df,
       scale_y_continuous(expand = expansion(mult = c(0.05, 0.12)))
   }
 
-  if (!is.null(signif_df) && nrow(signif_df) > 0) {
-    signif_df <- signif_df |>
-      dplyr::filter(p.value < 0.05)
-
-    if (nrow(signif_df) > 0) {
-      if (!factor1 %in% names(signif_df)) {
-        signif_df[[factor1]] <- "__overall__"
-      }
-
-      lookup <- stats_df |>
-        dplyr::mutate(
-          .factor1 = as.character(.data[[factor1]]),
-          .factor2 = as.character(.data[[factor2]]),
-          .x_index = as.numeric(.data[[factor1]]),
-          .group_index = as.numeric(.data[[factor2]]),
-          .ymax = mean + se
-        )
-
-      n_groups <- length(group_levels)
-      lookup <- lookup |>
-        dplyr::mutate(
-          .x_offset = dodge$width * ((.group_index - 0.5) / max(1, n_groups) - 0.5),
-          .xpos = .x_index + .x_offset
-        )
-
-      signif_split <- split(signif_df, signif_df[[factor1]])
-      annotations <- lapply(names(signif_split), function(level_name) {
-        subset_df <- signif_split[[level_name]]
-        if (nrow(subset_df) == 0) {
-          return(NULL)
-        }
-
-        level_lookup <- lookup
-        if (!identical(level_name, "__overall__") && !is.na(level_name)) {
-          level_lookup <- dplyr::filter(level_lookup, .factor1 == level_name)
-        }
-
-        if (nrow(level_lookup) == 0) {
-          return(NULL)
-        }
-
-        base_max <- suppressWarnings(max(level_lookup$.ymax, na.rm = TRUE))
-        if (!is.finite(base_max)) {
-          base_max <- suppressWarnings(max(lookup$.ymax, na.rm = TRUE))
-        }
-        if (!is.finite(base_max)) {
-          base_max <- 0
-        }
-
-        step <- if (isTRUE(all.equal(base_max, 0))) 0.1 else abs(base_max) * 0.08
-        start <- base_max + step
-
-        subset_df <- subset_df |>
-          dplyr::mutate(
-            label = format_significance_label(p.value),
-            xmin = vapply(group1, function(g) {
-              vals <- level_lookup$.xpos[level_lookup$.factor2 == g]
-              if (length(vals) == 0) NA_real_ else vals[1]
-            }, numeric(1)),
-            xmax = vapply(group2, function(g) {
-              vals <- level_lookup$.xpos[level_lookup$.factor2 == g]
-              if (length(vals) == 0) NA_real_ else vals[1]
-            }, numeric(1)),
-            y_position = seq(
-              from = start,
-              by = step,
-              length.out = dplyr::n()
-            ),
-            .group_id = seq_len(dplyr::n())
-          )
-
-        subset_df
-      })
-
-      annotations <- annotations[!vapply(annotations, is.null, logical(1))]
-
-      if (length(annotations) > 0) {
-        annotations <- dplyr::bind_rows(annotations)
-        annotations <- annotations |>
-          dplyr::filter(!is.na(xmin), !is.na(xmax))
-        if (nrow(annotations) > 0) {
-          annotations <- annotations |>
-            dplyr::mutate(.group_id = seq_len(dplyr::n()))
-        }
-
-        if (nrow(annotations) > 0) {
-          plot_obj <- plot_obj + ggsignif::geom_signif(
-            data = annotations,
-            aes(
-              xmin = xmin,
-              xmax = xmax,
-              annotations = label,
-              y_position = y_position,
-              group = .group_id
-            ),
-            manual = TRUE,
-            inherit.aes = FALSE,
-            tip_length = 0.01,
-            textsize = 3.8,
-            vjust = 0.5,
-            color = "gray30"
-          )
-        }
-      }
-    }
-  }
-
   plot_obj
-}
-
-prepare_barplot_significance <- function(posthoc_entry, factor1, factor2, stats_df) {
-  if (is.null(posthoc_entry)) {
-    return(NULL)
-  }
-
-  if (is.list(posthoc_entry) && !is.data.frame(posthoc_entry)) {
-    if (!is.null(posthoc_entry$table)) {
-      return(prepare_barplot_significance(posthoc_entry$table, factor1, factor2, stats_df))
-    }
-
-    if (!is.null(factor1) && !is.null(posthoc_entry[[factor1]])) {
-      return(prepare_barplot_significance(posthoc_entry[[factor1]], factor1, factor2, stats_df))
-    }
-
-    nested <- lapply(posthoc_entry, function(x) {
-      prepare_barplot_significance(x, factor1, factor2, stats_df)
-    })
-    nested <- nested[!vapply(nested, is.null, logical(1))]
-    if (length(nested) == 0) {
-      return(NULL)
-    }
-
-    combined <- dplyr::bind_rows(nested)
-    if (nrow(combined) == 0) {
-      return(NULL)
-    }
-    return(combined)
-  }
-
-  if (!is.data.frame(posthoc_entry)) {
-    return(NULL)
-  }
-
-  df <- posthoc_entry
-  if ("Factor" %in% names(df) && !is.null(factor2)) {
-    df <- df[df$Factor %in% c(
-      factor2,
-      paste(factor1, factor2, sep = ":"),
-      paste(factor2, factor1, sep = ":")
-    ), , drop = FALSE]
-  }
-
-  if (nrow(df) == 0) {
-    return(NULL)
-  }
-
-  factor1_levels <- NULL
-  if (!is.null(factor1) && factor1 %in% names(stats_df)) {
-    factor1_levels <- levels(stats_df[[factor1]])
-    if (is.null(factor1_levels)) {
-      factor1_levels <- unique(as.character(stats_df[[factor1]]))
-    }
-  }
-
-  if (!is.null(factor1) && factor1 %in% names(df)) {
-    split_df <- split(df, df[[factor1]])
-    annotations <- lapply(names(split_df), function(level_name) {
-      subset_df <- split_df[[level_name]]
-      signif_tbl <- extract_tukey_for_signif(subset_df)
-      if (is.null(signif_tbl) || nrow(signif_tbl) == 0) {
-        return(NULL)
-      }
-      signif_tbl[[factor1]] <- level_name
-      signif_tbl
-    })
-    annotations <- annotations[!vapply(annotations, is.null, logical(1))]
-    if (length(annotations) == 0) {
-      return(NULL)
-    }
-    combined <- dplyr::bind_rows(annotations)
-    if (!is.null(factor1_levels) && factor1 %in% names(combined)) {
-      combined[[factor1]] <- factor(combined[[factor1]], levels = factor1_levels)
-    }
-    return(combined)
-  }
-
-  signif_df <- extract_tukey_for_signif(df)
-  if (!is.null(signif_df) && nrow(signif_df) > 0 && !is.null(factor1)) {
-    signif_df[[factor1]] <- "__overall__"
-  }
-  signif_df
 }
 
 plot_anova_barplot_meanse <- function(data,
                                       info,
                                       layout_values = list(),
                                       line_colors = NULL,
-                                      posthoc_all = NULL,
                                       show_value_labels = FALSE,
                                       base_size = 14) {
   context <- initialize_anova_plot_context(data, info, layout_values)
@@ -1502,17 +1264,6 @@ plot_anova_barplot_meanse <- function(data,
         }
 
         stats_df <- apply_anova_factor_levels(stats_df, factor1, factor2, context$order1, context$order2)
-        posthoc_entry <- NULL
-        if (!is.null(posthoc_all) && !is.null(posthoc_all[[resp]])) {
-          resp_posthoc <- posthoc_all[[resp]]
-          if (is.list(resp_posthoc) && !is.data.frame(resp_posthoc)) {
-            posthoc_entry <- resp_posthoc[[stratum]]
-          } else {
-            posthoc_entry <- resp_posthoc
-          }
-        }
-        signif_df <- prepare_barplot_significance(posthoc_entry, factor1, factor2, stats_df)
-
         stratum_plots[[stratum]] <- build_bar_plot_panel(
           stats_df = stats_df,
           title_text = stratum,
@@ -1520,7 +1271,6 @@ plot_anova_barplot_meanse <- function(data,
           factor2 = factor2,
           line_colors = line_colors,
           base_fill = base_fill,
-          signif_df = signif_df,
           show_value_labels = show_value_labels,
           base_size = base_size
         )
@@ -1549,12 +1299,6 @@ plot_anova_barplot_meanse <- function(data,
       }
 
       stats_df <- apply_anova_factor_levels(stats_df, factor1, factor2, context$order1, context$order2)
-      posthoc_entry <- NULL
-      if (!is.null(posthoc_all) && !is.null(posthoc_all[[resp]])) {
-        posthoc_entry <- posthoc_all[[resp]]
-      }
-      signif_df <- prepare_barplot_significance(posthoc_entry, factor1, factor2, stats_df)
-
       response_plots[[resp]] <- build_bar_plot_panel(
         stats_df = stats_df,
         title_text = resp,
@@ -1562,7 +1306,6 @@ plot_anova_barplot_meanse <- function(data,
         factor2 = factor2,
         line_colors = line_colors,
         base_fill = base_fill,
-        signif_df = signif_df,
         show_value_labels = show_value_labels,
         base_size = base_size
       )
@@ -1587,74 +1330,4 @@ sanitize_name <- function(name) {
   if (!nzchar(safe)) safe <- "unnamed"
   safe
 }
-
-format_p_value <- function(p_values) {
-  vapply(
-    p_values,
-    function(p) {
-      if (is.na(p)) {
-        return(NA_character_)
-      }
-      if (p < 0.001) {
-        "<0.001"
-      } else {
-        sprintf("%.2f", round(p, 2))
-      }
-    },
-    character(1)
-  )
-}
-
-format_significance_label <- function(p_values) {
-  vapply(
-    p_values,
-    function(p) {
-      if (is.na(p)) {
-        return(NA_character_)
-      }
-
-      stars <- if (p < 0.001) {
-        "***"
-      } else if (p < 0.01) {
-        "**"
-      } else if (p < 0.05) {
-        "*"
-      } else {
-        ""
-      }
-
-      prefix <- if (p < 0.001) {
-        "p<0.001"
-      } else {
-        sprintf("p=%.3f", round(p, 3))
-      }
-
-      if (nzchar(stars)) {
-        paste0(prefix, " (", stars, ")")
-      } else {
-        prefix
-      }
-    },
-    character(1)
-  )
-}
-
-add_significance_marker <- function(formatted_p, raw_p) {
-  mapply(
-    function(fp, rp) {
-      if (is.na(rp)) {
-        return(fp)
-      }
-      if (rp < 0.05) {
-        paste0(fp, "*")
-      } else {
-        fp
-      }
-    },
-    formatted_p,
-    raw_p,
-    USE.NAMES = FALSE
-  )
-}
-
 

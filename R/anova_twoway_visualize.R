@@ -148,11 +148,6 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
 
       line_colors <- if (length(colors) == 0) NULL else colors
 
-      posthoc_data <- tryCatch(
-        compile_anova_results(info)$posthoc,
-        error = function(e) NULL
-      )
-
       list(
         lineplot_mean_se = safe_plot(
           plot_anova_lineplot_meanse(
@@ -169,7 +164,6 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
             info,
             layout_values = layout_inputs,
             line_colors = line_colors,
-            posthoc_all = posthoc_data,
             show_value_labels = isTRUE(input$show_bar_labels),
             base_size = base_size_value
           )
