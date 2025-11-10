@@ -132,8 +132,9 @@ filter_server <- function(id, uploaded_data) {
     filtered_df <- reactive({
       data <- req(df())
       cols <- input$columns
-      if (!length(cols)) return(data)
-      Reduce(filter_column, cols, init = data, right = FALSE)
+      if (!length(cols)) return(droplevels(data))
+      filtered <- Reduce(filter_column, cols, init = data, right = FALSE)
+      droplevels(filtered)
     })
 
     # --- 4. Preview table ---
