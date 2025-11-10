@@ -124,6 +124,5 @@ When exporting results, each module bundles the rendered tables, model summaries
 
 If Table Analyzer supports your research, please cite it so others can discover the tool:
 
-> Table Analyzer Team (2024). *Table Analyzer: Transparent spreadsheet-to-analysis workflows in R/Shiny* (Version X.Y.Z). Available at https://github.com/your-org/TableAnalyzer.
+**Palmieri, N.** (2025). *Table Analyzer: Transparent spreadsheet-to-analysis workflows in R/Shiny* (Version 1.00). Available at [https://github.com/nicola-palmieri/TableAnalyzer](https://github.com/nicola-palmieri/TableAnalyzer).
 
-Replace `X.Y.Z` with the app version shown in the UI (or the commit hash/date if running a specific snapshot). We recommend storing the exported reports alongside your manuscript submission to provide an auditable trail of the analyses.
