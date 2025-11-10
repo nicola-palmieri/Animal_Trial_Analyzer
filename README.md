@@ -2,6 +2,8 @@
 
 Table Analyzer is a modular R/Shiny application that walks researchers from raw spreadsheets to publication-ready figures and tables. The current release streamlines each step of the workflow with dedicated modules for uploading, filtering, modeling, and visualization.
 
+> **Project status:** The app is production-ready for day-to-day lab use and is actively maintained. All analysis modules share a unified export pipeline and have automated tests for the most failure-prone data reshaping steps.
+
 ---
 
 ## ✨ Highlights
@@ -97,3 +99,31 @@ MIT (or update with your project’s chosen license).
 ## 🙏 Acknowledgments
 
 Built by the Table Analyzer team. Inspired by best practices for transparent statistical reporting and reproducible research.
+
+---
+
+## 🔍 Transparency for users and reviewers
+
+Every analysis tab in Table Analyzer maps directly to a small set of R functions. The table below lists the key routines, the underlying packages, and the core arguments populated by the UI for each analysis.
+
+| Module | Core functions | Key arguments populated by the app |
+| --- | --- | --- |
+| Descriptive statistics | `compute_descriptive_summary()` → `skimr::skim()`; `dplyr::summarise()` for coefficient of variation, outliers, and five-number summaries. | Selected categorical variables (`cat_vars`), numeric variables (`num_vars`), optional stratification factor (`group_var`). Missing values are excluded column-wise for each summary statistic. |
+| One-way ANOVA | `prepare_stratified_anova()` builds `stats::aov(response ~ factor)` models; `car::Anova(model, type = 3)` for Type-III tables; `emmeans::emmeans()` with `contrast(..., method = "pairwise", adjust = "tukey")` for post-hoc tests. | Responses chosen in the UI (`responses`), single categorical predictor (`factor1_var`) with reordered levels (`factor1_order`), optional stratification factor. |
+| Two-way ANOVA | Same pipeline as one-way, but formulas expand to `stats::aov(response ~ factor1 * factor2)` and Tukey-adjusted post-hoc contrasts are produced for each main effect. | Responses plus two categorical predictors (`factor1_var`, `factor2_var`) and their level orders; optional stratification variable controlling per-stratum models. |
+| Linear model (LM) | `reg_fit_model()` wraps `stats::lm(response ~ predictors)`; summaries combine `car::Anova(model, type = 3)` and `summary.lm()`. Residual diagnostics are produced with `stats::fitted()`/`stats::residuals()` and `stats::qqnorm()`. | Numeric response (`dep`), categorical predictors (`fixed`), numeric covariates (`covar`), optional two-way interactions (`interactions`). Stratification fits one model per stratum. |
+| Linear mixed model (LMM) | `reg_fit_model()` dispatches to `lmerTest::lmer(response ~ fixed + covar + interactions + (1|random))`; inference uses `anova(model, type = 3)` from **lmerTest** and `summary()` with intraclass correlation from `compute_icc()` (based on `lme4::VarCorr()`). | Same arguments as LM plus a random intercept factor (`random`). |
+| Pairwise correlations | `cor()` with `use = "pairwise.complete.obs"` for numeric matrices; optional stratified splits. Visual diagnostics use `GGally::ggpairs()` with point, density, and correlation panels. | Numeric variables selected in the UI (`vars`) and optional stratification factor; each stratum is analyzed independently when supplied. |
+| Principal component analysis | `stats::prcomp(data, center = TRUE, scale. = TRUE)` on complete cases for the selected columns. Outputs include `summary(prcomp)` and the loadings matrix. | Numeric variables (`vars`). Rows with missing values in any selected variable are excluded prior to fitting, and the count of excluded rows is reported. |
+
+When exporting results, each module bundles the rendered tables, model summaries, and diagnostic plots for the exact function calls above. This makes it straightforward for reviewers to reproduce the analyses or to cite the software in a methods section.
+
+---
+
+## 📚 How to cite Table Analyzer
+
+If Table Analyzer supports your research, please cite it so others can discover the tool:
+
+> Table Analyzer Team (2024). *Table Analyzer: Transparent spreadsheet-to-analysis workflows in R/Shiny* (Version X.Y.Z). Available at https://github.com/your-org/TableAnalyzer.
+
+Replace `X.Y.Z` with the app version shown in the UI (or the commit hash/date if running a specific snapshot). We recommend storing the exported reports alongside your manuscript submission to provide an auditable trail of the analyses.
