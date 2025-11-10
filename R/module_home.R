@@ -57,7 +57,11 @@ home_ui <- function(id) {
         br(),
         tags$hr(class = "my-4"),
         p(
-          em("Developed by Nicola Palmieri"),
+          tagList(
+            em("Developed by Nicola Palmieri"),
+            br(),
+            span("Version v1.00", style = "color:#6c757d; font-size:0.9em;")
+          ),
           class = "text-muted small"
         )
       )
