@@ -501,25 +501,31 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
       )
     })
 
-    plot_size <- reactive({
-      width <- suppressWarnings(as.numeric(input$plot_width))
-      height <- suppressWarnings(as.numeric(input$plot_height))
+    # ---- Unified sizing logic ----
+    size_val <- reactiveVal(list(w = 800, h = 600))
+    
+    observeEvent(plot_info(), {
       info <- plot_info()
       layout <- info$layout
-
-      valid_size <- function(value, default) {
-        if (is.na(value) || value <= 0) default else value
+      base_w <- suppressWarnings(as.numeric(input$plot_width))
+      base_h <- suppressWarnings(as.numeric(input$plot_height))
+      
+      valid_size <- function(x, default) {
+        if (is.na(x) || x <= 0) default else x
       }
-
-      subplot_w <- valid_size(width, 400)
-      subplot_h <- valid_size(height, 300)
-
-      ncol <- if (!is.null(layout) && !is.null(layout$ncol)) max(1, layout$ncol) else 1
-      nrow <- if (!is.null(layout) && !is.null(layout$nrow)) max(1, layout$nrow) else 1
-
-      list(w = subplot_w * ncol, h = subplot_h * nrow)
-    })
-
+      
+      subplot_w <- valid_size(base_w, 400)
+      subplot_h <- valid_size(base_h, 300)
+      
+      if (is.null(layout)) {
+        size_val(list(w = subplot_w, h = subplot_h))
+      } else {
+        ncol <- if (!is.null(layout$ncol)) max(1, layout$ncol) else 1
+        nrow <- if (!is.null(layout$nrow)) max(1, layout$nrow) else 1
+        size_val(list(w = subplot_w * ncol, h = subplot_h * nrow))
+      }
+    }, ignoreInit = FALSE)
+    
     output$plot_warning <- renderUI({
       info <- plot_info()
       if (!is.null(info$warning)) {
@@ -528,24 +534,16 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
         NULL
       }
     })
-
-    plot_obj <- reactive({
-      info <- plot_info()
-      if (!is.null(info$warning) || is.null(info$plot)) {
-        return(NULL)
-      }
-      info$plot
-    })
-
+    
     output$plot <- renderPlot({
       info <- plot_info()
       if (!is.null(info$warning) || is.null(info$plot)) return(NULL)
       info$plot
     },
-    width = function() plot_size()$w,
-    height = function() plot_size()$h,
+    width = function() size_val()$w,
+    height = function() size_val()$h,
     res = 96)
-
+    
     output$download_plot <- downloadHandler(
       filename = function() {
         info <- plot_info()
@@ -560,15 +558,14 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
       content = function(file) {
         info <- plot_info()
         req(is.null(info$warning))
-        size <- plot_size()
-
+        s <- size_val()
         ggsave(
           filename = file,
           plot = info$plot,
           device = "png",
           dpi = 300,
-          width = size$w / 96,
-          height = size$h / 96,
+          width  = s$w / 96,
+          height = s$h / 96,
           units = "in",
           limitsize = FALSE
         )
