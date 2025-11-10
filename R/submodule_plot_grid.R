@@ -159,10 +159,19 @@ plot_grid_server <- function(id,
     rows <- reactive(sanitize_value(input$rows, rows_min, rows_max))
     cols <- reactive(sanitize_value(input$cols, cols_min, cols_max))
 
+    stable_values <- reactiveVal(list(rows = NA_integer_, cols = NA_integer_))
+
+    observeEvent(list(rows(), cols()), {
+      next_values <- list(rows = rows(), cols = cols())
+      if (!identical(stable_values(), next_values)) {
+        stable_values(next_values)
+      }
+    }, ignoreNULL = FALSE)
+
     list(
       rows = rows,
       cols = cols,
-      values = reactive(list(rows = rows(), cols = cols()))
+      values = reactive(stable_values())
     )
   })
 }
