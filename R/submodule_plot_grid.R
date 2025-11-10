@@ -100,33 +100,28 @@ plot_grid_ui <- function(id,
                          rows_value = NA,
                          cols_value = NA) {
   ns <- NS(id)
-
+  
   rows_input <- numericInput(
     ns("rows"),
-    rows_label,
+    label = rows_label,
     value = rows_value,
     min = rows_min,
     max = rows_max,
     step = 1
   )
-
+  
   cols_input <- numericInput(
     ns("cols"),
-    cols_label,
+    label = cols_label,
     value = cols_value,
     min = cols_min,
     max = cols_max,
     step = 1
   )
-
-  if (!is.null(rows_help)) {
-    rows_input <- with_help_tooltip(rows_input, rows_help)
-  }
-
-  if (!is.null(cols_help)) {
-    cols_input <- with_help_tooltip(cols_input, cols_help)
-  }
-
+  
+  if (!is.null(rows_help)) rows_input <- with_help_tooltip(rows_input, rows_help)
+  if (!is.null(cols_help)) cols_input <- with_help_tooltip(cols_input, cols_help)
+  
   tagList(
     fluidRow(
       column(6, rows_input),
@@ -139,26 +134,27 @@ plot_grid_server <- function(id,
                              rows_min = 1L,
                              rows_max = 10L,
                              cols_min = 1L,
-                             cols_max = 10L) {
+                             cols_max = 10L,
+                             debounce_ms = 150) {
   moduleServer(id, function(input, output, session) {
-    sanitize_value <- function(value, min_value, max_value) {
-      if (length(value) == 0) {
-        return(NA_integer_)
-      }
-      numeric_value <- suppressWarnings(as.integer(value[1]))
-      if (is.na(numeric_value)) {
-        return(NA_integer_)
-      }
-      numeric_value <- max(as.integer(min_value), numeric_value)
-      if (!is.null(max_value)) {
-        numeric_value <- min(as.integer(max_value), numeric_value)
-      }
-      as.integer(numeric_value)
+    sanitize <- function(x, min_value, max_value) {
+      if (length(x) == 0) return(NA_integer_)
+      v <- suppressWarnings(as.integer(x[1]))
+      if (is.na(v)) return(NA_integer_)
+      v <- max(as.integer(min_value), v)
+      v <- min(as.integer(max_value), v)
+      as.integer(v)
     }
-
-    rows <- reactive(sanitize_value(input$rows, rows_min, rows_max))
-    cols <- reactive(sanitize_value(input$cols, cols_min, cols_max))
-
+    
+    rows_raw <- reactive(sanitize(input$rows, rows_min, rows_max))
+    cols_raw <- reactive(sanitize(input$cols, cols_min, cols_max))
+    
+    values_raw <- reactive(list(rows = rows_raw(), cols = cols_raw()))
+    values_debounced <- debounce(values_raw, millis = debounce_ms)
+    
+    rows <- reactive(values_debounced()$rows)
+    cols <- reactive(values_debounced()$cols)
+    
     list(
       rows = rows,
       cols = cols,
