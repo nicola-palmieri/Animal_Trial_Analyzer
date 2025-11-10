@@ -1176,45 +1176,22 @@ build_bar_plot_panel <- function(stats_df,
             .group_id = seq_len(dplyr::n())
           )
 
-        level_values <- stats_df[[factor1]]
-        level_names <- if (is.factor(level_values)) {
-          levels(level_values)
-        } else {
-          unique(as.character(level_values))
-        }
-        level_names <- level_names[!is.na(level_names)]
-
-        level_lookup <- data.frame(
-          level = level_names,
-          xpos = seq_along(level_names),
-          stringsAsFactors = FALSE
+        plot_obj <- plot_obj + ggsignif::geom_signif(
+          data = signif_df,
+          aes(
+            xmin = xmin,
+            xmax = xmax,
+            annotations = label,
+            y_position = y_position,
+            group = .group_id
+          ),
+          manual = TRUE,
+          inherit.aes = FALSE,
+          tip_length = 0.01,
+          textsize = 3.8,
+          vjust = 0.5,
+          color = "gray30"
         )
-
-        signif_df <- signif_df |>
-          dplyr::mutate(
-            xmin = level_lookup$xpos[match(group1, level_lookup$level)],
-            xmax = level_lookup$xpos[match(group2, level_lookup$level)]
-          ) |>
-          dplyr::filter(!is.na(xmin), !is.na(xmax))
-
-        if (nrow(signif_df) > 0) {
-          plot_obj <- plot_obj + ggsignif::geom_signif(
-            data = signif_df,
-            aes(
-              xmin = xmin,
-              xmax = xmax,
-              annotations = label,
-              y_position = y_position,
-              group = .group_id
-            ),
-            manual = TRUE,
-            inherit.aes = FALSE,
-            tip_length = 0.01,
-            textsize = 3.8,
-            vjust = 0.5,
-            color = "gray30"
-          )
-        }
       }
     }
 
