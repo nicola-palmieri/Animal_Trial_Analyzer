@@ -1,8 +1,6 @@
-# 📊 Table Analyzer (R/Shiny)
+# 📊 Table Analyzer
 
 Table Analyzer is a modular R/Shiny application that walks researchers from raw spreadsheets to publication-ready figures and tables. The current release streamlines each step of the workflow with dedicated modules for uploading, filtering, modeling, and visualization.
-
-> **Project status:** The app is production-ready for day-to-day lab use and is actively maintained. All analysis modules share a unified export pipeline and have automated tests for the most failure-prone data reshaping steps.
 
 ---
 
