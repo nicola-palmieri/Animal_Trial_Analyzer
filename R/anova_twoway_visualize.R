@@ -165,7 +165,8 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
             layout_values = layout_inputs,
             line_colors = line_colors,
             show_value_labels = isTRUE(input$show_bar_labels),
-            base_size = base_size_value
+            base_size = base_size_value,
+            posthoc_all = info$posthoc
           )
         )
       )

@@ -1,4 +1,444 @@
 # ===============================================================
+# 🧪 Table Analyzer — One-way ANOVA Module (Clean & Minimal)
+# ===============================================================
+
+one_way_anova_ui <- function(id) {
+  ns <- NS(id)
+  list(
+    config = tagList(
+      uiOutput(ns("inputs")),
+      uiOutput(ns("level_order")),
+      tags$details(
+        tags$summary(strong("Advanced options")),
+        stratification_ui("strat", ns)
+      ),
+      br(),
+      fluidRow(
+        column(
+          6,
+          with_help_tooltip(
+            actionButton(ns("run"), "Show results", width = "100%"),
+            "Run the ANOVA using the selected response and group variable."
+          )
+        ),
+        column(
+          6,
+          with_help_tooltip(
+            downloadButton(ns("download_all"), "Download all results", style = "width: 100%;"),
+            "Export the ANOVA summaries, post-hoc tests, and diagnostics."
+          )
+        )
+      )
+    ),
+    results = uiOutput(ns("summary_ui"))
+  )
+}
+
+one_way_anova_server <- function(id, filtered_data) {
+  moduleServer(id, function(input, output, session) {
+    ns <- session$ns
+    
+    responses <- multi_response_server("response", filtered_data)
+    strat_info <- stratification_server("strat", filtered_data)
+    
+    output$inputs <- renderUI({
+      req(filtered_data())
+      data <- filtered_data()
+      cat_cols <- names(data)[sapply(data, function(x) is.character(x) || is.factor(x))]
+      
+      tagList(
+        multi_response_ui(ns("response")),
+        with_help_tooltip(
+          selectInput(
+            ns("group"),
+            "Categorical predictor",
+            choices = cat_cols,
+            selected = if (length(cat_cols) > 0) cat_cols[1] else NULL
+          ),
+          "Choose the grouping variable that defines the comparison categories."
+        )
+      )
+    })
+    
+    output$level_order <- renderUI({
+      req(filtered_data(), input$group)
+      levels <- unique(as.character(filtered_data()[[input$group]]))
+      with_help_tooltip(
+        selectInput(
+          ns("order"),
+          "Order of levels (first = reference)",
+          choices = levels,
+          selected = levels,
+          multiple = TRUE
+        ),
+        "Arrange the group levels; the first level is used as the reference in outputs."
+      )
+    })
+    
+    models <- eventReactive(input$run, {
+      req(filtered_data(), input$group, input$order)
+      validate(need(length(responses()) > 0, "Select at least one response variable."))
+      prepare_stratified_anova(
+        df = filtered_data(),
+        responses = responses(),
+        model = "oneway_anova",
+        factor1_var = input$group,
+        factor1_order = input$order,
+        stratification = strat_info()
+      )
+    })
+    
+    output$download_all <- downloadHandler(
+      filename = function() {
+        info <- models()
+        n_resp <- length(info$responses)
+        n_strata <- if (is.null(info$strata)) 0 else length(info$strata$levels)
+        label <- ifelse(n_strata == 0, "nostratum", paste0(n_strata, "strata"))
+        paste0("anova_results_", n_resp, "resp_", label, "_", format(Sys.time(), "%Y%m%d-%H%M"), ".docx")
+      },
+      content = function(file) download_all_anova_results(models(), file)
+    )
+    
+    output$summary_ui <- renderUI({
+      render_anova_results(ns, models(), "One-way ANOVA")
+    })
+    
+    bind_anova_outputs(ns, output, models)
+    
+    anova_results <- reactive({
+      mod <- models()
+      req(mod)
+      res <- compile_anova_results(mod)
+      
+      list(
+        analysis_type = "ANOVA",
+        type = "oneway_anova",
+        data_used = mod$data_used,
+        model = mod$models,
+        summary = res$summary,
+        posthoc = res$posthoc,
+        effects = res$effects,
+        stats = list(
+          n = nrow(mod$data_used),
+          vars = names(mod$data_used)
+        ),
+        metadata = list(
+          responses = mod$responses,
+          strata = mod$strata,
+          factors = mod$factors,
+          orders = mod$orders,
+          errors = res$errors
+        ),
+        responses = mod$responses,
+        strata = mod$strata,
+        factors = mod$factors,
+        orders = mod$orders
+      )
+    })
+    
+    
+    return(anova_results)
+  })
+}
+# ===============================================================
+# 🧪 Visualization Module — One-way ANOVA
+# ===============================================================
+
+visualize_oneway_ui <- function(id) {
+  ns <- NS(id)
+  sidebarLayout(
+    sidebarPanel(
+      width = 4,
+      h4("Step 4 — Visualize one-way ANOVA"),
+      p("Select visualization type and adjust subplot layout, axis scaling, and figure size."),
+      hr(),
+      with_help_tooltip(
+        selectInput(
+          ns("plot_type"),
+          label = "Select visualization type",
+          choices = c(
+            "Lineplots (mean ± SE)" = "lineplot_mean_se",
+            "Barplots (mean ± SE)"  = "barplot_mean_se"
+          ),
+          selected = "lineplot_mean_se"
+        ),
+        "Pick the chart style you prefer for comparing group means and error bars."
+      ),
+      uiOutput(ns("layout_controls")),
+      conditionalPanel(
+        condition = sprintf("input['%s'] === 'barplot_mean_se'", ns("plot_type")),
+        with_help_tooltip(
+          checkboxInput(
+            ns("show_bar_labels"),
+            "Show value labels on bars",
+            value = FALSE
+          ),
+          "Turn on labels to display the mean value on top of each bar."
+        )
+      ),
+      fluidRow(
+        column(6, with_help_tooltip(
+          numericInput(ns("plot_width"), "Subplot width (px)", value = 400, min = 200, max = 1200, step = 50),
+          "Adjust how wide each subplot should be in pixels."
+        )),
+        column(6, with_help_tooltip(
+          numericInput(ns("plot_height"), "Subplot height (px)", value = 300, min = 200, max = 1200, step = 50),
+          "Adjust how tall each subplot should be in pixels."
+        ))
+      ),
+      fluidRow(
+        column(6, add_color_customization_ui(ns, multi_group = FALSE)),
+        column(6, base_size_ui(
+          ns,
+          default = 14,
+          help_text = "Adjust the base font size used for the ANOVA plots."
+        ))
+      ),
+      br(),
+      with_help_tooltip(
+        downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;"),
+        "Save the current figure as an image file."
+      )
+    ),
+    mainPanel(
+      width = 8,
+      h4("Plots"),
+      uiOutput(ns("plot_warning")),
+      plotOutput(ns("plot"), height = "auto")
+    )
+  )
+}
+
+
+visualize_oneway_server <- function(id, filtered_data, model_info) {
+  moduleServer(id, function(input, output, session) {
+    ns <- session$ns
+
+    df <- reactive(filtered_data())
+
+    custom_colors <- add_color_customization_server(
+      ns = ns,
+      input = input,
+      output = output,
+      data = df,
+      color_var_reactive = reactive(NULL),
+      multi_group = FALSE
+    )
+
+    base_size <- base_size_server(
+      input = input,
+      default = 14
+    )
+
+    strata_grid <- plot_grid_server("strata_grid")
+    response_grid <- plot_grid_server("response_grid")
+
+    cached_results <- reactiveValues(plots = list())
+
+    compute_empty_result <- function(message = NULL) {
+      list(
+        plot = NULL,
+        warning = message,
+        layout = NULL,
+        defaults = NULL
+      )
+    }
+
+    empty_plot_results <- function(message) {
+      list(
+        lineplot_mean_se = compute_empty_result(message),
+        barplot_mean_se = compute_empty_result(message)
+      )
+    }
+
+    compute_all_plots <- function(data, info, layout_inputs, colors, base_size_value) {
+      if (is.null(info)) {
+        return(list())
+      }
+      if (!identical(info$type, "oneway_anova")) {
+        return(empty_plot_results("No one-way ANOVA results available for plotting."))
+      }
+
+      if (is.null(data) || nrow(data) == 0) {
+        return(empty_plot_results("No data available for plotting."))
+      }
+
+      safe_plot <- function(expr) {
+        tryCatch({
+          result <- expr
+          if (is.null(result)) {
+            compute_empty_result("Unable to generate plot.")
+          } else {
+            result
+          }
+        }, error = function(e) {
+          compute_empty_result(e$message)
+        })
+      }
+
+      results <- list()
+
+      results$lineplot_mean_se <- safe_plot(
+        plot_anova_lineplot_meanse(
+          data,
+          info,
+          layout_inputs,
+          line_colors = colors,
+          base_size = base_size_value
+        )
+      )
+
+      results$barplot_mean_se <- safe_plot(
+        plot_anova_barplot_meanse(
+          data,
+          info,
+          layout_values = layout_inputs,
+          line_colors = colors,
+          show_value_labels = isTRUE(input$show_bar_labels),
+          base_size = base_size_value,
+          posthoc_all = info$posthoc
+        )
+      )
+
+      results
+    }
+
+    observeEvent(
+      list(
+        model_info(),
+        df(),
+        strata_grid$values(),
+        response_grid$values(),
+        custom_colors(),
+        base_size(),
+        input$show_bar_labels
+      ),
+      {
+        info <- model_info()
+        data <- df()
+        layout_inputs <- list(
+          strata_rows = strata_grid$rows(),
+          strata_cols = strata_grid$cols(),
+          resp_rows = response_grid$rows(),
+          resp_cols = response_grid$cols()
+        )
+
+        cached_results$plots <- compute_all_plots(
+          data,
+          info,
+          layout_inputs,
+          custom_colors(),
+          base_size()
+        )
+      },
+      ignoreNULL = FALSE
+    )
+
+    results <- reactive(cached_results$plots)
+
+    current_result <- reactive({
+      res <- results()
+      res[[input$plot_type]]
+    })
+
+    plot_obj <- reactive({
+      result <- current_result()
+      if (is.null(result) || !is.null(result$warning)) {
+        return(NULL)
+      }
+      result$plot
+    })
+
+    first_non_null <- function(x, default) if (is.null(x)) default else x
+
+    plot_size <- reactive({
+      layout <- first_non_null(current_result()$layout, list())
+      strata <- first_non_null(layout$strata, list(rows = 1, cols = 1))
+      responses <- first_non_null(layout$responses, list(rows = 1, cols = 1))
+
+      list(
+        w = input$plot_width * first_non_null(strata$cols, 1) * first_non_null(responses$cols, 1),
+        h = input$plot_height * first_non_null(strata$rows, 1) * first_non_null(responses$rows, 1)
+      )
+    })
+
+    output$layout_controls <- renderUI({
+      info <- model_info()
+      req(info)
+      build_anova_layout_controls(ns, input, info)
+    })
+
+    output$plot_warning <- renderUI({
+      info <- current_result()
+      if (is.null(info) || is.null(info$warning)) {
+        return(NULL)
+      }
+      div(class = "alert alert-warning", HTML(info$warning))
+    })
+
+    output$plot <- renderPlot(
+      {
+        plot <- plot_obj()
+        if (is.null(plot)) {
+          return(NULL)
+        }
+        plot
+      },
+      width = function() plot_size()$w,
+      height = function() plot_size()$h,
+      res = 96
+    )
+
+    output$download_plot <- downloadHandler(
+      filename = function() paste0("anova_plot_", Sys.Date(), ".png"),
+      content = function(file) {
+        res <- current_result()
+        req(res)
+        req(is.null(res$warning))
+        plot <- plot_obj()
+        req(plot)
+        size <- plot_size()
+        ggsave(
+          filename = file,
+          plot = plot,
+          device = "png",
+          dpi = 300,
+          width = size$w / 96,
+          height = size$h / 96,
+          units = "in",
+          limitsize = FALSE
+        )
+      }
+    )
+  })
+}
+
+extract_tukey_for_signif <- function(posthoc_entry) {
+  if (is.null(posthoc_entry) || !is.data.frame(posthoc_entry)) return(NULL)
+  
+  df <- posthoc_entry
+  
+  # split contrast into group1 and group2
+  parts <- strsplit(as.character(df$contrast), " - ")
+  df$group1 <- vapply(parts, `[`, "", 1)
+  df$group2 <- vapply(parts, `[`, "", 2)
+  
+  # clean p.value column
+  df$p.value <- as.character(df$p.value)
+  df$p.value <- gsub("\\*", "", df$p.value)          # remove any stars
+  df$p.value <- gsub("<0\\.001", "0.0009", df$p.value)  # make "<0.001" numeric
+  df$p.value <- suppressWarnings(as.numeric(df$p.value))
+  
+  df <- df %>%
+    dplyr::filter(!is.na(p.value)) %>%
+    dplyr::select(group1, group2, p.value)
+  
+  df
+}
+
+
+
+# ===============================================================
 # 🧠 Table Analyzer — Shared ANOVA Module Helpers
 # ===============================================================
 
@@ -384,7 +824,6 @@ compile_anova_results <- function(model_info) {
       }
     }
   }
-
 
   list(
     summary = summary_list,
@@ -1144,9 +1583,8 @@ build_bar_plot_panel <- function(stats_df,
                                  base_fill,
                                  show_value_labels = FALSE,
                                  base_size = 14,
-                                 posthoc_entry = NULL,
-                                 nested_posthoc = NULL) {
-
+                                 posthoc_entry = NULL) {
+  
   if (is.null(factor2) || !factor2 %in% names(stats_df)) {
     return(
       build_single_factor_barplot(
@@ -1169,8 +1607,7 @@ build_bar_plot_panel <- function(stats_df,
     line_colors,
     base_fill,
     show_value_labels,
-    base_size,
-    nested_posthoc
+    base_size
   )
 }
 
@@ -1227,9 +1664,7 @@ build_two_factor_barplot <- function(stats_df,
                                      line_colors,
                                      base_fill,
                                      show_value_labels,
-                                     base_size,
-                                     nested_posthoc = NULL) {
-
+                                     base_size) {
   format_numeric_labels <- scales::label_number(accuracy = 0.01, trim = TRUE)
   
   group_levels <- if (is.factor(stats_df[[factor2]])) {
@@ -1265,10 +1700,6 @@ build_two_factor_barplot <- function(stats_df,
   
   if (isTRUE(show_value_labels)) {
     plot_obj <- add_grouped_bar_value_labels(plot_obj, stats_df, factor1, factor2, format_numeric_labels, dodge)
-  }
-  
-  if (!is.null(nested_posthoc)) {
-    plot_obj <- add_nested_significance_annotations(plot_obj, stats_df, factor1, factor2, nested_posthoc)
   }
   
   plot_obj
@@ -1383,96 +1814,6 @@ add_significance_annotations <- function(plot_obj, stats_df, factor1, posthoc_en
 }
 
 
-add_nested_significance_annotations <- function(plot_obj, stats_df, factor1, factor2, nested_posthoc, dodge_width = 0.7) {
-  nested_name <- paste0(factor2, "_within_", factor1)
-  
-  # Accept both a flat data.frame or a list entry
-  df <- NULL
-  if (is.data.frame(nested_posthoc)) {
-    if (!"Factor" %in% names(nested_posthoc)) return(plot_obj)
-    df <- dplyr::filter(nested_posthoc, .data$Factor == nested_name)
-  } else if (is.list(nested_posthoc) && nested_name %in% names(nested_posthoc)) {
-    df <- nested_posthoc[[nested_name]]
-  } else {
-    return(plot_obj)
-  }
-  if (is.null(df) || nrow(df) == 0) return(plot_obj)
-  if (!all(c("contrast","p.value", factor1) %in% names(df))) return(plot_obj)
-  
-  # Clean p-values, keep only significant
-  df$p.value <- as.character(df$p.value)
-  df$p.value <- gsub("[[:space:]]", "", df$p.value)
-  df$p.value <- gsub("^<\\.?0*", "0.", df$p.value)  # <.0001, <0.001 -> numeric-ish
-  df$p.value <- suppressWarnings(as.numeric(df$p.value))
-  df <- dplyr::filter(df, !is.na(.data$p.value) & .data$p.value < 0.05)
-  if (nrow(df) == 0) return(plot_obj)
-  
-  # Parse pair labels from "A - B"
-  df$g1 <- sub(" - .*", "", df$contrast)
-  df$g2 <- sub(".*- ",  "", df$contrast)
-  
-  # Factor levels on the plot
-  lev1 <- levels(stats_df[[factor1]])
-  lev2 <- levels(stats_df[[factor2]])
-  if (is.null(lev1)) lev1 <- unique(as.character(stats_df[[factor1]]))
-  if (is.null(lev2)) lev2 <- unique(as.character(stats_df[[factor2]]))
-  
-  # Compute dodge offsets for factor2 groups (centred around x)
-  k <- length(lev2)
-  # offsets range roughly within [-dodge_width/2, +dodge_width/2]
-  offsets <- seq_len(k)
-  offsets <- (offsets - (k + 1)/2) * (dodge_width / max(1, k))
-  
-  # Helper: numeric x for a (factor1 level, factor2 level) bar center
-  idx2 <- function(g) match(g, lev2)
-  x_center <- function(xlvl, glvl) {
-    as.numeric(match(xlvl, lev1)) + offsets[idx2(glvl)]
-  }
-  
-  # Build numeric xmin/xmax for each contrast row
-  df$x_base  <- as.numeric(match(df[[factor1]], lev1))
-  df$xmin    <- mapply(x_center, df[[factor1]], df$g1)
-  df$xmax    <- mapply(x_center, df[[factor1]], df$g2)
-  
-  # Per-treatment y position just above its local bars
-  local_max <- dplyr::summarise(
-    dplyr::group_by(stats_df, .data[[factor1]]),
-    ymax = max(mean + se, na.rm = TRUE),
-    .groups = "drop"
-  )
-  y_lookup <- setNames(local_max$ymax, as.character(local_max[[factor1]]))
-  df$y0 <- unname(y_lookup[as.character(df[[factor1]])])
-  
-  # Stack multiple brackets within the same treatment a bit
-  step <- diff(range(stats_df$mean + stats_df$se, na.rm = TRUE))
-  if (!is.finite(step) || step == 0) step <- max(stats_df$mean + stats_df$se, na.rm = TRUE) * 0.05
-  step <- step * 0.08
-  df <- dplyr::group_by(df, .data[[factor1]])
-  df <- dplyr::mutate(df, row_id = dplyr::row_number(), y_position = y0 + row_id * step)
-  df <- dplyr::ungroup(df)
-  
-  # Stars
-  df$annotations <- dplyr::case_when(
-    df$p.value < 0.001 ~ "***",
-    df$p.value < 0.01  ~ "**",
-    df$p.value < 0.05  ~ "*",
-    TRUE ~ ""
-  )
-  df$.group_id <- seq_len(nrow(df))
-  
-  # One layer total (manual=TRUE expects numeric x’s on the data)
-  plot_obj + ggsignif::geom_signif(
-    data        = df,
-    aes(xmin = xmin, xmax = xmax, annotations = annotations,
-        y_position = y_position, group = .group_id),
-    manual      = TRUE,
-    inherit.aes = FALSE,
-    textsize    = 3.5,
-    tip_length  = 0.01,
-    color       = "gray30"
-  )
-}
-
 plot_anova_barplot_meanse <- function(data,
                                       info,
                                       layout_values = list(),
@@ -1531,8 +1872,7 @@ plot_anova_barplot_meanse <- function(data,
           base_fill = base_fill,
           show_value_labels = show_value_labels,
           base_size = base_size,
-          posthoc_entry = stratum_posthoc,
-          nested_posthoc = stratum_posthoc
+          posthoc_entry = stratum_posthoc
         )
       }
       
@@ -1567,8 +1907,7 @@ plot_anova_barplot_meanse <- function(data,
         base_fill = base_fill,
         show_value_labels = show_value_labels,
         base_size = base_size,
-        posthoc_entry = posthoc_entry,
-        nested_posthoc = posthoc_entry
+        posthoc_entry = posthoc_entry
       )
     }
   }
@@ -1593,3 +1932,472 @@ sanitize_name <- function(name) {
   safe
 }
 
+# ===============================================================
+# 🧪 Table Analyzer — Two-way ANOVA Module
+# ===============================================================
+
+two_way_anova_ui <- function(id) {
+  ns <- NS(id)
+  list(
+    config = tagList(
+      uiOutput(ns("inputs")),
+      uiOutput(ns("level_order_1")),
+      uiOutput(ns("level_order_2")),
+      tags$details(
+        tags$summary(strong("Advanced options")),
+        stratification_ui("strat", ns)
+      ),
+      br(),
+      fluidRow(
+        column(6, with_help_tooltip(
+          actionButton(ns("run"), "Show results", width = "100%"),
+          "Fit the two-way ANOVA with the selected factors and responses."
+        )),
+        column(6, with_help_tooltip(
+          downloadButton(ns("download_all"), "Download all results", style = "width: 100%;"),
+          "Save all ANOVA tables, post-hoc results, and diagnostics to disk."
+        ))
+      )
+    ),
+    results = tagList(
+      uiOutput(ns("summary_ui"))
+    )
+  )
+}
+
+two_way_anova_server <- function(id, filtered_data) {
+  moduleServer(id, function(input, output, session) {
+    ns <- session$ns
+
+    responses <- multi_response_server("response", filtered_data)
+
+    output$inputs <- renderUI({
+      req(filtered_data())
+      data <- filtered_data()
+      cat_cols <- names(data)[sapply(data, function(x) is.character(x) || is.factor(x))]
+
+      tagList(
+        multi_response_ui(ns("response")),
+        with_help_tooltip(
+          selectInput(
+            ns("factor1"),
+            "Categorical predictor 1 (x-axis)",
+            choices = cat_cols,
+            selected = if (length(cat_cols) > 0) cat_cols[1] else NULL
+          ),
+          "Select the factor for the x-axis groups in the interaction plot."
+        ),
+        with_help_tooltip(
+          selectInput(
+            ns("factor2"),
+            "Categorical predictor 2 (lines)",
+            choices = cat_cols,
+            selected = if (length(cat_cols) > 1) cat_cols[2] else NULL
+          ),
+          "Select the factor for the lines in the interaction plot."
+        )
+      )
+    })
+    
+    strat_info <- stratification_server("strat", filtered_data)
+    
+    # -----------------------------------------------------------
+    # Level order selections
+    # -----------------------------------------------------------
+    output$level_order_1 <- renderUI({
+      req(filtered_data(), input$factor1)
+      levels1 <- unique(as.character(filtered_data()[[input$factor1]]))
+      with_help_tooltip(
+        selectInput(
+          ns("order1"),
+          paste("Order of levels (first = reference)", input$factor1, "(x-axis)"),
+          choices = levels1,
+          selected = levels1,
+          multiple = TRUE
+        ),
+        sprintf("Arrange the levels of %s for the x-axis; the first level is the reference.", input$factor1)
+      )
+    })
+    
+    output$level_order_2 <- renderUI({
+      req(filtered_data(), input$factor2)
+      levels2 <- unique(as.character(filtered_data()[[input$factor2]]))
+      with_help_tooltip(
+        selectInput(
+          ns("order2"),
+          paste("Order of levels (first = reference)", input$factor2, "(lines)"),
+          choices = levels2,
+          selected = levels2,
+          multiple = TRUE
+        ),
+        sprintf("Arrange the levels of %s for the line colours; the first level is the reference.", input$factor2)
+      )
+    })
+    
+    # -----------------------------------------------------------
+    # Model fitting (via shared helper)
+    # -----------------------------------------------------------
+    models <- eventReactive(input$run, {
+      req(filtered_data(), input$factor1, input$order1, input$factor2, input$order2)
+      resp_vals <- responses()
+      validate(
+        need(length(resp_vals) > 0, "Please select at least one response variable."),
+        need(all(input$order1 %in% unique(filtered_data()[[input$factor1]])), "Invalid level order for first factor."),
+        need(all(input$order2 %in% unique(filtered_data()[[input$factor2]])), "Invalid level order for second factor.")
+      )
+      prepare_stratified_anova(
+        df = filtered_data(),
+        responses = resp_vals,
+        model = "twoway_anova",
+        factor1_var = input$factor1,
+        factor1_order = input$order1,
+        factor2_var = input$factor2,
+        factor2_order = input$order2,
+        stratification = strat_info()
+      )
+    })
+
+    # -----------------------------------------------------------
+    # Download all results as one combined DOCX
+    # -----------------------------------------------------------
+    output$download_all <- downloadHandler(
+      filename = function() {
+        model_info <- models()
+        req(model_info)
+        
+        n_resp <- length(model_info$responses)
+        n_strata <- if (is.null(model_info$strata)) 0 else length(model_info$strata$levels)
+        strata_label <- ifelse(n_strata == 0, "nostratum", paste0(n_strata, "strata"))
+        timestamp <- format(Sys.time(), "%Y%m%d-%H%M")
+        sprintf("anova_results_%sresp_%s_%s.docx", n_resp, strata_label, timestamp)
+      },
+      content = function(file) {
+        model_info <- models()
+        req(model_info)
+        download_all_anova_results(model_info, file)
+      }
+    )
+    
+    # -----------------------------------------------------------
+    # Render results
+    # -----------------------------------------------------------
+    output$summary_ui <- renderUI({
+      render_anova_results(ns, models(), "Two-way ANOVA")
+    })
+    
+    # -----------------------------------------------------------
+    # Render model summaries + downloads (shared helper)
+    # -----------------------------------------------------------
+    bind_anova_outputs(ns, output, models)
+
+    anova_results <- reactive({
+      mod <- models()
+      req(mod)
+
+      res <- compile_anova_results(mod)
+      data_used <- mod$data_used
+
+      list(
+        analysis_type = "ANOVA",
+        type = "twoway_anova",
+        data_used = data_used,
+        model = mod$models,
+        summary = res$summary,
+        posthoc = res$posthoc,
+        effects = res$effects,
+        stats = if (!is.null(data_used)) list(n = nrow(data_used), vars = names(data_used)) else NULL,
+        metadata = list(
+          responses = mod$responses,
+          strata = mod$strata,
+          factors = mod$factors,
+          orders = mod$orders,
+          errors = res$errors
+        ),
+        models = mod$models,
+        responses = mod$responses,
+        strata = mod$strata,
+        factors = mod$factors,
+        orders = mod$orders
+      )
+    })
+
+    return(anova_results)
+  })
+}
+# ===============================================================
+# 🧪 Visualization Module — Two-way ANOVA (Simplified & Consistent)
+# ===============================================================
+
+visualize_twoway_ui <- function(id) {
+  ns <- NS(id)
+  sidebarLayout(
+    sidebarPanel(
+      width = 4,
+      h4("Step 4 — Visualize two-way ANOVA"),
+      p("Select visualization type and adjust subplot layout, axis scaling, and figure size."),
+      hr(),
+      with_help_tooltip(
+        selectInput(
+          ns("plot_type"),
+          label = "Select visualization type",
+          choices = c(
+            "Lineplots (mean ± SE)" = "lineplot_mean_se",
+            "Barplots (mean ± SE)"  = "barplot_mean_se"
+          ),
+          selected = "lineplot_mean_se"
+        ),
+        "Pick the chart style you prefer for viewing group means and uncertainty."
+      ),
+      uiOutput(ns("layout_controls")),
+      conditionalPanel(
+        condition = sprintf("input['%s'] === 'barplot_mean_se'", ns("plot_type")),
+        with_help_tooltip(
+          checkboxInput(
+            ns("show_bar_labels"),
+            "Show value labels on bars",
+            value = FALSE
+          ),
+          "Turn on labels to display the mean value on each bar."
+        )
+      ),
+      fluidRow(
+        column(6, with_help_tooltip(
+          numericInput(ns("plot_width"),  "Subplot width (px)",  value = 400, min = 200, max = 1200, step = 50),
+          "Set how wide each subplot should be in pixels."
+        )),
+        column(6, with_help_tooltip(
+          numericInput(ns("plot_height"), "Subplot height (px)", value = 300, min = 200, max = 1200, step = 50),
+          "Set how tall each subplot should be in pixels."
+        ))
+      ),
+      fluidRow(
+        column(6, add_color_customization_ui(ns, multi_group = TRUE)),
+        column(6, base_size_ui(
+          ns,
+          default = 14,
+          help_text = "Adjust the base font size used for the ANOVA plots."
+        ))
+      ),
+      br(),
+      with_help_tooltip(
+        downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;"),
+        "Save the current figure as an image file."
+      )
+    ),
+    mainPanel(
+      width = 8,
+      h4("Plots"),
+      uiOutput(ns("plot_warning")),
+      plotOutput(ns("plot"), height = "auto")
+    )
+  )
+}
+
+
+visualize_twoway_server <- function(id, filtered_data, model_info) {
+  moduleServer(id, function(input, output, session) {
+    ns <- session$ns
+    df <- reactive(filtered_data())
+
+    # ---- Plug in color customization module (multi-color mode) ----
+    color_var_reactive <- reactive({
+      info <- model_info()
+      if (is.null(info) || is.null(info$factors)) return(NULL)
+      info$factors$factor2
+    })
+
+    custom_colors <- add_color_customization_server(
+      ns = ns,
+      input = input,
+      output = output,
+      data = df,
+      color_var_reactive = color_var_reactive,
+      multi_group = TRUE
+    )
+
+    base_size <- base_size_server(
+      input = input,
+      default = 14
+    )
+
+    strata_grid <- plot_grid_server("strata_grid")
+    response_grid <- plot_grid_server("response_grid")
+
+    cached_results <- reactiveValues(plots = list())
+
+    plot_types <- c("lineplot_mean_se", "barplot_mean_se")
+
+    compute_empty_result <- function(message = NULL) {
+      list(
+        plot = NULL,
+        warning = message,
+        layout = NULL,
+        defaults = NULL
+      )
+    }
+
+    empty_results <- function(message) {
+      setNames(rep(list(compute_empty_result(message)), length(plot_types)), plot_types)
+    }
+
+    extract_or <- function(x, name, default) {
+      if (is.null(x)) return(default)
+      value <- x[[name]]
+      if (is.null(value)) default else value
+    }
+
+    compute_all_plots <- function(data, info, layout_inputs, colors, base_size_value) {
+      if (is.null(info)) {
+        return(list())
+      }
+
+      if (!identical(info$type, "twoway_anova")) {
+        return(empty_results("No two-way ANOVA results available for plotting."))
+      }
+
+      if (is.null(data) || nrow(data) == 0) {
+        return(empty_results("No data available for plotting."))
+      }
+
+      safe_plot <- function(expr) {
+        tryCatch({
+          result <- expr
+          if (is.null(result)) {
+            compute_empty_result("Unable to generate plot.")
+          } else {
+            result
+          }
+        }, error = function(e) {
+          compute_empty_result(e$message)
+        })
+      }
+
+      line_colors <- if (length(colors) == 0) NULL else colors
+
+      list(
+        lineplot_mean_se = safe_plot(
+          plot_anova_lineplot_meanse(
+            data,
+            info,
+            layout_inputs,
+            line_colors = line_colors,
+            base_size = base_size_value
+          )
+        ),
+        barplot_mean_se = safe_plot(
+          plot_anova_barplot_meanse(
+            data,
+            info,
+            layout_values = layout_inputs,
+            line_colors = line_colors,
+            show_value_labels = isTRUE(input$show_bar_labels),
+            base_size = base_size_value
+          )
+        )
+      )
+    }
+
+    observeEvent(
+      list(
+        model_info(),
+        df(),
+        strata_grid$values(),
+        response_grid$values(),
+        custom_colors(),
+        base_size(),
+        input$show_bar_labels
+      ),
+      {
+        info <- model_info()
+        data <- df()
+        layout_inputs <- list(
+          strata_rows = strata_grid$rows(),
+          strata_cols = strata_grid$cols(),
+          resp_rows = response_grid$rows(),
+          resp_cols = response_grid$cols()
+        )
+
+        cached_results$plots <- compute_all_plots(
+          data,
+          info,
+          layout_inputs,
+          custom_colors(),
+          base_size()
+        )
+      },
+      ignoreNULL = FALSE
+    )
+
+    results <- reactive(cached_results$plots)
+
+    current_result <- reactive({
+      res <- results()
+      if (!length(res)) return(NULL)
+      res[[input$plot_type]]
+    })
+
+    plot_obj <- reactive({
+      info <- current_result()
+      if (is.null(info) || !is.null(info$warning)) return(NULL)
+      info$plot
+    })
+
+    plot_size <- reactive({
+      res <- current_result()
+      layout <- if (is.null(res)) list() else extract_or(res, "layout", list())
+      strata_layout <- extract_or(layout, "strata", list(rows = 1, cols = 1))
+      response_layout <- extract_or(layout, "responses", list(rows = 1, cols = 1))
+      strata_rows <- extract_or(strata_layout, "rows", 1)
+      strata_cols <- extract_or(strata_layout, "cols", 1)
+      resp_rows <- extract_or(response_layout, "rows", 1)
+      resp_cols <- extract_or(response_layout, "cols", 1)
+      list(
+        w = input$plot_width * strata_cols * resp_cols,
+        h = input$plot_height * strata_rows * resp_rows
+      )
+    })
+
+    output$layout_controls <- renderUI({
+      info <- model_info()
+      req(info)
+      build_anova_layout_controls(ns, input, info)
+    })
+
+    output$plot_warning <- renderUI({
+      info <- current_result()
+      if (is.null(info) || is.null(info$warning)) return(NULL)
+      div(class = "alert alert-warning", HTML(info$warning))
+    })
+
+    output$plot <- renderPlot({
+      plot <- plot_obj()
+      req(plot)
+      plot
+    },
+    width = function() plot_size()$w,
+    height = function() plot_size()$h,
+    res = 96)
+
+    output$download_plot <- downloadHandler(
+      filename = function() paste0("anova_plot_", Sys.Date(), ".png"),
+      content = function(file) {
+        info <- current_result()
+        req(info)
+        req(is.null(info$warning))
+        plot <- plot_obj()
+        req(plot)
+        size <- plot_size()
+        ggsave(
+          filename = file,
+          plot = plot,
+          device = "png",
+          dpi = 300,
+          width = size$w / 96,
+          height = size$h / 96,
+          units = "in",
+          limitsize = FALSE
+        )
+      }
+    )
+  })
+}
