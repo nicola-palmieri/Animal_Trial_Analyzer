@@ -56,47 +56,31 @@ visualize_categorical_barplots_plot_ui <- function(id) {
 visualize_categorical_barplots_server <- function(id, filtered_data, summary_info, is_active = NULL) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
-
+    
     resolve_input_value <- function(x) {
       if (is.null(x)) return(NULL)
       if (is.reactive(x)) x() else x
     }
-
+    
     module_active <- reactive({
-      if (is.null(is_active)) {
-        TRUE
-      } else {
-        isTRUE(is_active())
-      }
+      if (is.null(is_active)) TRUE else isTRUE(is_active())
     })
-
-    plot_width <- reactive({
-      w <- input$plot_width
-      if (is.null(w) || !is.numeric(w) || is.na(w)) 400 else w
-    })
-
-    plot_height <- reactive({
-      h <- input$plot_height
-      if (is.null(h) || !is.numeric(h) || is.na(h)) 300 else h
-    })
+    
+    plot_width  <- reactive({ w <- input$plot_width;  if (is.null(w) || is.na(w)) 400 else as.numeric(w) })
+    plot_height <- reactive({ h <- input$plot_height; if (is.null(h) || is.na(h)) 300 else as.numeric(h) })
+    
+    grid <- plot_grid_server("plot_grid")
     
     color_var_reactive <- reactive({
       info <- summary_info()
       if (is.null(info)) return(NULL)
-
-      group_var <- resolve_input_value(info$group_var)
-      if (is.null(group_var) || identical(group_var, "") || identical(group_var, "None")) {
-        return(NULL)
-      }
-
+      g <- resolve_input_value(info$group_var)
       dat <- filtered_data()
-      if (is.null(dat) || !is.data.frame(dat) || !group_var %in% names(dat)) {
-        return(NULL)
-      }
-
-      group_var
+      if (is.null(g) || identical(g, "") || identical(g, "None")) return(NULL)
+      if (is.null(dat) || !is.data.frame(dat) || !g %in% names(dat)) return(NULL)
+      g
     })
-
+    
     custom_colors <- add_color_customization_server(
       ns = ns,
       input = input,
@@ -105,113 +89,72 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
       color_var_reactive = color_var_reactive,
       multi_group = TRUE
     )
-
-    base_size <- base_size_server(
-      input = input,
-      default = 13
-    )
-
-    cached_plot_info <- reactiveVal(NULL)
-    cache_ready <- reactiveVal(FALSE)
-
-    grid_inputs <- plot_grid_server("plot_grid")
-
-    invalidate_cache <- function() {
-      cached_plot_info(NULL)
-      cache_ready(FALSE)
-      invisible(TRUE)
-    }
-
-    observeEvent(
+    
+    base_size <- base_size_server(input = input, default = 13)
+    
+    state <- reactive({
       list(
-        summary_info(),
-        filtered_data(),
-        input$show_proportions,
-        input$show_value_labels,
-        custom_colors(),
-        base_size()
-      ),
-      {
-        invalidate_cache()
-      },
-      ignoreNULL = FALSE
-    )
-
-    observeEvent(grid_inputs$values(), {
-      invalidate_cache()
-    }, ignoreNULL = FALSE)
-
-    compute_plot_info <- function() {
-      info <- summary_info()
-
-      validate(need(!is.null(info), "Summary not available."))
-
-      processed <- resolve_input_value(info$processed_data)
-      dat <- if (!is.null(processed)) processed else filtered_data()
-
-      validate(need(!is.null(dat) && is.data.frame(dat) && nrow(dat) > 0, "No data available."))
-
-      selected_vars <- resolve_input_value(info$selected_vars)
-      group_var     <- resolve_input_value(info$group_var)
-      strata_levels <- resolve_input_value(info$strata_levels)
-
-      out <- build_descriptive_categorical_plot(
-        df = dat,
-        selected_vars = selected_vars,
-        group_var = group_var,
-        strata_levels = strata_levels,
-        show_proportions = isTRUE(input$show_proportions),
-        nrow_input = grid_inputs$rows(),
-        ncol_input = grid_inputs$cols(),
-        fill_colors = custom_colors(),
-        show_value_labels = isTRUE(input$show_value_labels),
-        base_size = base_size()
+        info          = summary_info(),
+        dat           = filtered_data(),
+        proportions   = isTRUE(input$show_proportions),
+        labels        = isTRUE(input$show_value_labels),
+        colors        = custom_colors(),
+        base_size     = base_size(),
+        rows_input    = grid$rows(),
+        cols_input    = grid$cols()
       )
-      validate(need(!is.null(out), "No categorical variables available for plotting."))
-      out
-    }
-
+    })
+    
     plot_info <- reactive({
       req(module_active())
-      if (!isTRUE(cache_ready())) {
-        cached_plot_info(compute_plot_info())
-        cache_ready(TRUE)
-      }
-      cached_plot_info()
+      s <- state()
+      req(!is.null(s$info))
+      processed <- resolve_input_value(s$info$processed_data)
+      dat <- if (!is.null(processed)) processed else s$dat
+      req(!is.null(dat), is.data.frame(dat), nrow(dat) > 0)
+      
+      selected_vars <- resolve_input_value(s$info$selected_vars)
+      group_var     <- resolve_input_value(s$info$group_var)
+      strata_levels <- resolve_input_value(s$info$strata_levels)
+      
+      build_descriptive_categorical_plot(
+        df                = dat,
+        selected_vars     = selected_vars,
+        group_var         = group_var,
+        strata_levels     = strata_levels,
+        show_proportions  = s$proportions,
+        nrow_input        = s$rows_input,
+        ncol_input        = s$cols_input,
+        fill_colors       = s$colors,
+        show_value_labels = s$labels,
+        base_size         = s$base_size
+      )
     })
-
-    plot_size <- reactive({
+    
+    size_val <- reactiveVal(list(w = 400, h = 300))
+    
+    observeEvent(plot_info(), {
       req(module_active())
       info <- plot_info()
-      layout <- info$layout
-      if (is.null(layout)) {
-        list(w = plot_width(), h = plot_height())
-      } else {
-        list(
-          w = plot_width()  * layout$ncol,
-          h = plot_height() * layout$nrow
-        )
-      }
-    })
-
+      lay <- info$layout
+      nrow_l <- if (is.null(lay) || is.null(lay$nrow) || is.na(lay$nrow)) 1L else as.integer(lay$nrow)
+      ncol_l <- if (is.null(lay) || is.null(lay$ncol) || is.na(lay$ncol)) 1L else as.integer(lay$ncol)
+      size_val(list(w = plot_width() * ncol_l, h = plot_height() * nrow_l))
+    }, ignoreInit = FALSE)
+    
     output$grid_warning <- renderUI({
       req(module_active())
       info <- plot_info()
-      if (!is.null(info$warning)) {
-        div(class = "alert alert-warning", info$warning)
-      } else {
-        NULL
-      }
+      if (!is.null(info$warning)) div(class = "alert alert-warning", info$warning) else NULL
     })
-
+    
     output$download_plot <- downloadHandler(
       filename = function() paste0("categorical_barplots_", Sys.Date(), ".png"),
-      content  = function(file) {
+      content = function(file) {
         req(module_active())
         info <- plot_info()
-        req(is.null(info$warning))
-        req(info$plot)
-        s <- plot_size()
+        req(is.null(info$warning), !is.null(info$plot))
+        s <- size_val()
         ggplot2::ggsave(
           filename = file,
           plot = info$plot,
@@ -224,24 +167,19 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
         )
       }
     )
-
+    
     output$plot <- renderPlot({
       req(module_active())
       info <- plot_info()
       if (!is.null(info$warning) || is.null(info$plot)) return(NULL)
       print(info$plot)
     },
-    width = function() {
-      req(module_active())
-      plot_size()$w
-    },
-    height = function() {
-      req(module_active())
-      plot_size()$h
-    },
+    width = function() { size_val()$w },
+    height = function() { size_val()$h },
     res = 96)
   })
 }
+
 
 
 format_value_labels <- function(df, show_proportions) {
