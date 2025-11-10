@@ -1170,12 +1170,7 @@ build_bar_plot_panel <- function(stats_df,
               by = step,
               length.out = dplyr::n()
             ),
-            label = dplyr::case_when(
-              p.value < 0.001 ~ "***",
-              p.value < 0.01 ~ "**",
-              p.value < 0.05 ~ "*",
-              TRUE ~ sprintf("p=%.3f", p.value)
-            ),
+            label = format_significance_label(p.value),
             xmin = group1,
             xmax = group2,
             .group_id = seq_len(dplyr::n())
@@ -1326,12 +1321,7 @@ build_bar_plot_panel <- function(stats_df,
 
         subset_df <- subset_df |>
           dplyr::mutate(
-            label = dplyr::case_when(
-              p.value < 0.001 ~ "***",
-              p.value < 0.01 ~ "**",
-              p.value < 0.05 ~ "*",
-              TRUE ~ sprintf("p=%.3f", p.value)
-            ),
+            label = format_significance_label(p.value),
             xmin = vapply(group1, function(g) {
               vals <- level_lookup$.xpos[level_lookup$.factor2 == g]
               if (length(vals) == 0) NA_real_ else vals[1]
@@ -1609,6 +1599,40 @@ format_p_value <- function(p_values) {
         "<0.001"
       } else {
         sprintf("%.2f", round(p, 2))
+      }
+    },
+    character(1)
+  )
+}
+
+format_significance_label <- function(p_values) {
+  vapply(
+    p_values,
+    function(p) {
+      if (is.na(p)) {
+        return(NA_character_)
+      }
+
+      stars <- if (p < 0.001) {
+        "***"
+      } else if (p < 0.01) {
+        "**"
+      } else if (p < 0.05) {
+        "*"
+      } else {
+        ""
+      }
+
+      prefix <- if (p < 0.001) {
+        "p<0.001"
+      } else {
+        sprintf("p=%.3f", round(p, 3))
+      }
+
+      if (nzchar(stars)) {
+        paste0(prefix, " (", stars, ")")
+      } else {
+        prefix
       }
     },
     character(1)
