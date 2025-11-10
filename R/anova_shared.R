@@ -1361,11 +1361,11 @@ add_significance_annotations <- function(plot_obj, stats_df, factor1, posthoc_en
   )
   
   max_y <- max(stats_df$mean + stats_df$se, na.rm = TRUE)
-  step <- abs(max_y) * 0.10
+  step <- abs(max_y) * 0.15
   signif_df$y_position <- seq(from = max_y + step, by = step, length.out = nrow(signif_df))
   signif_df$.group_id <- seq_len(nrow(signif_df))
   
-  plot_obj + ggsignif::geom_signif(
+  plot_obj <- plot_obj + ggsignif::geom_signif(
     data = signif_df,
     aes(
       xmin = xmin,
@@ -1380,6 +1380,10 @@ add_significance_annotations <- function(plot_obj, stats_df, factor1, posthoc_en
     tip_length = 0.01,
     color = "gray30"
   )
+  
+  max_y_total <- max(signif_df$y_position, na.rm = TRUE)
+  plot_obj + scale_y_continuous(expand = expansion(mult = c(0, 0.10)),
+                                limits = c(NA, max_y_total * 1.1))
 }
 
 
@@ -1461,7 +1465,7 @@ add_nested_significance_annotations <- function(plot_obj, stats_df, factor1, fac
   df$.group_id <- seq_len(nrow(df))
   
   # One layer total (manual=TRUE expects numeric x’s on the data)
-  plot_obj + ggsignif::geom_signif(
+  plot_obj <- plot_obj + ggsignif::geom_signif(
     data        = df,
     aes(xmin = xmin, xmax = xmax, annotations = annotations,
         y_position = y_position, group = .group_id),
@@ -1471,6 +1475,10 @@ add_nested_significance_annotations <- function(plot_obj, stats_df, factor1, fac
     tip_length  = 0.01,
     color       = "gray30"
   )
+  
+  max_y_total <- max(df$y_position, na.rm = TRUE)
+  plot_obj + scale_y_continuous(expand = expansion(mult = c(0, 0.10)),
+                                limits = c(NA, max_y_total * 1.1))
 }
 
 plot_anova_barplot_meanse <- function(data,
