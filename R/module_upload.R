@@ -70,7 +70,7 @@ upload_server <- function(id) {
 
       data <- processed$result
       df(data)
-      output$preview <- renderDT(data, options = list(scrollX = TRUE, pageLength = 5))
+      output$preview <- renderDT(data, options = list(scrollX = TRUE, pageLength = 10))
       create_type_selectors(data)
       if (!is.null(success_message)) {
         render_validation(success_message)
@@ -104,7 +104,7 @@ upload_server <- function(id) {
         if (!handle_safe_result(
           safe_result,
           "Error preparing example dataset",
-          "📂 Loaded built-in example dataset (long format).",
+          "📂 Loaded built-in example dataset.",
           "Error preparing example dataset"
         )) {
           return()

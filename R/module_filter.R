@@ -139,7 +139,7 @@ filter_server <- function(id, uploaded_data) {
 
     # --- 4. Preview table ---
     output$filtered_preview <- renderDT({
-      datatable(filtered_df(), options = list(scrollX = TRUE, pageLength = 5))
+      datatable(filtered_df(), options = list(scrollX = TRUE, pageLength = 10))
     })
 
     # --- 5. Return filtered data downstream ---
