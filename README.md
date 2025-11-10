@@ -124,5 +124,6 @@ When exporting results, each module bundles the rendered tables, model summaries
 
 If Table Analyzer supports your research, please cite it so others can discover the tool:
 
-**Palmieri, N.** (2025). *Table Analyzer: Transparent spreadsheet-to-analysis workflows in R/Shiny* (Version 1.00). Available at [https://github.com/nicola-palmieri/TableAnalyzer](https://github.com/nicola-palmieri/TableAnalyzer).
+**Palmieri, N.** (2025). *Table Analyzer: Turn your tabular data into publication-ready tables and plots* (Version 1.00). Available at [https://github.com/nicola-palmieri/TableAnalyzer](https://github.com/nicola-palmieri/TableAnalyzer).
+
 
