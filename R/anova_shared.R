@@ -213,15 +213,21 @@ prepare_anova_outputs <- function(model_obj, factor_names) {
   
   if (!is.null(posthoc_combined)) {
     posthoc_combined <- posthoc_combined[, c("Factor", setdiff(names(posthoc_combined), "Factor"))]
+
+    raw_posthoc_p <- NULL
+    if ("p.value" %in% names(posthoc_combined)) {
+      raw_posthoc_p <- posthoc_combined$p.value
+    }
+
     numeric_cols <- names(posthoc_combined)[sapply(posthoc_combined, is.numeric)]
+    numeric_cols <- setdiff(numeric_cols, "p.value")
     if (length(numeric_cols) > 0) {
       for (col in numeric_cols) {
         posthoc_combined[[col]] <- round(posthoc_combined[[col]], 2)
       }
     }
-    
-    if ("p.value" %in% names(posthoc_combined)) {
-      raw_posthoc_p <- posthoc_combined$p.value
+
+    if (!is.null(raw_posthoc_p)) {
       posthoc_significant <- !is.na(raw_posthoc_p) & raw_posthoc_p < 0.05
       formatted_posthoc_p <- format_p_value(raw_posthoc_p)
       posthoc_combined$p.value <- add_significance_marker(formatted_posthoc_p, raw_posthoc_p)
