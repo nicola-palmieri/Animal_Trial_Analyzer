@@ -63,47 +63,31 @@ visualize_numeric_boxplots_plot_ui <- function(id) {
 visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, is_active = NULL) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
-
+    
     resolve_input_value <- function(x) {
       if (is.null(x)) return(NULL)
       if (is.reactive(x)) x() else x
     }
-
+    
     module_active <- reactive({
-      if (is.null(is_active)) {
-        TRUE
-      } else {
-        isTRUE(is_active())
-      }
+      if (is.null(is_active)) TRUE else isTRUE(is_active())
     })
-
-    plot_width <- reactive({
-      w <- input$plot_width
-      if (is.null(w) || !is.numeric(w) || is.na(w)) 400 else w
-    })
-
-    plot_height <- reactive({
-      h <- input$plot_height
-      if (is.null(h) || !is.numeric(h) || is.na(h)) 300 else h
-    })
-
+    
+    plot_width  <- reactive({ w <- input$plot_width;  if (is.null(w) || is.na(w)) 200 else as.numeric(w) })
+    plot_height <- reactive({ h <- input$plot_height; if (is.null(h) || is.na(h)) 800 else as.numeric(h) })
+    
+    grid <- plot_grid_server("plot_grid", cols_max = 100L)
+    
     color_var_reactive <- reactive({
       info <- summary_info()
       if (is.null(info)) return(NULL)
-
-      group_var <- resolve_input_value(info$group_var)
-      if (is.null(group_var) || identical(group_var, "") || identical(group_var, "None")) {
-        return(NULL)
-      }
-
+      g <- resolve_input_value(info$group_var)
       dat <- filtered_data()
-      if (is.null(dat) || !is.data.frame(dat) || !group_var %in% names(dat)) {
-        return(NULL)
-      }
-
-      group_var
+      if (is.null(g) || identical(g, "") || identical(g, "None")) return(NULL)
+      if (is.null(dat) || !is.data.frame(dat) || !g %in% names(dat)) return(NULL)
+      g
     })
-
+    
     custom_colors <- add_color_customization_server(
       ns = ns,
       input = input,
@@ -112,12 +96,9 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
       color_var_reactive = color_var_reactive,
       multi_group = TRUE
     )
-
-    base_size <- base_size_server(
-      input = input,
-      default = 13
-    )
-
+    
+    base_size <- base_size_server(input = input, default = 13)
+    
     output$outlier_label_ui <- renderUI({
       dat <- filtered_data()
       cat_cols <- character(0)
@@ -129,12 +110,10 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
         )]
         cat_cols <- sort(unique(cat_cols))
       }
-
+      
       current <- isolate(input$outlier_label)
-      if (is.null(current) || !nzchar(current) || !current %in% cat_cols) {
-        current <- ""
-      }
-
+      if (is.null(current) || !nzchar(current) || !current %in% cat_cols) current <- ""
+      
       with_help_tooltip(
         selectInput(
           ns("outlier_label"),
@@ -145,106 +124,70 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
         "Choose a column to annotate the highlighted outliers."
       )
     })
-
-    cached_plot_info <- reactiveVal(NULL)
-
-    invalidate_cache <- function() {
-      cached_plot_info(NULL)
-      invisible(TRUE)
-    }
-
-    observeEvent(
+    
+    state <- reactive({
       list(
-        summary_info(),
-        filtered_data(),
-        input$show_points,
-        input$show_outliers,
-        input$outlier_label,
-        custom_colors(),
-        base_size()
-      ),
-      {
-        invalidate_cache()
-      },
-      ignoreNULL = FALSE
-    )
-
-    grid_inputs <- plot_grid_server("plot_grid", cols_max = 100L)
-
-    observeEvent(grid_inputs$values(), {
-      invalidate_cache()
-    })
-
-    compute_plot_info <- function() {
-      info <- summary_info()
-
-      validate(need(!is.null(info), "Summary not available."))
-
-      processed <- resolve_input_value(info$processed_data)
-      dat <- if (!is.null(processed)) processed else filtered_data()
-
-      validate(need(!is.null(dat) && is.data.frame(dat) && nrow(dat) > 0, "No data available."))
-
-      selected_vars <- resolve_input_value(info$selected_vars)
-      group_var     <- resolve_input_value(info$group_var)
-
-      out <- build_descriptive_numeric_boxplot(
-        df = dat,
-        selected_vars = selected_vars,
-        group_var = group_var,
-        show_points = isTRUE(input$show_points),
+        info          = summary_info(),
+        dat           = filtered_data(),
+        show_points   = isTRUE(input$show_points),
         show_outliers = isTRUE(input$show_outliers),
-        outlier_label_var = validate_outlier_label(input$outlier_label),
-        nrow_input = grid_inputs$rows(),
-        ncol_input = grid_inputs$cols(),
-        custom_colors = custom_colors(),
-        base_size = base_size()
+        label_var     = validate_outlier_label(input$outlier_label),
+        colors        = custom_colors(),
+        base_size     = base_size(),
+        rows_input    = grid$rows(),
+        cols_input    = grid$cols()
       )
-
-      validate(need(!is.null(out), "No numeric variables available for plotting."))
-      out
-    }
-
+    })
+    
     plot_info <- reactive({
       req(module_active())
-      if (is.null(cached_plot_info())) {
-        cached_plot_info(compute_plot_info())
-      }
-      cached_plot_info()
+      s <- state()
+      req(!is.null(s$info))
+      processed <- resolve_input_value(s$info$processed_data)
+      dat <- if (!is.null(processed)) processed else s$dat
+      req(!is.null(dat), is.data.frame(dat), nrow(dat) > 0)
+      
+      selected_vars <- resolve_input_value(s$info$selected_vars)
+      group_var     <- resolve_input_value(s$info$group_var)
+      
+      build_descriptive_numeric_boxplot(
+        df                = dat,
+        selected_vars     = selected_vars,
+        group_var         = group_var,
+        show_points       = s$show_points,
+        show_outliers     = s$show_outliers,
+        outlier_label_var = s$label_var,
+        nrow_input        = s$rows_input,
+        ncol_input        = s$cols_input,
+        custom_colors     = s$colors,
+        base_size         = s$base_size
+      )
     })
-
-    plot_size <- reactive({
+    
+    size_val <- reactiveVal(list(w = 200, h = 800))
+    
+    observeEvent(plot_info(), {
       req(module_active())
       info <- plot_info()
-      layout <- info$layout
-      if (is.null(layout)) {
-        list(w = plot_width(), h = plot_height())
-      } else {
-        list(
-          w = plot_width()  * layout$ncol,
-          h = plot_height() * layout$nrow
-        )
-      }
-    })
-
+      lay <- info$layout
+      nrow_l <- if (is.null(lay) || is.null(lay$nrow) || is.na(lay$nrow)) 1L else as.integer(lay$nrow)
+      ncol_l <- if (is.null(lay) || is.null(lay$ncol) || is.na(lay$ncol)) 1L else as.integer(lay$ncol)
+      size_val(list(w = plot_width() * ncol_l, h = plot_height() * nrow_l))
+    }, ignoreInit = FALSE)
+    
     output$grid_warning <- renderUI({
       req(module_active())
       info <- plot_info()
-      if (!is.null(info$warning)) {
-        div(class = "alert alert-warning", info$warning)
-      } else {
-        NULL
-      }
+      if (!is.null(info$warning)) div(class = "alert alert-warning", info$warning) else NULL
     })
-
+    
     output$download_plot <- downloadHandler(
       filename = function() paste0("numeric_boxplots_", Sys.Date(), ".png"),
-      content  = function(file) {
+      content = function(file) {
         req(module_active())
         info <- plot_info()
-        req(is.null(info$warning))
-        req(info$plot)
-        s <- plot_size()
+        req(is.null(info$warning), !is.null(info$plot))
+        s <- size_val()
         ggplot2::ggsave(
           filename = file,
           plot = info$plot,
@@ -257,24 +200,20 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
         )
       }
     )
-
+    
     output$plot <- renderPlot({
       req(module_active())
       info <- plot_info()
       if (!is.null(info$warning) || is.null(info$plot)) return(NULL)
       print(info$plot)
     },
-    width = function() {
-      req(module_active())
-      plot_size()$w
-    },
-    height = function() {
-      req(module_active())
-      plot_size()$h
-    },
+    width = function() { size_val()$w },
+    height = function() { size_val()$h },
     res = 96)
   })
 }
+
+
 
 
 build_descriptive_numeric_boxplot <- function(df,
