@@ -7,7 +7,7 @@
   is.factor(x) || is.character(x) || is.logical(x)
 }
 
-.pca_aesthetic_choices <- function(data) {
+.pca_aesthetic_choices <- function(data, max_levels = NULL) {
   if (missing(data) || is.null(data) || !is.data.frame(data) || ncol(data) == 0) {
     return(c("None" = "None"))
   }
@@ -15,8 +15,7 @@
   keep <- vapply(data, .is_categorical, logical(1))
   cat_cols <- names(data)[keep]
 
-  if (length(cat_cols) > 0) {
-    max_levels <- 16L
+  if (!is.null(max_levels) && length(cat_cols) > 0) {
     within_limit <- vapply(cat_cols, function(column_name) {
       column <- data[[column_name]]
       if (is.null(column)) {
@@ -42,7 +41,8 @@
 
 visualize_pca_ui <- function(id, filtered_data = NULL) {
   ns <- NS(id)
-  choices <- .pca_aesthetic_choices(filtered_data)
+  all_choices <- .pca_aesthetic_choices(filtered_data)
+  limited_choices <- .pca_aesthetic_choices(filtered_data, max_levels = 16L)
 
   sidebarLayout(
     sidebarPanel(
@@ -63,7 +63,7 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
         selectInput(
           ns("pca_color"),
           label = "Color points by",
-          choices = choices,
+          choices = limited_choices,
           selected = "None"
         ),
         "Colour the samples using a grouping variable to spot patterns. Only variables with 16 or fewer categories are available."
@@ -72,16 +72,16 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
         selectInput(
           ns("pca_shape"),
           label = "Shape points by",
-          choices = choices,
+          choices = limited_choices,
           selected = "None"
         ),
-        "Change the point shapes using a grouping variable for extra contrast."
+        "Change the point shapes using a grouping variable for extra contrast. Only variables with 16 or fewer categories are available."
       ),
       with_help_tooltip(
         selectInput(
           ns("pca_label"),
           label = "Label points by",
-          choices = choices,
+          choices = all_choices,
           selected = "None"
         ),
         "Add text labels from a column to identify each sample."
@@ -90,7 +90,7 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
         selectInput(
           ns("facet_var"),
           label = "Facet by variable",
-          choices = choices,
+          choices = all_choices,
           selected = "None"
         ),
         "Split the plot into small multiples based on a grouping variable."
@@ -218,7 +218,8 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
       }
     })
 
-    available_choices <- reactive(.pca_aesthetic_choices(color_data()))
+    available_choices_all <- reactive(.pca_aesthetic_choices(color_data()))
+    available_choices_limited <- reactive(.pca_aesthetic_choices(color_data(), max_levels = 16L))
 
     valid_column <- function(var) {
       if (is.null(var) || identical(var, "None") || !nzchar(var)) {
@@ -249,27 +250,20 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
 
     facet_grid_inputs <- plot_grid_server("facet_grid")
 
-    observeEvent(available_choices(), {
-      choices <- available_choices()
-      update_input <- function(id, current) {
-        selected <- if (!is.null(current) && current %in% choices) current else "None"
+    observeEvent(list(available_choices_all(), available_choices_limited()), {
+      limited <- available_choices_limited()
+      all_choices <- available_choices_all()
+
+      update_input <- function(id, current, choices) {
+        pool <- unname(choices)
+        selected <- if (!is.null(current) && current %in% pool) current else "None"
         updateSelectInput(session, id, choices = choices, selected = selected)
       }
-      update_input("pca_color", input$pca_color)
-      update_input("pca_shape", input$pca_shape)
-      update_input("pca_label", input$pca_label)
-    }, ignoreNULL = FALSE)
 
-    observeEvent(available_choices(), {
-      facet_choices <- available_choices()
-
-      selected <- if (!is.null(input$facet_var) && input$facet_var %in% facet_choices) {
-        input$facet_var
-      } else {
-        "None"
-      }
-
-      updateSelectInput(session, "facet_var", choices = facet_choices, selected = selected)
+      update_input("pca_color", input$pca_color, limited)
+      update_input("pca_shape", input$pca_shape, limited)
+      update_input("pca_label", input$pca_label, all_choices)
+      update_input("facet_var", input$facet_var, all_choices)
     }, ignoreNULL = FALSE)
 
     output$layout_controls <- renderUI({
@@ -369,11 +363,11 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
         return(empty_result("PCA data unavailable."))
       }
 
-      choices <- available_choices()
-      choice_pool <- unname(choices)
-      color_var <- validate_choice(input$pca_color, choice_pool)
-      shape_var <- validate_choice(input$pca_shape, choice_pool)
-      label_var <- validate_choice(input$pca_label, choice_pool)
+      limited_pool <- unname(available_choices_limited())
+      all_pool <- unname(available_choices_all())
+      color_var <- validate_choice(input$pca_color, limited_pool)
+      shape_var <- validate_choice(input$pca_shape, limited_pool)
+      label_var <- validate_choice(input$pca_label, all_pool)
       label_size <- ifelse(is.null(input$pca_label_size) || is.na(input$pca_label_size), 2, input$pca_label_size)
       show_loadings <- isTRUE(input$show_loadings)
       loading_scale <- ifelse(is.null(input$loading_scale) || is.na(input$loading_scale), 1.2, input$loading_scale)
