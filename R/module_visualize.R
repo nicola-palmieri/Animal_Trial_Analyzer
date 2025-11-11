@@ -43,8 +43,6 @@ visualize_server <- function(id, filtered_data, model_fit) {
     })
 
     vis_cache <- reactiveValues()
-    selection_memory <- reactiveValues()
-    active_selection_key <- reactiveVal(NULL)
 
     ensure_vis_server <- function(key, create_fn) {
       if (is.null(vis_cache[[key]])) {
@@ -57,35 +55,27 @@ visualize_server <- function(id, filtered_data, model_fit) {
       oneway_anova = list(
         id = "oneway",
         ui = function(ns) visualize_oneway_ui(ns("oneway")),
-        server = function(...) visualize_oneway_server("oneway", filtered_data, model_info)
+        server = function() visualize_oneway_server("oneway", filtered_data, model_info)
       ),
       twoway_anova = list(
         id = "twoway",
         ui = function(ns) visualize_twoway_ui(ns("twoway")),
-        server = function(...) visualize_twoway_server("twoway", filtered_data, model_info)
+        server = function() visualize_twoway_server("twoway", filtered_data, model_info)
       ),
       pairs = list(
         id = "ggpairs",
         ui = function(ns) visualize_ggpairs_ui(ns("ggpairs")),
-        server = function(...) visualize_ggpairs_server("ggpairs", filtered_data, model_info)
+        server = function() visualize_ggpairs_server("ggpairs", filtered_data, model_info)
       ),
       pca = list(
         id = "pca",
         ui = function(ns) visualize_pca_ui(ns("pca"), filtered_data()),
-        server = function(...) visualize_pca_server("pca", filtered_data, model_info)
+        server = function() visualize_pca_server("pca", filtered_data, model_info)
       ),
       descriptive = list(
         id = "descriptive",
         ui = function(ns) visualize_descriptive_ui(ns("descriptive")),
-        server = function(selection, save_selection) {
-          visualize_descriptive_server(
-            "descriptive",
-            filtered_data,
-            model_info,
-            selection,
-            save_selection
-          )
-        }
+        server = function() visualize_descriptive_server("descriptive", filtered_data, model_info)
       )
     )
 
@@ -115,30 +105,9 @@ visualize_server <- function(id, filtered_data, model_fit) {
     observeEvent(analysis_type(), {
       type <- analysis_type()
       spec <- visualization_specs[[type]]
-
-      if (is.null(spec)) {
-        return(NULL)
+      if (!is.null(spec)) {
+        ensure_vis_server(spec$id, spec$server)
       }
-
-      key <- spec$id
-      previous_key <- active_selection_key()
-
-      if (!identical(previous_key, key)) {
-        selection_memory[[key]] <- NULL
-        active_selection_key(key)
-      }
-
-      ensure_vis_server(
-        key,
-        function() {
-          spec$server(
-            selection = reactive(selection_memory[[key]]),
-            save_selection = function(value) {
-              selection_memory[[key]] <- value
-            }
-          )
-        }
-      )
     }, ignoreInit = FALSE)
   })
 }
