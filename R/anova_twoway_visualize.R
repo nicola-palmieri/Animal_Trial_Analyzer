@@ -154,23 +154,31 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
     
     size_val <- reactiveVal(list(w = 400, h = 300))
     
-    observeEvent(plot_info(), {
+    observe({
       req(module_active())
       info <- plot_info()
+      req(info)
+
+      width_input <- suppressWarnings(as.numeric(input$plot_width))
+      height_input <- suppressWarnings(as.numeric(input$plot_height))
+
+      plot_w <- if (is.na(width_input) || width_input <= 0) 400 else width_input
+      plot_h <- if (is.na(height_input) || height_input <= 0) 300 else height_input
+
       layout <- info$layout
       if (is.null(layout)) {
-        size_val(list(w = input$plot_width, h = input$plot_height))
+        size_val(list(w = plot_w, h = plot_h))
       } else {
         strata <- layout$strata
         responses <- layout$responses
         nrow_l <- (strata$rows %||% 1L) * (responses$rows %||% 1L)
         ncol_l <- (strata$cols %||% 1L) * (responses$cols %||% 1L)
         size_val(list(
-          w = input$plot_width  * ncol_l,
-          h = input$plot_height * nrow_l
+          w = plot_w * ncol_l,
+          h = plot_h * nrow_l
         ))
       }
-    }, ignoreInit = FALSE)
+    })
     
     output$layout_controls <- renderUI({
       info <- model_info()
