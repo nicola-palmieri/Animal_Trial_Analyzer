@@ -207,14 +207,8 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
       entry <- pca_entry()
       if (!is.null(entry) && !is.null(entry$data)) {
         entry$data
-      } else if (!is.null(filtered_data)) {
-        if (is.reactive(filtered_data)) {
-          filtered_data()
-        } else {
-          filtered_data
-        }
       } else {
-        NULL
+        resolve_reactive(filtered_data)
       }
     })
 

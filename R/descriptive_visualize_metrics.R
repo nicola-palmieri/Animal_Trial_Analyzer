@@ -49,12 +49,6 @@ metric_plot_ui <- function(id) {
 visualize_cv_plot_ui <- visualize_outliers_plot_ui <- visualize_missing_plot_ui <- metric_plot_ui
 
 
-# ---- Shared computation helpers ----
-resolve_metric_input <- function(x) {
-  if (is.null(x)) return(NULL)
-  if (is.reactive(x)) x() else x
-}
-
 safe_cv <- function(x) {
   m <- mean(x, na.rm = TRUE)
   s <- stats::sd(x, na.rm = TRUE)
@@ -224,7 +218,7 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
       info <- summary_info()
       if (is.null(info)) return(NULL)
 
-      group_var <- resolve_metric_input(info$group_var)
+      group_var <- resolve_reactive(info$group_var)
       if (is.null(group_var) || group_var %in% c("", "None")) return(NULL)
 
       dat <- filtered_data()
@@ -270,15 +264,15 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
       info <- summary_info()
       validate(need(!is.null(info), "Summary not available."))
 
-      processed <- resolve_metric_input(info$processed_data)
+      processed <- resolve_reactive(info$processed_data)
       dat <- if (!is.null(processed)) processed else filtered_data()
 
       validate(need(!is.null(dat) && is.data.frame(dat) && nrow(dat) > 0, "No data available."))
 
-      selected_vars <- resolve_metric_input(info$selected_vars)
-      group_var <- resolve_metric_input(info$group_var)
-      strata_levels <- resolve_metric_input(info$strata_levels)
-      group_label <- resolve_metric_input(info$group_label)
+      selected_vars <- resolve_reactive(info$selected_vars)
+      group_var <- resolve_reactive(info$group_var)
+      strata_levels <- resolve_reactive(info$strata_levels)
+      group_label <- resolve_reactive(info$group_label)
 
       numeric_vars <- names(dat)[vapply(dat, is.numeric, logical(1))]
       if (!is.null(selected_vars) && length(selected_vars) > 0) {
