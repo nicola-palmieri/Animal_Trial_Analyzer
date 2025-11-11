@@ -150,23 +150,38 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
     
     size_val <- reactiveVal(list(w = 400, h = 300))
     
-    observeEvent(plot_info(), {
+    observe({
       req(module_active())
       info <- plot_info()
+      req(info)
+
+      sanitize_dim <- function(value, default) {
+        if (is.null(value)) return(default)
+        numeric_value <- suppressWarnings(as.numeric(value))
+        if (length(numeric_value) == 0 || is.na(numeric_value) || numeric_value <= 0) {
+          default
+        } else {
+          numeric_value
+        }
+      }
+
+      plot_w <- sanitize_dim(input$plot_width, 400)
+      plot_h <- sanitize_dim(input$plot_height, 300)
+
       layout <- info$layout
       if (is.null(layout)) {
-        size_val(list(w = input$plot_width, h = input$plot_height))
+        size_val(list(w = plot_w, h = plot_h))
       } else {
         strata <- layout$strata
         responses <- layout$responses
         nrow_l <- (strata$rows %||% 1L) * (responses$rows %||% 1L)
         ncol_l <- (strata$cols %||% 1L) * (responses$cols %||% 1L)
         size_val(list(
-          w = input$plot_width  * ncol_l,
-          h = input$plot_height * nrow_l
+          w = plot_w * ncol_l,
+          h = plot_h * nrow_l
         ))
       }
-    }, ignoreInit = FALSE)
+    })
     
     output$layout_controls <- renderUI({
       info <- model_info()
