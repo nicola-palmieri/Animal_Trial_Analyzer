@@ -15,11 +15,7 @@ pairwise_correlation_visualize_ggpairs_ui <- function(id) {
         "Set the height in pixels for each panel of the correlation matrix."
       ))
     ),
-    plot_grid_ui(
-      id = ns("plot_grid"),
-      rows_help = "Choose how many rows of panels to use when multiple strata are plotted.",
-      cols_help = "Choose how many columns of panels to use when multiple strata are plotted."
-    ),
+    uiOutput(ns("grid_controls")),
     fluidRow(
       column(6, add_color_customization_ui(ns, multi_group = TRUE)),
       column(6, base_size_ui(
@@ -73,6 +69,19 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
     
     base_size <- base_size_server(input = input, default = 11)
     grid_inputs <- plot_grid_server("plot_grid")
+
+    output$grid_controls <- renderUI({
+      info <- plot_info()
+      if (is.null(info) || is.null(info$panels) || info$panels <= 1L) {
+        return(NULL)
+      }
+
+      plot_grid_ui(
+        id = ns("plot_grid"),
+        rows_help = "Choose how many rows of panels to use when multiple strata are plotted.",
+        cols_help = "Choose how many columns of panels to use when multiple strata are plotted."
+      )
+    })
     
     build_ggpairs_plot <- function(data, color_value, title = NULL, base_size_value = 11) {
       validate(need(is.data.frame(data) && nrow(data) > 0, "No data available for plotting."))
