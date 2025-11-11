@@ -48,3 +48,17 @@ base_size_server <- function(input,
     }
   })
 }
+
+compute_label_text_size <- function(base_size,
+                                    divisor = 4,
+                                    min_size = 2.5,
+                                    max_size = 6) {
+  if (is.null(base_size) || !is.numeric(base_size) || !is.finite(base_size)) {
+    return(min_size)
+  }
+
+  size <- base_size / divisor
+  size <- max(min_size, size)
+  size <- min(max_size, size)
+  size
+}

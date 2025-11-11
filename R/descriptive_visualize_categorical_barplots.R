@@ -214,7 +214,12 @@ apply_value_scale <- function(plot, show_proportions, show_value_labels) {
   }
 }
 
-add_value_labels <- function(plot, data, show_value_labels, show_proportions, position = NULL) {
+add_value_labels <- function(plot,
+                             data,
+                             show_value_labels,
+                             show_proportions,
+                             position = NULL,
+                             base_size = 13) {
   if (!isTRUE(show_value_labels)) return(plot)
 
   label_df <- format_value_labels(data, show_proportions)
@@ -227,7 +232,7 @@ add_value_labels <- function(plot, data, show_value_labels, show_proportions, po
       aes(label = label_text, y = label_y, vjust = label_vjust),
       position = position,
       color = "gray20",
-      size = 3.5,
+      size = compute_label_text_size(base_size),
       fontface = "bold"
     )
 }
@@ -319,7 +324,7 @@ build_descriptive_categorical_plot <- function(df,
         labs(title = var, x = NULL, y = y_label, fill = group_col) +
         theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-      p <- add_value_labels(p, count_df, show_value_labels, show_proportions, group_dodge)
+      p <- add_value_labels(p, count_df, show_value_labels, show_proportions, group_dodge, base_size)
       p <- apply_value_scale(p, show_proportions, show_value_labels)
       p
     } else {
@@ -347,7 +352,7 @@ build_descriptive_categorical_plot <- function(df,
         labs(title = var, x = NULL, y = y_label) +
         theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-      p <- add_value_labels(p, count_df, show_value_labels, show_proportions)
+      p <- add_value_labels(p, count_df, show_value_labels, show_proportions, base_size = base_size)
       p <- apply_value_scale(p, show_proportions, show_value_labels)
       p
     }
