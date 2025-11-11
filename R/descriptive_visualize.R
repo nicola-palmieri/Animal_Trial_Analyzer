@@ -37,9 +37,51 @@ visualize_descriptive_ui <- function(id) {
 }
 
 
-visualize_descriptive_server <- function(id, filtered_data, descriptive_summary) {
+visualize_descriptive_server <- function(
+    id,
+    filtered_data,
+    descriptive_summary,
+    cached_selection = NULL,
+    save_selection = NULL) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
+
+    restoration_done <- reactiveVal(TRUE)
+
+    if (!is.null(cached_selection)) {
+      observeEvent(cached_selection(), {
+        value <- cached_selection()
+
+        if (is.null(value)) {
+          restoration_done(TRUE)
+          return(NULL)
+        }
+
+        restoration_done(FALSE)
+        on.exit(restoration_done(TRUE), add = TRUE)
+
+        req(!is.null(input$plot_type))
+
+        if (!identical(value, input$plot_type)) {
+          updateSelectInput(session, "plot_type", selected = value)
+        }
+      }, ignoreNULL = FALSE)
+    }
+
+    observeEvent(input$plot_type, {
+      if (is.null(save_selection) || !isTRUE(restoration_done())) {
+        return(NULL)
+      }
+
+      cached <- NULL
+      if (!is.null(cached_selection)) {
+        cached <- isolate(cached_selection())
+      }
+
+      if (!identical(cached, input$plot_type)) {
+        save_selection(input$plot_type)
+      }
+    }, ignoreNULL = TRUE)
     active_type <- reactive({
       type <- input$plot_type
       if (is.null(type) || !nzchar(type[1])) "categorical" else type[1]
