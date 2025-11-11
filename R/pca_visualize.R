@@ -157,7 +157,7 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
         column(6, add_color_customization_ui(ns, multi_group = TRUE)),
         column(6, base_size_ui(
           ns,
-          default = 14,
+          default = 13,
           help_text = "Adjust the base font size used for PCA plots."
         ))
       ),
@@ -580,7 +580,7 @@ build_pca_biplot <- function(pca_obj, data, color_var = NULL, shape_var = NULL,
                              show_loadings = FALSE, loading_scale = 1.2,
                              custom_colors = NULL, subset_rows = NULL,
                              color_levels = NULL, x_limits = NULL,
-                             y_limits = NULL, base_size = 14) {
+                             y_limits = NULL, base_size = 13) {
   stopifnot(!is.null(pca_obj$x))
 
   scores <- as.data.frame(pca_obj$x[, 1:2])

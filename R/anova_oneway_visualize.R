@@ -48,7 +48,7 @@ visualize_oneway_ui <- function(id) {
         column(6, add_color_customization_ui(ns, multi_group = FALSE)),
         column(6, base_size_ui(
           ns,
-          default = 14,
+          default = 13,
           help_text = "Adjust the base font size used for the ANOVA plots."
         ))
       ),

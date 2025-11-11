@@ -48,7 +48,7 @@ visualize_twoway_ui <- function(id) {
         column(6, add_color_customization_ui(ns, multi_group = TRUE)),
         column(6, base_size_ui(
           ns,
-          default = 14,
+          default = 13,
           help_text = "Adjust the base font size used for the ANOVA plots."
         ))
       ),
@@ -88,7 +88,7 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
       multi_group = TRUE
     )
     
-    base_size <- base_size_server(input = input, default = 14)
+    base_size <- base_size_server(input = input, default = 13)
     
     strata_grid <- plot_grid_server("strata_grid")
     response_grid <- plot_grid_server("response_grid")

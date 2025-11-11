@@ -965,7 +965,7 @@ build_line_plot_panel <- function(stats_df,
                                   factor1,
                                   factor2,
                                   line_colors,
-                                  base_size = 14) {
+                                  base_size = 13) {
   if (is.null(factor2) || !factor2 %in% names(stats_df)) {
     color_value <- if (!is.null(line_colors) && length(line_colors) > 0) {
       unname(line_colors)[1]
