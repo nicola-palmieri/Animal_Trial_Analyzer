@@ -1451,8 +1451,13 @@ add_nested_significance_annotations <- function(plot_obj, stats_df, factor1, fac
   step <- diff(range(stats_df$mean + stats_df$se, na.rm = TRUE))
   if (!is.finite(step) || step == 0) step <- max(stats_df$mean + stats_df$se, na.rm = TRUE) * 0.05
   step <- step * 0.08
+  base_offset <- step * 0.6
   df <- dplyr::group_by(df, .data[[factor1]])
-  df <- dplyr::mutate(df, row_id = dplyr::row_number(), y_position = y0 + row_id * step)
+  df <- dplyr::mutate(
+    df,
+    row_id = dplyr::row_number(),
+    y_position = y0 + base_offset + row_id * step
+  )
   df <- dplyr::ungroup(df)
   
   # Stars
