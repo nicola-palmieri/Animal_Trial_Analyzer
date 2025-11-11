@@ -71,9 +71,10 @@ visualize_twoway_ui <- function(id) {
 visualize_twoway_server <- function(id, filtered_data, model_info) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
+    
     df <- reactive(filtered_data())
     
-    color_var_reactive <- reactive({
+    color_var <- reactive({
       info <- model_info()
       if (is.null(info) || is.null(info$factors)) return(NULL)
       info$factors$factor2
@@ -82,39 +83,34 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
     factor2_levels <- reactive({
       info <- model_info()
       if (is.null(info) || is.null(info$orders)) return(NULL)
-      order2 <- info$orders$order2
-      if (is.null(order2)) NULL else order2
+      info$orders$order2
     })
-
+    
     custom_colors <- add_color_customization_server(
-      ns = ns,
-      input = input,
-      output = output,
-      data = df,
-      color_var_reactive = color_var_reactive,
+      ns, input, output, df,
+      color_var_reactive = color_var,
       multi_group = TRUE,
       level_order_reactive = factor2_levels
     )
     
-    base_size <- base_size_server(input = input, default = 13)
-    
+    base_size <- base_size_server(input, default = 13)
     strata_grid <- plot_grid_server("strata_grid")
     response_grid <- plot_grid_server("response_grid")
     
-    module_active <- reactive(TRUE)
+    active <- reactive(TRUE)
     
     state <- reactive({
       list(
-        data          = df(),
-        info          = model_info(),
-        strata_rows   = strata_grid$rows(),
-        strata_cols   = strata_grid$cols(),
-        resp_rows     = response_grid$rows(),
-        resp_cols     = response_grid$cols(),
-        colors        = custom_colors(),
-        base_size     = base_size(),
-        show_labels   = isTRUE(input$show_bar_labels),
-        plot_type     = input$plot_type
+        data        = df(),
+        info        = model_info(),
+        strata_rows = strata_grid$rows(),
+        strata_cols = strata_grid$cols(),
+        resp_rows   = response_grid$rows(),
+        resp_cols   = response_grid$cols(),
+        colors      = custom_colors(),
+        base_size   = base_size(),
+        show_labels = isTRUE(input$show_bar_labels),
+        plot_type   = input$plot_type
       )
     })
     
@@ -125,19 +121,14 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
           barplot_mean_se  = list(plot = NULL, warning = "No data or results available.", layout = NULL)
         ))
       }
-      
       list(
         lineplot_mean_se = plot_anova_lineplot_meanse(
-          data,
-          info,
-          layout_inputs,
+          data, info, layout_inputs,
           line_colors = colors,
           base_size = base_size_value
         ),
         barplot_mean_se = plot_anova_barplot_meanse(
-          data,
-          info,
-          layout_values = layout_inputs,
+          data, info, layout_values = layout_inputs,
           line_colors = colors,
           show_value_labels = show_labels,
           base_size = base_size_value,
@@ -147,7 +138,7 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
     }
     
     plot_info <- reactive({
-      req(module_active())
+      req(active())
       s <- state()
       req(!is.null(s$data), !is.null(s$info))
       layout_inputs <- list(
@@ -160,39 +151,47 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
       res[[if (!is.null(s$plot_type) && s$plot_type %in% names(res)) s$plot_type else "lineplot_mean_se"]]
     })
     
-    size_val <- reactiveVal(list(w = 400, h = 300))
+    # ---- Cached ggplot object to avoid flicker ----
+    if (!requireNamespace("digest", quietly = TRUE)) stop("Please install the 'digest' package.")
+    hash_key <- function(data) {
+      if (is.null(data) || !is.data.frame(data)) return("no-data")
+      digest::digest(data, algo = "xxhash64")
+    }
+    
+    cached_plot <- reactiveVal(NULL)
+    cached_key  <- reactiveVal(NULL)
     
     observe({
-      req(module_active())
-      info <- plot_info()
-      req(info)
-
-      sanitize_dim <- function(value, default) {
-        if (is.null(value)) return(default)
-        numeric_value <- suppressWarnings(as.numeric(value))
-        if (length(numeric_value) == 0 || is.na(numeric_value) || numeric_value <= 0) {
-          default
-        } else {
-          numeric_value
+      req(active())
+      s <- state()
+      dat <- s$data
+      key <- paste(
+        hash_key(dat),
+        s$plot_type,
+        s$show_labels,
+        s$colors,
+        s$base_size,
+        sep = "_"
+      )
+      if (!identical(key, cached_key())) {
+        info <- isolate(plot_info())
+        if (!is.null(info$plot)) {
+          cached_plot(info$plot)
+          cached_key(key)
         }
       }
-
-      plot_w <- sanitize_dim(input$plot_width, 400)
-      plot_h <- sanitize_dim(input$plot_height, 300)
-
-      layout <- info$layout
-      if (is.null(layout)) {
-        size_val(list(w = plot_w, h = plot_h))
-      } else {
-        strata <- layout$strata
-        responses <- layout$responses
-        nrow_l <- (strata$rows %||% 1L) * (responses$rows %||% 1L)
-        ncol_l <- (strata$cols %||% 1L) * (responses$cols %||% 1L)
-        size_val(list(
-          w = plot_w * ncol_l,
-          h = plot_h * nrow_l
-        ))
-      }
+    })
+    
+    plot_dimensions <- reactive({
+      req(active())
+      info <- plot_info()
+      lay <- info$layout
+      nrow_l <- (lay$strata$rows %||% 1L) * (lay$responses$rows %||% 1L)
+      ncol_l <- (lay$strata$cols %||% 1L) * (lay$responses$cols %||% 1L)
+      list(
+        width = max(200, as.numeric(input$plot_width  %||% 400) * ncol_l),
+        height = max(200, as.numeric(input$plot_height %||% 300) * nrow_l)
+      )
     })
     
     output$layout_controls <- renderUI({
@@ -203,35 +202,36 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
     
     output$plot_warning <- renderUI({
       info <- plot_info()
-      if (!is.null(info$warning)) div(class = "alert alert-warning", HTML(info$warning)) else NULL
+      if (!is.null(info$warning))
+        div(class = "alert alert-warning", HTML(info$warning))
     })
     
     output$plot <- renderPlot({
-      info <- plot_info()
-      if (is.null(info$plot)) return(NULL)
-      info$plot
+      req(active())
+      p <- cached_plot()
+      validate(need(!is.null(p), "Plot not ready"))
+      print(p)
     },
-    width  = function() size_val()$w,
-    height = function() size_val()$h,
+    width  = function() plot_dimensions()$width,
+    height = function() plot_dimensions()$height,
     res = 96)
     
     output$download_plot <- downloadHandler(
       filename = function() paste0("anova_plot_", Sys.Date(), ".png"),
       content = function(file) {
-        info <- plot_info()
-        req(info$plot, is.null(info$warning))
-        s <- size_val()
+        req(active())
+        p <- cached_plot()
+        req(!is.null(p))
+        s <- plot_dimensions()
         ggsave(
-          filename = file,
-          plot = info$plot,
-          device = "png",
-          dpi = 300,
-          width  = s$w / 96,
-          height = s$h / 96,
-          units = "in",
-          limitsize = FALSE
+          file, p, device = "png", dpi = 300,
+          width = s$width / 96, height = s$height / 96,
+          units = "in", limitsize = FALSE
         )
       }
     )
+    
+    outputOptions(output, "plot", suspendWhenHidden = TRUE)
   })
 }
+
