@@ -188,8 +188,19 @@ compute_descriptive_summary <- function(data, group_var = NULL) {
       )
   }
 
+  # Define a custom skim function with full factor labels
+  top_counts_full <- function(x) skimr::top_counts(x, max_char = 200, max_levels = 10)
+  skim_full <- skimr::skim_with(
+    factor = skimr::sfl(
+      ordered    = is.ordered,
+      n_unique   = skimr::n_unique,
+      top_counts = top_counts_full
+    ),
+    append = FALSE
+  )
+  
   list(
-    skim = if (!is.null(group_var)) skim(group_data) else skim(data),
+    skim = if (!is.null(group_var)) skim_full(group_data) else skim_full(data),
     cv = summarise_numeric(
       group_data,
       numeric_vars,
