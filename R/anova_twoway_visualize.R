@@ -79,13 +79,21 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
       info$factors$factor2
     })
     
+    factor2_levels <- reactive({
+      info <- model_info()
+      if (is.null(info) || is.null(info$orders)) return(NULL)
+      order2 <- info$orders$order2
+      if (is.null(order2)) NULL else order2
+    })
+
     custom_colors <- add_color_customization_server(
       ns = ns,
       input = input,
       output = output,
       data = df,
       color_var_reactive = color_var_reactive,
-      multi_group = TRUE
+      multi_group = TRUE,
+      level_order_reactive = factor2_levels
     )
     
     base_size <- base_size_server(input = input, default = 13)
