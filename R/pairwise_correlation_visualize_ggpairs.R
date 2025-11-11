@@ -62,13 +62,30 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
       group_var
     })
     
+    strata_level_order <- reactive({
+      info <- correlation_info()
+      if (is.null(info) || is.null(info$strata_order)) {
+        return(NULL)
+      }
+
+      order_values <- resolve_reactive(info$strata_order)
+      if (is.null(order_values)) {
+        return(NULL)
+      }
+
+      order_values <- as.character(order_values)
+      order_values <- order_values[!is.na(order_values) & nzchar(order_values)]
+      if (!length(order_values)) NULL else order_values
+    })
+
     custom_colors <- add_color_customization_server(
       ns = ns,
       input = input,
       output = output,
       data = filtered_data,
       color_var_reactive = color_var_reactive,
-      multi_group = TRUE
+      multi_group = TRUE,
+      level_order_reactive = strata_level_order
     )
     
     base_size <- base_size_server(input = input, default = 11)

@@ -228,13 +228,37 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
 
     color_var_reactive <- reactive(valid_column(input$pca_color))
 
+    color_level_order <- reactive({
+      var <- color_var_reactive()
+      if (is.null(var)) {
+        return(NULL)
+      }
+
+      data <- color_data()
+      if (is.null(data) || !is.data.frame(data) || !var %in% names(data)) {
+        return(NULL)
+      }
+
+      column <- data[[var]]
+      levels_vec <- if (is.factor(column)) {
+        levels(base::droplevels(column))
+      } else {
+        unique(as.character(column[!is.na(column)]))
+      }
+
+      levels_vec <- as.character(levels_vec)
+      levels_vec <- levels_vec[!is.na(levels_vec) & nzchar(levels_vec)]
+      if (!length(levels_vec)) NULL else levels_vec
+    })
+
     custom_colors <- add_color_customization_server(
       ns = ns,
       input = input,
       output = output,
       data = color_data,
       color_var_reactive = color_var_reactive,
-      multi_group = TRUE
+      multi_group = TRUE,
+      level_order_reactive = color_level_order
     )
 
     base_size <- base_size_server(

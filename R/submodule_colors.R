@@ -28,7 +28,13 @@ add_color_customization_ui <- function(ns, multi_group = TRUE) {
 }
 
 # ---- Server ----
-add_color_customization_server <- function(ns, input, output, data, color_var_reactive, multi_group = TRUE) {
+add_color_customization_server <- function(ns,
+                                           input,
+                                           output,
+                                           data,
+                                           color_var_reactive,
+                                           multi_group = TRUE,
+                                           level_order_reactive = NULL) {
   default_color <- "steelblue"
 
   # ---- Dynamic UI ----
@@ -36,6 +42,7 @@ add_color_customization_server <- function(ns, input, output, data, color_var_re
     req(data())
 
     color_var <- color_var_reactive() %||% ""
+    level_override <- if (is.null(level_order_reactive)) NULL else level_order_reactive()
 
     # Single color UI shown when multi-group off or no color_var available
     if (!isTRUE(multi_group) || color_var %in% c("", "None")) {
@@ -47,7 +54,7 @@ add_color_customization_server <- function(ns, input, output, data, color_var_re
         )
       )
     } else {
-      render_color_inputs(ns, data, color_var)
+      render_color_inputs(ns, data, color_var, level_override)
     }
   })
 
@@ -70,7 +77,21 @@ add_color_customization_server <- function(ns, input, output, data, color_var_re
       return(input$single_color %||% default_color)
     }
 
-    lvls <- levels(as.factor(dataset[[color_var]]))
+    values <- dataset[[color_var]]
+    as_factor <- as.factor(values)
+    lvls <- levels(as_factor)
+    unique_vals <- unique(as.character(as_factor))
+    unique_vals <- unique_vals[!is.na(unique_vals)]
+
+    level_override <- if (is.null(level_order_reactive)) NULL else level_order_reactive()
+    if (!is.null(level_override) && length(level_override) > 0) {
+      level_override <- unique(as.character(level_override[!is.na(level_override)]))
+      remainder <- setdiff(unique_vals, level_override)
+      lvls <- c(level_override, remainder)
+    } else if (length(lvls) == 0) {
+      lvls <- unique_vals
+    }
+
     base_palette <- rep(basic_color_palette, length.out = length(lvls))
 
     cols <- vapply(seq_along(lvls), function(i) {
@@ -86,13 +107,22 @@ add_color_customization_server <- function(ns, input, output, data, color_var_re
 # 🎨 UI helper to assign colors per level of a factor
 # ===============================================================
 
-render_color_inputs <- function(ns, data, color_var) {
+render_color_inputs <- function(ns, data, color_var, level_order = NULL) {
   if (is.null(color_var) || color_var == "None") return(NULL)
   if (!color_var %in% names(data())) return(NULL)
 
   values <- data()[[color_var]]
-  lvls <- if (is.factor(values)) levels(values) else unique(as.character(values))
-  lvls <- lvls[!is.na(lvls)]
+  raw_levels <- if (is.factor(values)) levels(values) else unique(as.character(values))
+  raw_levels <- raw_levels[!is.na(raw_levels)]
+
+  if (!is.null(level_order) && length(level_order) > 0) {
+    level_order <- unique(as.character(level_order[!is.na(level_order)]))
+    remainder <- setdiff(raw_levels, level_order)
+    lvls <- c(level_order, remainder)
+  } else {
+    lvls <- raw_levels
+  }
+
   default_palette <- rep(basic_color_palette, length.out = length(lvls))
 
   tagList(
