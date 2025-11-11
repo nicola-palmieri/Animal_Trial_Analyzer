@@ -62,7 +62,15 @@ visualize_oneway_ui <- function(id) {
       width = 8,
       h4("Plots"),
       uiOutput(ns("plot_warning")),
-      plotOutput(ns("plot"), height = "auto")
+      # Pre-mounted panels for instant switching
+      conditionalPanel(
+        condition = sprintf("input['%s'] === 'lineplot_mean_se'", ns("plot_type")),
+        plotOutput(ns("plot_line"), height = "auto")
+      ),
+      conditionalPanel(
+        condition = sprintf("input['%s'] === 'barplot_mean_se'", ns("plot_type")),
+        plotOutput(ns("plot_bar"), height = "auto")
+      )
     )
   )
 }
@@ -86,8 +94,6 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
     base_size <- base_size_server(input = input, default = 14)
     strata_grid <- plot_grid_server("strata_grid")
     response_grid <- plot_grid_server("response_grid")
-    
-    module_active <- reactive(TRUE)
     
     state <- reactive({
       list(
@@ -130,7 +136,6 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
     }
     
     plot_info <- reactive({
-      req(module_active())
       s <- state()
       req(!is.null(s$data), !is.null(s$info))
       layout_inputs <- list(
@@ -153,7 +158,6 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
     cached_key  <- reactiveVal(NULL)
     
     observe({
-      req(module_active())
       s <- state()
       dat <- s$data
       key <- paste(
@@ -174,7 +178,6 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
     })
     
     plot_dimensions <- reactive({
-      req(module_active())
       info <- plot_info()
       lay <- info$layout
       nrow_l <- (lay$strata$rows %||% 1L) * (lay$responses$rows %||% 1L)
@@ -197,11 +200,19 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
         div(class = "alert alert-warning", HTML(info$warning))
     })
     
-    output$plot <- renderPlot({
-      req(module_active())
-      p <- cached_plot()
-      validate(need(!is.null(p), "Plot not ready"))
-      print(p)
+    output$plot_line <- renderPlot({
+      info <- isolate(plot_info())
+      if (is.null(info$plot) || input$plot_type != "lineplot_mean_se") return(NULL)
+      print(info$plot)
+    },
+    width  = function() plot_dimensions()$width,
+    height = function() plot_dimensions()$height,
+    res = 96)
+    
+    output$plot_bar <- renderPlot({
+      info <- isolate(plot_info())
+      if (is.null(info$plot) || input$plot_type != "barplot_mean_se") return(NULL)
+      print(info$plot)
     },
     width  = function() plot_dimensions()$width,
     height = function() plot_dimensions()$height,
@@ -222,7 +233,9 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
       }
     )
     
-    outputOptions(output, "plot", suspendWhenHidden = TRUE)
+    outputOptions(output, "plot_line", suspendWhenHidden = TRUE)
+    outputOptions(output, "plot_bar",  suspendWhenHidden = TRUE)
+    
   })
 }
 

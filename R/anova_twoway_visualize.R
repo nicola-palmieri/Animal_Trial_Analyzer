@@ -62,7 +62,15 @@ visualize_twoway_ui <- function(id) {
       width = 8,
       h4("Plots"),
       uiOutput(ns("plot_warning")),
-      plotOutput(ns("plot"), height = "auto")
+      # Pre-mounted panels for instant switching
+      conditionalPanel(
+        condition = sprintf("input['%s'] === 'lineplot_mean_se'", ns("plot_type")),
+        plotOutput(ns("plot_line"), height = "auto")
+      ),
+      conditionalPanel(
+        condition = sprintf("input['%s'] === 'barplot_mean_se'", ns("plot_type")),
+        plotOutput(ns("plot_bar"), height = "auto")
+      )
     )
   )
 }
@@ -206,15 +214,24 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
         div(class = "alert alert-warning", HTML(info$warning))
     })
     
-    output$plot <- renderPlot({
-      req(active())
-      p <- cached_plot()
-      validate(need(!is.null(p), "Plot not ready"))
-      print(p)
+    output$plot_line <- renderPlot({
+      info <- isolate(plot_info())
+      if (is.null(info$plot) || input$plot_type != "lineplot_mean_se") return(NULL)
+      print(info$plot)
     },
     width  = function() plot_dimensions()$width,
     height = function() plot_dimensions()$height,
     res = 96)
+    
+    output$plot_bar <- renderPlot({
+      info <- isolate(plot_info())
+      if (is.null(info$plot) || input$plot_type != "barplot_mean_se") return(NULL)
+      print(info$plot)
+    },
+    width  = function() plot_dimensions()$width,
+    height = function() plot_dimensions()$height,
+    res = 96)
+    
     
     output$download_plot <- downloadHandler(
       filename = function() paste0("anova_plot_", Sys.Date(), ".png"),
@@ -231,7 +248,9 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
       }
     )
     
-    outputOptions(output, "plot", suspendWhenHidden = TRUE)
+    outputOptions(output, "plot_line", suspendWhenHidden = TRUE)
+    outputOptions(output, "plot_bar",  suspendWhenHidden = TRUE)
+    
   })
 }
 
