@@ -1,0 +1,2134 @@
+# ===============================================================
+# 🧩 Visualization Coordinator (Lazy + Reactive)
+# ===============================================================
+
+visualize_ui <- function(id) {
+  ns <- NS(id)
+  uiOutput(ns("dynamic_ui"))
+}
+
+visualize_server <- function(id, filtered_data, model_fit) {
+  moduleServer(id, function(input, output, session) {
+    ns <- session$ns
+
+    empty_state <- function(icon, title, message) {
+      div(
+        class = "empty-state card bg-light border-0 shadow-sm text-center my-5",
+        div(
+          class = "card-body py-5 px-4",
+          div(class = "empty-state-icon text-primary mb-3", HTML(icon)),
+          h4(class = "mb-2", title),
+          p(class = "text-muted mb-0", message)
+        )
+      )
+    }
+
+    model_info_or_null <- reactive({
+      tryCatch(
+        model_fit(),
+        shiny.silent.stop = function(e) NULL
+      )
+    })
+
+    model_info <- reactive({
+      info <- model_info_or_null()
+      req(info)
+      info
+    })
+
+    analysis_type <- reactive({
+      info <- model_info()
+      type <- info$type %||% "oneway_anova"
+      tolower(type)
+    })
+
+    vis_cache <- reactiveValues()
+
+    ensure_vis_server <- function(key, create_fn) {
+      if (is.null(vis_cache[[key]])) {
+        vis_cache[[key]] <- create_fn()
+      }
+      vis_cache[[key]]
+    }
+
+    visualization_specs <- list(
+      oneway_anova = list(
+        id = "oneway",
+        ui = function(ns) visualize_oneway_ui(ns("oneway")),
+        server = function() visualize_oneway_server("oneway", filtered_data, model_info)
+      ),
+      twoway_anova = list(
+        id = "twoway",
+        ui = function(ns) visualize_twoway_ui(ns("twoway")),
+        server = function() visualize_twoway_server("twoway", filtered_data, model_info)
+      ),
+      pairs = list(
+        id = "ggpairs",
+        ui = function(ns) visualize_ggpairs_ui(ns("ggpairs")),
+        server = function() visualize_ggpairs_server("ggpairs", filtered_data, model_info)
+      ),
+      pca = list(
+        id = "pca",
+        ui = function(ns) visualize_pca_ui(ns("pca"), filtered_data()),
+        server = function() visualize_pca_server("pca", filtered_data, model_info)
+      ),
+      descriptive = list(
+        id = "descriptive",
+        ui = function(ns) visualize_descriptive_ui(ns("descriptive")),
+        server = function() visualize_descriptive_server("descriptive", filtered_data, model_info)
+      )
+    )
+
+    output$dynamic_ui <- renderUI({
+      info <- model_info_or_null()
+      if (is.null(info)) {
+        return(empty_state(
+          "&#128221;",
+          "No analysis selected yet",
+          "Run an analysis in the Analyze tab to unlock tailored visualizations for your results."
+        ))
+      }
+
+      type <- analysis_type()
+      spec <- visualization_specs[[type]]
+      if (!is.null(spec)) {
+        return(spec$ui(ns))
+      }
+
+      empty_state(
+        "&#128065;",
+        "Visualization coming soon",
+        "We're still crafting charts for this analysis type. In the meantime, explore the other visualizations available!"
+      )
+    })
+
+    observeEvent(analysis_type(), {
+      type <- analysis_type()
+      spec <- visualization_specs[[type]]
+      if (!is.null(spec)) {
+        ensure_vis_server(spec$id, spec$server)
+      }
+    }, ignoreInit = FALSE)
+  })
+}
+# ===============================================================
+# 🧾 Table Analyzer — Descriptive Statistics Modules
+# ===============================================================
+
+descriptive_ui <- function(id) {
+  ns <- NS(id)
+  list(
+    config = tagList(
+      uiOutput(ns("inputs")),
+      tags$details(
+        tags$summary(strong("Advanced options")),
+        stratification_ui("strat", ns)
+      ),
+      br(),
+      fluidRow(
+        column(6, with_help_tooltip(
+          actionButton(ns("run"), "Show summary", width = "100%"),
+          "Calculate the descriptive statistics for the selected variables."
+        )),
+        column(6, with_help_tooltip(
+          downloadButton(ns("download_summary"), "Download summary", style = "width: 100%;"),
+          "Save the displayed summary as a text file for later reference."
+        ))
+      ),
+      hr()
+    ),
+    results = tagList(verbatimTextOutput(ns("summary_text")))
+  )
+}
+
+descriptive_server <- function(id, filtered_data) {
+  moduleServer(id, function(input, output, session) {
+    ns <- session$ns
+    df <- filtered_data
+
+    # ------------------------------------------------------------
+    # Dynamic inputs
+    # ------------------------------------------------------------
+    output$inputs <- renderUI({
+      req(df())
+      data <- df()
+      cat_cols <- names(data)[vapply(data, function(x) is.character(x) || is.factor(x) || is.logical(x), logical(1))]
+      num_cols <- names(data)[vapply(data, is.numeric, logical(1))]
+      
+      tagList(
+        with_help_tooltip(
+          selectInput(ns("cat_vars"), label = "Categorical variables", choices = cat_cols, selected = cat_cols, multiple = TRUE),
+          "Choose the group variables whose counts and proportions you want to inspect."
+        ),
+        with_help_tooltip(
+          selectInput(ns("num_vars"), label = "Numeric variables", choices = num_cols, selected = num_cols, multiple = TRUE),
+          "Choose the numeric measurements you want to summarise (mean, SD, etc.)."
+        )
+      )
+    })
+    
+    strat_info <- stratification_server("strat", df)
+    
+    # ------------------------------------------------------------
+    # Summary computation
+    # ------------------------------------------------------------
+    summary_data <- eventReactive(input$run, {
+      req(df())
+
+      local_data <- df()
+      selected_vars <- unique(c(input$cat_vars, input$num_vars))
+      validate(need(length(selected_vars) > 0, "Please select at least one variable."))
+
+      strat_details <- strat_info()
+      group_var <- strat_details$var
+      data_columns <- selected_vars
+
+      if (!is.null(group_var)) {
+        sel <- strat_details$levels
+        if (!is.null(sel) && length(sel) > 0) {
+          local_data <- dplyr::filter(local_data, .data[[group_var]] %in% sel)
+          local_data[[group_var]] <- factor(as.character(local_data[[group_var]]), levels = sel)
+        } else {
+          local_data[[group_var]] <- factor(as.character(local_data[[group_var]]))
+        }
+        local_data <- droplevels(local_data)
+        data_columns <- unique(c(data_columns, group_var))
+      }
+
+      data_columns <- data_columns[!is.na(data_columns) & nzchar(data_columns)]
+      data_columns <- intersect(data_columns, names(local_data))
+      local_data <- local_data[, data_columns, drop = FALSE]
+
+      selected_vars <- selected_vars[!is.na(selected_vars) & nzchar(selected_vars)]
+      selected_vars <- intersect(selected_vars, names(local_data))
+
+      list(
+        summary = compute_descriptive_summary(local_data, group_var),
+        selected_vars = selected_vars,
+        group_var = group_var,
+        processed_data = local_data,
+        strata_levels = if (!is.null(group_var) && group_var %in% names(local_data)) levels(local_data[[group_var]]) else NULL
+      )
+    })
+    
+    
+    
+    
+    # ------------------------------------------------------------
+    # Print summary
+    # ------------------------------------------------------------
+    output$summary_text <- renderPrint({
+      req(summary_data())
+      print_summary_sections(summary_data()$summary)
+    })
+    
+    # ------------------------------------------------------------
+    # Download
+    # ------------------------------------------------------------
+    output$download_summary <- downloadHandler(
+      filename = function() paste0("Descriptive_Statistics_", Sys.Date(), ".txt"),
+      content = function(file) {
+        results <- summary_data()
+        req(results)
+        sink(file)
+        on.exit(sink(), add = TRUE)
+        print_summary_sections(results$summary)
+      }
+    )
+    
+    # ------------------------------------------------------------
+    # Return full model info
+    # ------------------------------------------------------------
+    extract_detail <- function(field) reactive({
+      details <- summary_data()
+      req(details)
+      details[[field]]
+    })
+
+    df_final <- extract_detail("processed_data")
+    summary_table <- extract_detail("summary")
+    selected_vars_reactive <- extract_detail("selected_vars")
+    group_var_reactive <- extract_detail("group_var")
+    strata_levels_reactive <- extract_detail("strata_levels")
+
+    reactive({
+      details <- summary_data()
+      req(details)
+
+      data_used <- df_final()
+
+      list(
+        analysis_type = "DESCRIPTIVE",
+        data_used = data_used,
+        model = NULL,
+        summary = summary_table(),
+        posthoc = NULL,
+        effects = NULL,
+        stats = if (!is.null(data_used)) list(n = nrow(data_used), vars = names(data_used)) else NULL,
+        metadata = list(
+          selected_vars = details$selected_vars,
+          group_var = details$group_var,
+          strata_levels = details$strata_levels
+        ),
+        type = "descriptive",
+        data = df,
+        processed_data = df_final,
+        selected_vars = selected_vars_reactive,
+        group_var = group_var_reactive,
+        strata_levels = strata_levels_reactive
+      )
+    })
+
+  })
+}
+
+compute_descriptive_summary <- function(data, group_var = NULL) {
+  numeric_vars <- names(data)[sapply(data, is.numeric)]
+  group_data <- if (!is.null(group_var)) dplyr::group_by(data, .data[[group_var]], .drop = TRUE) else data
+
+  summarise_numeric <- function(.data, vars, suffix, fn) {
+    if (length(vars) == 0) {
+      return(NULL)
+    }
+    .data %>%
+      dplyr::summarise(
+        dplyr::across(
+          dplyr::all_of(vars),
+          fn,
+          .names = paste0(suffix, "_{.col}")
+        ),
+        .groups = "drop"
+      )
+  }
+
+  # Define a custom skim function with full factor labels
+  top_counts_full <- function(x) skimr::top_counts(x, max_char = 200, max_levels = 10)
+  skim_full <- skimr::skim_with(
+    factor = skimr::sfl(
+      ordered    = is.ordered,
+      n_unique   = skimr::n_unique,
+      top_counts = top_counts_full
+    ),
+    append = FALSE
+  )
+  
+  list(
+    skim = if (!is.null(group_var)) skim_full(group_data) else skim_full(data),
+    cv = summarise_numeric(
+      group_data,
+      numeric_vars,
+      "cv",
+      ~ 100 * stats::sd(.x, na.rm = TRUE) / mean(.x, na.rm = TRUE)
+    ),
+    outliers = summarise_numeric(
+      group_data,
+      numeric_vars,
+      "outliers",
+      ~ {
+        q <- stats::quantile(.x, probs = c(0.25, 0.75), na.rm = TRUE)
+        iqr <- q[2] - q[1]
+        sum(.x < q[1] - 1.5 * iqr | .x > q[2] + 1.5 * iqr, na.rm = TRUE)
+      }
+    ),
+    missing = summarise_numeric(
+      group_data,
+      numeric_vars,
+      "missing",
+      ~ 100 * mean(is.na(.x))
+    ),
+    shapiro = summarise_numeric(
+      group_data,
+      numeric_vars,
+      "shapiro",
+      ~ tryCatch(stats::shapiro.test(.x)$p.value, error = function(e) NA_real_)
+    )
+  )
+}
+
+# ---- Shared printing ----
+print_summary_sections <- function(results) {
+  # 1) Print skim AS-IS (unchanged)
+  cat(paste(capture.output(print(results$skim)), collapse = "\n"), "\n\n", sep = "")
+  
+  # 2) Helper to detect if a grouping column exists and what it's called
+  metric_prefix <- "^(cv_|outliers_|missing_|shapiro_)"
+  first_col <- if (!is.null(results$cv) && ncol(results$cv) > 0) names(results$cv)[1] else NULL
+  group_col <- if (!is.null(first_col) && !grepl(metric_prefix, first_col)) first_col else NULL
+  
+  # 3) Robust long conversion that preserves the real group column name (if any)
+  to_long <- function(df, value_name) {
+    if (is.null(df) || ncol(df) == 0) {
+      empty_cols <- list(variable = character())
+      if (!is.null(group_col)) {
+        empty_cols[[group_col]] <- character()
+      }
+      empty_cols[[value_name]] <- numeric()
+      return(tibble::as_tibble(empty_cols))
+    }
+    id_cols <- intersect(names(df), group_col)
+    df |>
+      tidyr::pivot_longer(
+        cols = -tidyselect::any_of(id_cols),
+        names_to = "variable",
+        values_to = value_name
+      ) |>
+      dplyr::mutate(variable = sub(metric_prefix, "", .data$variable))
+  }
+
+  # 4) Build pieces (no "missing" here)
+  cv_long   <- to_long(results$cv, "cv")
+  out_long  <- to_long(results$outliers, "outliers")
+  shap_long <- to_long(results$shapiro, "shapiro_p")
+
+  # 5) Join by the right keys
+  join_keys <- c(if (!is.null(group_col)) group_col, "variable")
+  merged <- dplyr::full_join(cv_long, out_long, by = join_keys) |>
+    dplyr::full_join(shap_long, by = join_keys) |>
+    dplyr::mutate(
+      cv = round(cv, 2),
+      shapiro_p = signif(shapiro_p, 3)
+    )
+
+  numeric_order <- NULL
+  if (is.data.frame(results$skim) && all(c("skim_type", "skim_variable") %in% names(results$skim))) {
+    numeric_order <- results$skim |>
+      dplyr::filter(.data$skim_type == "numeric") |>
+      dplyr::pull(.data$skim_variable) |>
+      unique()
+  }
+
+  arrange_cols <- c(if (!is.null(group_col)) group_col, "variable")
+  if (!is.null(numeric_order) && length(numeric_order) > 0) {
+    merged$variable <- factor(merged$variable, levels = numeric_order)
+    merged <- dplyr::arrange(merged, !!!rlang::syms(arrange_cols))
+    merged$variable <- as.character(merged$variable)
+  } else {
+    merged <- dplyr::arrange(merged, !!!rlang::syms(arrange_cols))
+  }
+
+  # 7) Print with/without group column
+  cat("── Numeric variables summary ──\n")
+  final_cols <- c("variable", arrange_cols[-length(arrange_cols)], "cv", "outliers", "shapiro_p")
+  final_df <- merged[, final_cols, drop = FALSE]
+  print(as.data.frame(final_df), row.names = FALSE)
+  
+  cat("\nInterpretation:\n")
+  cat("  • outliers = # beyond 1.5×IQR\n")
+  cat("  • shapiro_p < 0.05 → non-normal distribution\n")
+  
+  invisible(NULL)
+}
+# ===============================================================
+# Visualization Module — Descriptive Statistics (Dispatcher)
+# ===============================================================
+
+visualize_descriptive_ui <- function(id) {
+  ns <- NS(id)
+  sidebarLayout(
+    sidebarPanel(
+      width = 4,
+      h4("Step 5 — Visualize descriptive statistics"),
+      p("Explore distributions, variability, and normality across variables."),
+      hr(),
+      with_help_tooltip(
+        selectInput(
+          ns("plot_type"),
+          label = "Select visualization type",
+          choices = c(
+            "Categorical barplots" = "categorical",
+            "Numeric boxplots"          = "boxplots",
+            "Numeric histograms"        = "histograms",
+            "CV (%)"                    = "cv",
+            "Outlier counts"            = "outliers",
+            "Missingness (%)"           = "missing"
+          ),
+          selected = "categorical"
+        ),
+        "Choose the descriptive chart that best answers your question."
+      ),
+      uiOutput(ns("sub_controls"))  # controls from active submodule
+    ),
+    mainPanel(
+      width = 8,
+      h4("Plots"),
+      uiOutput(ns("plot_ui"))  # plot output provided by the active submodule
+    )
+  )
+}
+
+
+visualize_descriptive_server <- function(id, filtered_data, descriptive_summary) {
+  moduleServer(id, function(input, output, session) {
+    ns <- session$ns
+    active_type <- reactive({
+      type <- input$plot_type
+      if (is.null(type) || !nzchar(type[1])) "categorical" else type[1]
+    })
+    
+
+    # ==========================================================
+    # 🔹 Inject the correct UI for each submodule
+    # ==========================================================
+    output$sub_controls <- renderUI({
+      type <- active_type()
+      switch(type,
+             "categorical" = visualize_categorical_barplots_ui(ns("categorical")),
+             "boxplots"    = visualize_numeric_boxplots_ui(ns("boxplots")),
+             "histograms"  = visualize_numeric_histograms_ui(ns("histograms")),
+             "cv"          = visualize_cv_ui(ns("cv")),
+             "outliers"    = visualize_outliers_ui(ns("outliers")),
+             "missing"     = visualize_missing_ui(ns("missing")),
+             div("No controls available for this plot type.")
+      )
+    })
+
+    output$plot_ui <- renderUI({
+      type <- active_type()
+      switch(type,
+             "categorical" = visualize_categorical_barplots_plot_ui(ns("categorical")),
+             "boxplots"    = visualize_numeric_boxplots_plot_ui(ns("boxplots")),
+             "histograms"  = visualize_numeric_histograms_plot_ui(ns("histograms")),
+             "cv"          = visualize_cv_plot_ui(ns("cv")),
+             "outliers"    = visualize_outliers_plot_ui(ns("outliers")),
+             "missing"     = visualize_missing_plot_ui(ns("missing")),
+             div("Plot not available for this selection.")
+      )
+    })
+
+    categorical_active <- reactive(active_type() == "categorical")
+    boxplots_active    <- reactive(active_type() == "boxplots")
+    histograms_active  <- reactive(active_type() == "histograms")
+    cv_active          <- reactive(active_type() == "cv")
+    outliers_active    <- reactive(active_type() == "outliers")
+    missing_active     <- reactive(active_type() == "missing")
+
+    visualize_categorical_barplots_server(
+      "categorical",
+      filtered_data,
+      descriptive_summary,
+      is_active = categorical_active
+    )
+    visualize_numeric_boxplots_server(
+      "boxplots",
+      filtered_data,
+      descriptive_summary,
+      is_active = boxplots_active
+    )
+    visualize_numeric_histograms_server(
+      "histograms",
+      filtered_data,
+      descriptive_summary,
+      is_active = histograms_active
+    )
+    visualize_cv_server(
+      "cv",
+      filtered_data,
+      descriptive_summary,
+      is_active = cv_active
+    )
+    visualize_outliers_server(
+      "outliers",
+      filtered_data,
+      descriptive_summary,
+      is_active = outliers_active
+    )
+    visualize_missing_server(
+      "missing",
+      filtered_data,
+      descriptive_summary,
+      is_active = missing_active
+    )
+  })
+}
+# ===============================================================
+# 🟦 Descriptive Visualization — Categorical Barplots
+# ===============================================================
+
+visualize_categorical_barplots_ui <- function(id) {
+  ns <- NS(id)
+  tagList(
+    with_help_tooltip(
+      checkboxInput(ns("show_proportions"), "Show proportions instead of counts", FALSE),
+      "Switch between raw counts and percentages for each category."
+    ),
+    with_help_tooltip(
+      checkboxInput(ns("show_value_labels"), "Show value labels on bars", FALSE),
+      "Display the numeric value on top of each bar."
+    ),
+    fluidRow(
+      column(6, with_help_tooltip(
+        numericInput(ns("plot_width"),  "Subplot width (px)",  400, 200, 2000, 50),
+        "Set the width of each categorical plot in pixels."
+      )),
+      column(6, with_help_tooltip(
+        numericInput(ns("plot_height"), "Subplot height (px)", 300, 200, 2000, 50),
+        "Set the height of each categorical plot in pixels."
+      ))
+    ),
+    plot_grid_ui(
+      id = ns("plot_grid"),
+      rows_help = "Choose how many rows of plots to display when several charts are shown.",
+      cols_help = "Choose how many columns of plots to display when several charts are shown."
+    ),
+    fluidRow(
+      column(6, add_color_customization_ui(ns, multi_group = TRUE)),
+      column(6, base_size_ui(
+        ns,
+        default = 13,
+        help_text = "Adjust the base font size used for barplot text elements."
+      ))
+    ),
+    hr(),
+    with_help_tooltip(
+      downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;"),
+      "Save the categorical barplots as an image file."
+    )
+  )
+}
+
+visualize_categorical_barplots_plot_ui <- function(id) {
+  ns <- NS(id)
+  div(
+    class = "ta-plot-container",
+    uiOutput(ns("grid_warning")),
+    plotOutput(ns("plot"), width = "100%", height = "auto")
+  )
+}
+
+visualize_categorical_barplots_server <- function(id, filtered_data, summary_info, is_active = NULL) {
+  moduleServer(id, function(input, output, session) {
+    ns <- session$ns
+    
+    module_active <- reactive({
+      if (is.null(is_active)) TRUE else isTRUE(is_active())
+    })
+    
+    plot_width  <- reactive({ w <- input$plot_width;  if (is.null(w) || is.na(w)) 400 else as.numeric(w) })
+    plot_height <- reactive({ h <- input$plot_height; if (is.null(h) || is.na(h)) 300 else as.numeric(h) })
+    
+    grid <- plot_grid_server("plot_grid")
+    
+    color_var_reactive <- reactive({
+      info <- summary_info()
+      if (is.null(info)) return(NULL)
+      g <- resolve_reactive(info$group_var)
+      dat <- filtered_data()
+      if (is.null(g) || identical(g, "") || identical(g, "None")) return(NULL)
+      if (is.null(dat) || !is.data.frame(dat) || !g %in% names(dat)) return(NULL)
+      g
+    })
+    
+    custom_colors <- add_color_customization_server(
+      ns = ns,
+      input = input,
+      output = output,
+      data = filtered_data,
+      color_var_reactive = color_var_reactive,
+      multi_group = TRUE
+    )
+    
+    base_size <- base_size_server(input = input, default = 13)
+    
+    state <- reactive({
+      list(
+        info          = summary_info(),
+        dat           = filtered_data(),
+        proportions   = isTRUE(input$show_proportions),
+        labels        = isTRUE(input$show_value_labels),
+        colors        = custom_colors(),
+        base_size     = base_size(),
+        rows_input    = grid$rows(),
+        cols_input    = grid$cols()
+      )
+    })
+    
+    plot_info <- reactive({
+      req(module_active())
+      s <- state()
+      req(!is.null(s$info))
+      processed <- resolve_reactive(s$info$processed_data)
+      dat <- if (!is.null(processed)) processed else s$dat
+      req(!is.null(dat), is.data.frame(dat), nrow(dat) > 0)
+
+      selected_vars <- resolve_reactive(s$info$selected_vars)
+      group_var     <- resolve_reactive(s$info$group_var)
+      strata_levels <- resolve_reactive(s$info$strata_levels)
+      
+      build_descriptive_categorical_plot(
+        df                = dat,
+        selected_vars     = selected_vars,
+        group_var         = group_var,
+        strata_levels     = strata_levels,
+        show_proportions  = s$proportions,
+        nrow_input        = s$rows_input,
+        ncol_input        = s$cols_input,
+        fill_colors       = s$colors,
+        show_value_labels = s$labels,
+        base_size         = s$base_size
+      )
+    })
+    
+    plot_dimensions <- reactive({
+      req(module_active())
+      info <- plot_info()
+      lay <- info$layout
+
+      nrow_l <- 1L
+      if (!is.null(lay) && !is.null(lay$nrow) && !is.na(lay$nrow)) {
+        nrow_l <- as.integer(lay$nrow)
+      }
+
+      ncol_l <- 1L
+      if (!is.null(lay) && !is.null(lay$ncol) && !is.na(lay$ncol)) {
+        ncol_l <- as.integer(lay$ncol)
+      }
+
+      list(
+        width = plot_width() * ncol_l,
+        height = plot_height() * nrow_l
+      )
+    })
+    
+    output$grid_warning <- renderUI({
+      req(module_active())
+      info <- plot_info()
+      if (!is.null(info$warning)) div(class = "alert alert-warning", info$warning) else NULL
+    })
+    
+    output$download_plot <- downloadHandler(
+      filename = function() paste0("categorical_barplots_", Sys.Date(), ".png"),
+      content = function(file) {
+        req(module_active())
+        info <- plot_info()
+        req(is.null(info$warning), !is.null(info$plot))
+        s <- plot_dimensions()
+        ggplot2::ggsave(
+          filename = file,
+          plot = info$plot,
+          device = "png",
+          dpi = 300,
+          width  = s$width / 96,
+          height = s$height / 96,
+          units = "in",
+          limitsize = FALSE
+        )
+      }
+    )
+
+    output$plot <- renderPlot({
+      req(module_active())
+      info <- plot_info()
+      if (!is.null(info$warning) || is.null(info$plot)) return(NULL)
+      print(info$plot)
+    },
+    width = function() { plot_dimensions()$width },
+    height = function() { plot_dimensions()$height },
+    res = 96)
+  })
+}
+
+
+
+format_value_labels <- function(df, show_proportions) {
+  formatter <- if (isTRUE(show_proportions)) {
+    scales::label_percent(accuracy = 0.1, trim = TRUE)
+  } else {
+    scales::label_comma(accuracy = 1, trim = TRUE)
+  }
+
+  df |>
+    dplyr::mutate(
+      label_text = formatter(.data$value),
+      label_y = .data$value,
+      label_vjust = ifelse(.data$value >= 0, -0.4, 1.2)
+    )
+}
+
+apply_value_scale <- function(plot, show_proportions, show_value_labels) {
+  if (isTRUE(show_proportions)) {
+    scale_args <- list(labels = scales::percent_format(accuracy = 1))
+    if (isTRUE(show_value_labels)) {
+      scale_args$limits <- c(0, NA)
+      scale_args$expand <- expansion(mult = c(0.02, 0.12))
+    } else {
+      scale_args$limits <- c(0, 1)
+    }
+    plot + do.call(scale_y_continuous, scale_args)
+  } else if (isTRUE(show_value_labels)) {
+    plot + scale_y_continuous(limits = c(0, NA), expand = expansion(mult = c(0.05, 0.12)))
+  } else {
+    plot
+  }
+}
+
+add_value_labels <- function(plot,
+                             data,
+                             show_value_labels,
+                             show_proportions,
+                             position = NULL,
+                             base_size = 13) {
+  if (!isTRUE(show_value_labels)) return(plot)
+
+  label_df <- format_value_labels(data, show_proportions)
+
+  position <- if (is.null(position)) "identity" else position
+
+  plot +
+    geom_text(
+      data = label_df,
+      aes(label = label_text, y = label_y, vjust = label_vjust),
+      position = position,
+      color = "gray20",
+      size = compute_label_text_size(base_size),
+      fontface = "bold"
+    )
+}
+
+build_descriptive_categorical_plot <- function(df,
+                                               selected_vars = NULL,
+                                               group_var = NULL,
+                                               strata_levels = NULL,
+                                               show_proportions = FALSE,
+                                               nrow_input = NULL,
+                                               ncol_input = NULL,
+                                               fill_colors = NULL,
+                                               show_value_labels = FALSE,
+                                               base_size = 13) {
+  if (is.null(df) || !is.data.frame(df) || nrow(df) == 0) return(NULL)
+  
+  factor_vars <- names(df)[vapply(df, function(x) {
+    is.character(x) || is.factor(x) || is.logical(x)
+  }, logical(1))]
+  
+  if (!is.null(selected_vars) && length(selected_vars) > 0) {
+    factor_vars <- intersect(factor_vars, selected_vars)
+  }
+  if (length(factor_vars) == 0) return(NULL)
+  
+  if (!is.null(group_var) && group_var %in% names(df)) {
+    df[[group_var]] <- as.character(df[[group_var]])
+    df[[group_var]][is.na(df[[group_var]]) | trimws(df[[group_var]]) == ""] <- "Missing"
+    
+    if (!is.null(strata_levels) && length(strata_levels) > 0) {
+      keep_levels <- unique(strata_levels)
+      df <- df[df[[group_var]] %in% keep_levels, , drop = FALSE]
+      if (nrow(df) == 0) return(NULL)
+      df[[group_var]] <- factor(df[[group_var]], levels = keep_levels)
+    } else {
+      df[[group_var]] <- factor(df[[group_var]], levels = unique(df[[group_var]]))
+    }
+  } else {
+    group_var <- NULL
+  }
+  
+  plots <- lapply(factor_vars, function(var) {
+    group_col <- if (!is.null(group_var) && !identical(group_var, var)) group_var else NULL
+    cols_to_use <- c(var, group_col)
+    cols_to_use <- cols_to_use[cols_to_use %in% names(df)]
+    var_data <- df[, cols_to_use, drop = FALSE]
+    
+    var_data[[var]] <- as.character(var_data[[var]])
+    keep <- !is.na(var_data[[var]]) & trimws(var_data[[var]]) != ""
+    if (!any(keep)) return(NULL)
+    var_data <- var_data[keep, , drop = FALSE]
+    
+    level_order <- if (is.factor(df[[var]])) {
+      as.character(levels(df[[var]]))
+    } else {
+      unique(var_data[[var]])
+    }
+    var_data[[var]] <- factor(var_data[[var]], levels = level_order)
+    
+    y_label <- if (isTRUE(show_proportions)) "Proportion" else "Count"
+    
+    if (!is.null(group_col)) {
+      var_data[[group_col]] <- droplevels(var_data[[group_col]])
+      count_df <- dplyr::count(var_data, .data[[var]], .data[[group_col]], name = "count")
+      if (nrow(count_df) == 0) return(NULL)
+
+      if (isTRUE(show_proportions)) {
+        count_df <- count_df |>
+          dplyr::group_by(.data[[group_col]]) |>
+          dplyr::mutate(total = sum(.data$count, na.rm = TRUE)) |>
+          dplyr::mutate(value = ifelse(.data$total > 0, .data$count / .data$total, 0)) |>
+          dplyr::ungroup()
+        count_df$total <- NULL
+      } else {
+        count_df <- dplyr::mutate(count_df, value = .data$count)
+      }
+
+      count_df[[var]] <- factor(as.character(count_df[[var]]), levels = level_order)
+      group_levels <- levels(droplevels(var_data[[group_col]]))
+      count_df[[group_col]] <- factor(as.character(count_df[[group_col]]), levels = group_levels)
+
+      palette <- resolve_palette_for_levels(group_levels, custom = fill_colors)
+      group_dodge <- position_dodge(width = 0.75)
+
+      p <- ggplot(count_df, aes(x = .data[[var]], y = .data$value, fill = .data[[group_col]])) +
+        geom_col(position = group_dodge, width = 0.65) +
+        scale_fill_manual(values = palette) +
+        theme_minimal(base_size = base_size) +
+        labs(title = var, x = NULL, y = y_label, fill = group_col) +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+      p <- add_value_labels(p, count_df, show_value_labels, show_proportions, group_dodge, base_size)
+      p <- apply_value_scale(p, show_proportions, show_value_labels)
+      p
+    } else {
+      count_df <- dplyr::count(var_data, .data[[var]], name = "count")
+      if (nrow(count_df) == 0) return(NULL)
+
+      total <- sum(count_df$count, na.rm = TRUE)
+      if (isTRUE(show_proportions) && total > 0) {
+        count_df$value <- count_df$count / total
+      } else {
+        count_df$value <- count_df$count
+      }
+
+      count_df[[var]] <- factor(as.character(count_df[[var]]), levels = level_order)
+
+      single_fill <- if (!is.null(fill_colors) && length(fill_colors) > 0) {
+        fill_colors[1]
+      } else {
+        resolve_single_color()
+      }
+
+      p <- ggplot(count_df, aes(x = .data[[var]], y = .data$value)) +
+        geom_col(fill = single_fill, width = 0.65) +
+        theme_minimal(base_size = base_size) +
+        labs(title = var, x = NULL, y = y_label) +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+      p <- add_value_labels(p, count_df, show_value_labels, show_proportions, base_size = base_size)
+      p <- apply_value_scale(p, show_proportions, show_value_labels)
+      p
+    }
+  })
+  
+  plots <- Filter(Negate(is.null), plots)
+  if (length(plots) == 0) return(NULL)
+  
+  n_panels <- length(plots)
+  defaults <- compute_default_grid(n_panels)
+
+  layout <- basic_grid_layout(
+    rows = suppressWarnings(as.numeric(nrow_input)),
+    cols = suppressWarnings(as.numeric(ncol_input)),
+    default_rows = defaults$rows,
+    default_cols = defaults$cols
+  )
+
+  layout <- adjust_grid_layout(n_panels, layout)
+
+  validation <- validate_grid(n_panels, layout$nrow, layout$ncol)
+
+  combined <- NULL
+  if (isTRUE(validation$valid)) {
+    combined <- patchwork::wrap_plots(plots, nrow = layout$nrow, ncol = layout$ncol) +
+      patchwork::plot_annotation(
+        theme = theme(plot.title = element_text(size = 16, face = "bold"))
+      )
+  }
+
+  list(
+    plot = combined,
+    layout = list(nrow = layout$nrow, ncol = layout$ncol),
+    panels = n_panels,
+    warning = validation$message,
+    defaults = defaults
+  )
+}
+
+# ===============================================================
+# 🟦 Descriptive Visualization — Summary Metrics
+# ===============================================================
+
+# ---- UI helpers ----
+metric_panel_ui <- function(id, default_width = 400, default_height = 300,
+                            default_rows = 1, default_cols = 1) {
+  ns <- NS(id)
+  tagList(
+    fluidRow(
+      column(6, with_help_tooltip(
+        numericInput(ns("plot_width"),  "Subplot width (px)",  default_width, 200, 2000, 50),
+        "Set the width of each metric panel in pixels."
+      )),
+      column(6, with_help_tooltip(
+        numericInput(ns("plot_height"), "Subplot height (px)", default_height, 200, 2000, 50),
+        "Set the height of each metric panel in pixels."
+      ))
+    ),
+    fluidRow(
+      column(6, add_color_customization_ui(ns, multi_group = TRUE)),
+      column(6, base_size_ui(
+        ns,
+        default = 13,
+        help_text = "Adjust the base font size used for metric plot text elements."
+      ))
+    ),
+    hr(),
+    with_help_tooltip(
+      downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;"),
+      "Save the metric charts as an image file."
+    )
+  )
+}
+
+
+visualize_cv_ui <- visualize_outliers_ui <- visualize_missing_ui <- function(id) {
+  metric_panel_ui(id, default_width = 400, default_height = 320, default_rows = 2, default_cols = 3)
+}
+
+metric_plot_ui <- function(id) {
+  ns <- NS(id)
+  div(
+    class = "ta-plot-container",
+    plotOutput(ns("plot"), width = "100%", height = "auto")
+  )
+}
+
+visualize_cv_plot_ui <- visualize_outliers_plot_ui <- visualize_missing_plot_ui <- metric_plot_ui
+
+
+safe_cv <- function(x) {
+  m <- mean(x, na.rm = TRUE)
+  s <- stats::sd(x, na.rm = TRUE)
+  if (!is.finite(m) || abs(m) < .Machine$double.eps) {
+    return(NA_real_)
+  }
+  100 * s / m
+}
+
+count_outliers <- function(x) {
+  q <- stats::quantile(x, probs = c(0.25, 0.75), na.rm = TRUE)
+  iqr <- q[2] - q[1]
+  sum(x < q[1] - 1.5 * iqr | x > q[2] + 1.5 * iqr, na.rm = TRUE)
+}
+
+missing_pct <- function(x) {
+  100 * mean(is.na(x))
+}
+
+prepare_metric_data <- function(data, numeric_vars, group_var, strata_levels, metric) {
+  if (length(numeric_vars) == 0) {
+    return(NULL)
+  }
+
+  if (is.null(group_var) || !group_var %in% names(data)) {
+    group_var <- NULL
+  }
+
+  data_tbl <- tibble::as_tibble(data)
+
+  if (!is.null(group_var)) {
+    if (!is.null(strata_levels) && length(strata_levels) > 0) {
+      data_tbl[[group_var]] <- factor(as.character(data_tbl[[group_var]]), levels = strata_levels)
+      data_tbl <- droplevels(data_tbl)
+    }
+    data_tbl <- dplyr::group_by(data_tbl, .data[[group_var]], .drop = TRUE)
+  }
+
+  summarised <- switch(
+    metric,
+    cv = dplyr::summarise(
+      data_tbl,
+      dplyr::across(
+        dplyr::all_of(numeric_vars),
+        ~ safe_cv(.x),
+        .names = "cv_{.col}"
+      ),
+      .groups = "drop"
+    ),
+    outliers = dplyr::summarise(
+      data_tbl,
+      dplyr::across(
+        dplyr::all_of(numeric_vars),
+        ~ count_outliers(.x),
+        .names = "outliers_{.col}"
+      ),
+      .groups = "drop"
+    ),
+    missing = dplyr::summarise(
+      data_tbl,
+      dplyr::across(
+        dplyr::all_of(numeric_vars),
+        ~ missing_pct(.x),
+        .names = "missing_{.col}"
+      ),
+      .groups = "drop"
+    ),
+    stop("Unsupported metric type.")
+  )
+
+  tidy <- tidy_descriptive_metric(summarised, metric)
+  if (is.null(tidy)) {
+    return(NULL)
+  }
+
+  tidy$data <- tidy$data[tidy$data$variable %in% numeric_vars, , drop = FALSE]
+  if (nrow(tidy$data) == 0) {
+    return(NULL)
+  }
+
+  tidy$data$variable <- factor(tidy$data$variable, levels = numeric_vars)
+
+  if (!is.null(group_var) && !is.null(strata_levels) && length(strata_levels) > 0) {
+    tidy$data$.group <- factor(as.character(tidy$data$.group), levels = strata_levels)
+  }
+
+  tidy
+}
+
+tidy_descriptive_metric <- function(df, prefix) {
+  if (is.null(df) || nrow(df) == 0) return(NULL)
+  metric_cols <- grep(paste0("^", prefix, "_"), names(df), value = TRUE)
+  if (length(metric_cols) == 0) return(NULL)
+  group_cols <- setdiff(names(df), metric_cols)
+  has_group <- length(group_cols) > 0
+  group_label <- if (has_group) paste(group_cols, collapse = " / ") else NULL
+  if (!has_group) {
+    df <- df |> dplyr::mutate(.group = "Overall")
+    group_cols <- ".group"
+  }
+  tidy <- df |>
+    tidyr::unite(".group", dplyr::all_of(group_cols), sep = " / ", remove = FALSE) |>
+    tidyr::pivot_longer(
+      cols = dplyr::all_of(metric_cols),
+      names_to = "variable",
+      values_to = "value"
+    ) |>
+    dplyr::mutate(
+      variable = gsub(paste0("^", prefix, "_"), "", .data$variable),
+      value = ifelse(is.finite(.data$value), .data$value, NA_real_),
+      .group = factor(.data$.group, levels = unique(.data$.group))
+    ) |>
+    tidyr::drop_na("value")
+  if (nrow(tidy) == 0) return(NULL)
+  list(data = tidy, has_group = has_group, group_label = group_label)
+}
+
+
+build_metric_plot <- function(metric_info,
+                              y_label,
+                              title,
+                              custom_colors = NULL,
+                              base_size = 13) {
+  df <- metric_info$data
+  has_group <- isTRUE(metric_info$has_group)
+
+  if (has_group) {
+    legend_title <- if (!is.null(metric_info$group_label)) metric_info$group_label else "Group"
+    palette <- resolve_palette_for_levels(levels(df$.group), custom = custom_colors)
+    p <- ggplot(df, aes(x = variable, y = value, fill = .group)) +
+      geom_col(position = position_dodge(width = 0.7), width = 0.65) +
+      scale_fill_manual(values = palette) +
+      labs(fill = legend_title)
+  } else {
+    p <- ggplot(df, aes(x = variable, y = value)) +
+      geom_col(width = 0.65, fill = resolve_single_color(custom_colors)) +
+      guides(fill = "none")
+  }
+  
+  p +
+    theme_minimal(base_size = base_size) +
+    labs(x = NULL, y = y_label, title = title) +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      panel.grid.minor = element_blank()
+    )
+}
+
+
+metric_module_server <- function(id, filtered_data, summary_info, metric_key,
+                                 y_label, title, filename_prefix, is_active = NULL) {
+  moduleServer(id, function(input, output, session) {
+    ns <- session$ns
+
+    resolve_dimension <- function(value, default) {
+      if (is.null(value) || !is.numeric(value) || is.na(value)) default else value
+    }
+
+    plot_width <- reactive(resolve_dimension(input$plot_width, 400))
+    plot_height <- reactive(resolve_dimension(input$plot_height, 300))
+
+    module_active <- reactive({
+      if (is.null(is_active)) TRUE else isTRUE(is_active())
+    })
+
+    color_var_reactive <- reactive({
+      info <- summary_info()
+      if (is.null(info)) return(NULL)
+
+      group_var <- resolve_reactive(info$group_var)
+      if (is.null(group_var) || group_var %in% c("", "None")) return(NULL)
+
+      dat <- filtered_data()
+      if (is.null(dat) || !is.data.frame(dat) || !group_var %in% names(dat)) return(NULL)
+
+      group_var
+    })
+
+    custom_colors <- add_color_customization_server(
+      ns = ns,
+      input = input,
+      output = output,
+      data = filtered_data,
+      color_var_reactive = color_var_reactive,
+      multi_group = TRUE
+    )
+
+    base_size <- base_size_server(
+      input = input,
+      default = 13
+    )
+
+    cached_plot_details <- reactiveVal(NULL)
+
+    invalidate_cache <- function() {
+      cached_plot_details(NULL)
+    }
+
+    observeEvent(
+      list(
+        summary_info(),
+        filtered_data(),
+        custom_colors(),
+        base_size()
+      ),
+      {
+        invalidate_cache()
+      },
+      ignoreNULL = FALSE
+    )
+
+    compute_plot_details <- function() {
+      info <- summary_info()
+      validate(need(!is.null(info), "Summary not available."))
+
+      processed <- resolve_reactive(info$processed_data)
+      dat <- if (!is.null(processed)) processed else filtered_data()
+
+      validate(need(!is.null(dat) && is.data.frame(dat) && nrow(dat) > 0, "No data available."))
+
+      selected_vars <- resolve_reactive(info$selected_vars)
+      group_var <- resolve_reactive(info$group_var)
+      strata_levels <- resolve_reactive(info$strata_levels)
+      group_label <- resolve_reactive(info$group_label)
+
+      numeric_vars <- names(dat)[vapply(dat, is.numeric, logical(1))]
+      if (!is.null(selected_vars) && length(selected_vars) > 0) {
+        # Preserve the order specified in the UI while filtering to numeric columns.
+        numeric_vars <- selected_vars[selected_vars %in% numeric_vars]
+      }
+      validate(need(length(numeric_vars) > 0, "No numeric variables available for plotting."))
+
+      metric_info <- prepare_metric_data(
+        data = dat,
+        numeric_vars = numeric_vars,
+        group_var = group_var,
+        strata_levels = strata_levels,
+        metric = metric_key
+      )
+
+      validate(need(!is.null(metric_info), "Unable to compute metric for the selected variables."))
+
+      if (!is.null(group_label)) {
+        metric_info$group_label <- group_label
+      }
+
+      list(
+        plot = build_metric_plot(
+          metric_info,
+          y_label,
+          title,
+          custom_colors = custom_colors(),
+          base_size = base_size()
+        )
+      )
+    }
+
+    plot_details <- reactive({
+      req(module_active())
+      details <- cached_plot_details()
+      if (is.null(details)) {
+        details <- compute_plot_details()
+        cached_plot_details(details)
+      }
+      details
+    })
+
+    plot_size <- reactive({
+      req(module_active())
+      list(w = plot_width(), h = plot_height())
+    })
+
+    output$download_plot <- downloadHandler(
+      filename = function() paste0(filename_prefix, "_", Sys.Date(), ".png"),
+      content = function(file) {
+        req(module_active())
+        details <- plot_details()
+        req(details$plot)
+        size <- plot_size()
+        ggplot2::ggsave(
+          filename = file,
+          plot = details$plot,
+          device = "png",
+          dpi = 300,
+          width = size$w / 96,
+          height = size$h / 96,
+          units = "in",
+          limitsize = FALSE
+        )
+      }
+    )
+
+    output$plot <- renderPlot({
+      req(module_active())
+      details <- plot_details()
+      if (!is.null(details$warning) || is.null(details$plot)) return(NULL)
+      print(details$plot)
+    },
+    width = function() {
+      req(module_active())
+      plot_size()$w
+    },
+    height = function() {
+      req(module_active())
+      plot_size()$h
+    },
+    res = 96)
+  })
+}
+
+
+metric_server_factory <- function(metric_key, y_label, filename_prefix) {
+  force(metric_key)
+  force(y_label)
+  force(filename_prefix)
+
+  function(id, filtered_data, summary_info, is_active = NULL) {
+    metric_module_server(
+      id = id,
+      filtered_data = filtered_data,
+      summary_info = summary_info,
+      metric_key = metric_key,
+      y_label = y_label,
+      title = "",
+      filename_prefix = filename_prefix,
+      is_active = is_active
+    )
+  }
+}
+
+visualize_cv_server <- metric_server_factory("cv", "CV (%)", "cv_summary")
+visualize_outliers_server <- metric_server_factory("outliers", "Outlier Count", "outlier_summary")
+visualize_missing_server <- metric_server_factory("missing", "Missing (%)", "missing_summary")
+# ===============================================================
+# 🟦 Descriptive Visualization — Numeric Boxplots
+# ===============================================================
+
+visualize_numeric_boxplots_ui <- function(id) {
+  ns <- NS(id)
+  tagList(
+    with_help_tooltip(
+      checkboxInput(ns("show_points"), "Show individual data points", TRUE),
+      "Add the raw observations on top of each boxplot."
+    ),
+    with_help_tooltip(
+      checkboxInput(ns("show_outliers"), "Highlight boxplot outliers", FALSE),
+      "Highlight points that fall outside the typical range."
+    ),
+    conditionalPanel(
+      condition = sprintf("input['%s']", ns("show_outliers")),
+      uiOutput(ns("outlier_label_ui"))
+    ),
+    fluidRow(
+      column(6, with_help_tooltip(
+        numericInput(ns("plot_width"),  "Subplot width (px)",  200, 200, 2000, 50),
+        "Control how wide each boxplot panel should be."
+      )),
+      column(6, with_help_tooltip(
+        numericInput(ns("plot_height"), "Subplot height (px)", 800, 200, 2000, 50),
+        "Control how tall each boxplot panel should be."
+      ))
+    ),
+    plot_grid_ui(
+      id = ns("plot_grid"),
+      rows_help = "Choose how many rows of plots to display when multiple charts are shown.",
+      cols_help = "Choose how many columns of plots to display when multiple charts are shown.",
+      cols_max = 100L
+    ),
+    fluidRow(
+      column(6, add_color_customization_ui(ns, multi_group = TRUE)),
+      column(6, base_size_ui(
+        ns,
+        default = 13,
+        help_text = "Adjust the base font size used for boxplot text elements."
+      ))
+    ),
+    hr(),
+    with_help_tooltip(
+      downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;"),
+      "Save the boxplots as an image file."
+    )
+  )
+}
+
+
+visualize_numeric_boxplots_plot_ui <- function(id) {
+  ns <- NS(id)
+  div(
+    class = "ta-plot-container",
+    uiOutput(ns("grid_warning")),
+    plotOutput(ns("plot"), width = "100%", height = "auto")
+  )
+}
+
+
+visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, is_active = NULL) {
+  moduleServer(id, function(input, output, session) {
+    ns <- session$ns
+    
+    module_active <- reactive({
+      if (is.null(is_active)) TRUE else isTRUE(is_active())
+    })
+    
+    plot_width  <- reactive({ w <- input$plot_width;  if (is.null(w) || is.na(w)) 200 else as.numeric(w) })
+    plot_height <- reactive({ h <- input$plot_height; if (is.null(h) || is.na(h)) 800 else as.numeric(h) })
+    
+    grid <- plot_grid_server("plot_grid", cols_max = 100L)
+    
+    color_var_reactive <- reactive({
+      info <- summary_info()
+      if (is.null(info)) return(NULL)
+      g <- resolve_reactive(info$group_var)
+      dat <- filtered_data()
+      if (is.null(g) || identical(g, "") || identical(g, "None")) return(NULL)
+      if (is.null(dat) || !is.data.frame(dat) || !g %in% names(dat)) return(NULL)
+      g
+    })
+    
+    custom_colors <- add_color_customization_server(
+      ns = ns,
+      input = input,
+      output = output,
+      data = filtered_data,
+      color_var_reactive = color_var_reactive,
+      multi_group = TRUE
+    )
+    
+    base_size <- base_size_server(input = input, default = 13)
+    
+    output$outlier_label_ui <- renderUI({
+      dat <- filtered_data()
+      cat_cols <- character(0)
+      if (!is.null(dat) && is.data.frame(dat)) {
+        cat_cols <- names(dat)[vapply(
+          dat,
+          function(x) is.character(x) || is.factor(x) || is.logical(x),
+          logical(1)
+        )]
+        cat_cols <- sort(unique(cat_cols))
+      }
+      
+      current <- isolate(input$outlier_label)
+      if (is.null(current) || !nzchar(current) || !current %in% cat_cols) current <- ""
+      
+      with_help_tooltip(
+        selectInput(
+          ns("outlier_label"),
+          label = "Label outliers by",
+          choices = c("None" = "", stats::setNames(cat_cols, cat_cols)),
+          selected = current
+        ),
+        "Choose a column to annotate the highlighted outliers."
+      )
+    })
+    
+    state <- reactive({
+      list(
+        info          = summary_info(),
+        dat           = filtered_data(),
+        show_points   = isTRUE(input$show_points),
+        show_outliers = isTRUE(input$show_outliers),
+        label_var     = validate_outlier_label(input$outlier_label),
+        colors        = custom_colors(),
+        base_size     = base_size(),
+        rows_input    = grid$rows(),
+        cols_input    = grid$cols()
+      )
+    })
+    
+    plot_info <- reactive({
+      req(module_active())
+      s <- state()
+      req(!is.null(s$info))
+      processed <- resolve_reactive(s$info$processed_data)
+      dat <- if (!is.null(processed)) processed else s$dat
+      req(!is.null(dat), is.data.frame(dat), nrow(dat) > 0)
+
+      selected_vars <- resolve_reactive(s$info$selected_vars)
+      group_var     <- resolve_reactive(s$info$group_var)
+      
+      build_descriptive_numeric_boxplot(
+        df                = dat,
+        selected_vars     = selected_vars,
+        group_var         = group_var,
+        show_points       = s$show_points,
+        show_outliers     = s$show_outliers,
+        outlier_label_var = s$label_var,
+        nrow_input        = s$rows_input,
+        ncol_input        = s$cols_input,
+        custom_colors     = s$colors,
+        base_size         = s$base_size
+      )
+    })
+    
+    plot_dimensions <- reactive({
+      req(module_active())
+      info <- plot_info()
+      lay <- info$layout
+
+      nrow_l <- 1L
+      if (!is.null(lay) && !is.null(lay$nrow) && !is.na(lay$nrow)) {
+        nrow_l <- as.integer(lay$nrow)
+      }
+
+      ncol_l <- 1L
+      if (!is.null(lay) && !is.null(lay$ncol) && !is.na(lay$ncol)) {
+        ncol_l <- as.integer(lay$ncol)
+      }
+
+      list(
+        width = plot_width() * ncol_l,
+        height = plot_height() * nrow_l
+      )
+    })
+    
+    output$grid_warning <- renderUI({
+      req(module_active())
+      info <- plot_info()
+      if (!is.null(info$warning)) div(class = "alert alert-warning", info$warning) else NULL
+    })
+    
+    output$download_plot <- downloadHandler(
+      filename = function() paste0("numeric_boxplots_", Sys.Date(), ".png"),
+      content = function(file) {
+        req(module_active())
+        info <- plot_info()
+        req(is.null(info$warning), !is.null(info$plot))
+        s <- plot_dimensions()
+        ggplot2::ggsave(
+          filename = file,
+          plot = info$plot,
+          device = "png",
+          dpi = 300,
+          width  = s$width / 96,
+          height = s$height / 96,
+          units = "in",
+          limitsize = FALSE
+        )
+      }
+    )
+
+    output$plot <- renderPlot({
+      req(module_active())
+      info <- plot_info()
+      if (!is.null(info$warning) || is.null(info$plot)) return(NULL)
+      print(info$plot)
+    },
+    width = function() { plot_dimensions()$width },
+    height = function() { plot_dimensions()$height },
+    res = 96)
+  })
+}
+
+
+
+
+build_descriptive_numeric_boxplot <- function(df,
+                                              selected_vars = NULL,
+                                              group_var = NULL,
+                                              show_points = TRUE,
+                                              show_outliers = FALSE,
+                                              outlier_label_var = NULL,
+                                              nrow_input = NULL,
+                                              ncol_input = NULL,
+                                              custom_colors = NULL,
+                                              base_size = 13) {
+  if (is.null(df) || !is.data.frame(df) || nrow(df) == 0) return(NULL)
+
+  num_vars <- names(df)[vapply(df, is.numeric, logical(1))]
+  if (!is.null(selected_vars) && length(selected_vars) > 0) {
+    num_vars <- intersect(num_vars, selected_vars)
+  }
+  if (length(num_vars) == 0) return(NULL)
+  
+  # ensure discrete x if grouped
+  if (!is.null(group_var) && group_var %in% names(df)) {
+    df[[group_var]] <- as.factor(df[[group_var]])
+  } else {
+    group_var <- NULL
+  }
+  
+  plots <- lapply(num_vars, function(var) {
+    vec <- df[[var]]
+    if (all(is.na(vec))) return(NULL)
+
+    if (!is.null(group_var)) {
+      group_levels <- levels(df[[group_var]])
+      palette <- resolve_palette_for_levels(group_levels, custom = custom_colors)
+      p <- ggplot(df, aes(x = .data[[group_var]], y = .data[[var]], fill = .data[[group_var]])) +
+        geom_boxplot(outlier.shape = NA, width = 0.6) +
+        scale_fill_manual(values = palette) +
+        theme_minimal(base_size = base_size) +
+        labs(title = var, x = NULL, y = var) +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+      needs_color_scale <- FALSE
+      if (isTRUE(show_points)) {
+        p <- p + geom_jitter(
+          aes(color = .data[[group_var]]),
+          width = 0.2,
+          alpha = 0.5,
+          size = 1
+        )
+        needs_color_scale <- TRUE
+      }
+
+      if (isTRUE(show_outliers)) {
+        outliers <- prepare_boxplot_outliers(
+          data = df,
+          value_col = var,
+          group_col = group_var,
+          label_col = outlier_label_var
+        )
+        if (has_rows(outliers)) {
+          p <- p + geom_point(
+            data = outliers,
+            aes(x = x, y = y, color = group),
+            inherit.aes = FALSE,
+            size = 2.5,
+            show.legend = FALSE
+          )
+          needs_color_scale <- TRUE
+
+          label_data <- filter_labeled_outliers(outliers)
+          if (has_rows(label_data)) {
+            p <- p + ggrepel::geom_text_repel(
+              data = label_data,
+              aes(x = x, y = y, label = label, color = group),
+              inherit.aes = FALSE,
+              size = 3,
+              max.overlaps = Inf,
+              min.segment.length = 0,
+              box.padding = 0.3,
+              point.padding = 0.2,
+              show.legend = FALSE
+            )
+          }
+        }
+      }
+
+      if (needs_color_scale) {
+        p <- p + scale_color_manual(values = palette, guide = "none")
+      }
+    } else {
+      single_color <- resolve_single_color(custom_colors)
+      p <- ggplot(df, aes(x = factor(1), y = .data[[var]])) +
+        geom_boxplot(fill = single_color, width = 0.3) +
+        theme_minimal(base_size = base_size) +
+        labs(title = var, x = NULL, y = var) +
+        theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+
+      if (isTRUE(show_points)) {
+        p <- p + geom_jitter(color = single_color, width = 0.05, alpha = 0.5, size = 1)
+      }
+
+      if (isTRUE(show_outliers)) {
+        outliers <- prepare_boxplot_outliers(
+          data = df,
+          value_col = var,
+          label_col = outlier_label_var
+        )
+        if (has_rows(outliers)) {
+          p <- p + geom_point(
+            data = outliers,
+            aes(x = x, y = y),
+            inherit.aes = FALSE,
+            color = single_color,
+            size = 2.5,
+            show.legend = FALSE
+          )
+
+          label_data <- filter_labeled_outliers(outliers)
+          if (has_rows(label_data)) {
+            p <- p + ggrepel::geom_text_repel(
+              data = label_data,
+              aes(x = x, y = y, label = label),
+              inherit.aes = FALSE,
+              size = 3,
+              color = single_color,
+              max.overlaps = Inf,
+              min.segment.length = 0,
+              box.padding = 0.3,
+              point.padding = 0.2,
+              show.legend = FALSE
+            )
+          }
+        }
+      }
+    }
+
+    if (inherits(p, "gg")) p else NULL
+  })
+  
+  # keep only valid ggplots
+  plots <- Filter(Negate(is.null), plots)
+  if (length(plots) == 0) return(NULL)
+
+  n_panels <- length(plots)
+  defaults <- list(
+    rows = 1L,
+    cols = max(1L, as.integer(n_panels))
+  )
+
+  layout <- basic_grid_layout(
+    rows = suppressWarnings(as.numeric(nrow_input)),
+    cols = suppressWarnings(as.numeric(ncol_input)),
+    default_rows = defaults$rows,
+    default_cols = defaults$cols,
+    max_cols = max(100L, as.integer(defaults$cols))
+  )
+
+  layout <- adjust_grid_layout(n_panels, layout)
+
+  validation <- validate_grid(n_panels, layout$nrow, layout$ncol)
+
+  combined <- NULL
+  if (isTRUE(validation$valid)) {
+    combined <- patchwork::wrap_plots(plots, nrow = layout$nrow, ncol = layout$ncol) +
+      patchwork::plot_annotation(
+        theme = theme(plot.title = element_text(size = 16, face = "bold"))
+      )
+  }
+
+  list(
+    plot = combined,
+    layout = list(nrow = layout$nrow, ncol = layout$ncol),
+    panels = n_panels,
+    warning = validation$message,
+    defaults = defaults
+  )
+}
+
+
+has_rows <- function(x) {
+  is.data.frame(x) && nrow(x) > 0
+}
+
+
+compute_outlier_bounds <- function(values) {
+  if (is.null(values)) return(NULL)
+  values <- values[!is.na(values)]
+  if (!length(values)) return(NULL)
+
+  stats <- stats::quantile(values, probs = c(0.25, 0.75), na.rm = TRUE, names = FALSE)
+  if (anyNA(stats)) return(NULL)
+
+  iqr <- stats[2] - stats[1]
+  list(
+    lower = stats[1] - 1.5 * iqr,
+    upper = stats[2] + 1.5 * iqr
+  )
+}
+
+
+clean_outlier_labels <- function(values) {
+  if (is.null(values)) return(character())
+  out <- as.character(values)
+  out[is.na(out) | trimws(out) == ""] <- NA_character_
+  out
+}
+
+
+filter_labeled_outliers <- function(outliers) {
+  if (!has_rows(outliers) || !"label" %in% names(outliers)) {
+    return(NULL)
+  }
+  labeled <- outliers[!is.na(outliers$label) & nzchar(outliers$label), , drop = FALSE]
+  if (has_rows(labeled)) labeled else NULL
+}
+
+
+validate_outlier_label <- function(label_input) {
+  if (is.null(label_input) || !nzchar(label_input)) {
+    return(NULL)
+  }
+  label_input
+}
+
+
+prepare_boxplot_outliers <- function(data,
+                                     value_col,
+                                     group_col = NULL,
+                                     label_col = NULL) {
+  if (is.null(data) || !is.data.frame(data) || !value_col %in% names(data)) {
+    return(NULL)
+  }
+
+  extract_labels <- function(df, idx) {
+    if (is.null(label_col) || !label_col %in% names(df)) {
+      return(rep(NA_character_, length(idx)))
+    }
+    clean_outlier_labels(df[[label_col]][idx])
+  }
+
+  if (!is.null(group_col) && group_col %in% names(data)) {
+    grouped <- data
+    grouped[[group_col]] <- droplevels(as.factor(grouped[[group_col]]))
+    group_levels <- levels(grouped[[group_col]])
+    split_data <- split(grouped, grouped[[group_col]], drop = TRUE)
+
+    out_list <- lapply(group_levels, function(lvl) {
+      subset <- split_data[[lvl]]
+      if (is.null(subset)) return(NULL)
+
+      bounds <- compute_outlier_bounds(subset[[value_col]])
+      if (is.null(bounds)) return(NULL)
+
+      idx <- which(subset[[value_col]] < bounds$lower | subset[[value_col]] > bounds$upper)
+      if (!length(idx)) return(NULL)
+
+      data.frame(
+        x = factor(rep(lvl, length(idx)), levels = group_levels),
+        y = subset[[value_col]][idx],
+        group = factor(rep(lvl, length(idx)), levels = group_levels),
+        label = extract_labels(subset, idx),
+        stringsAsFactors = FALSE
+      )
+    })
+
+    out_list <- Filter(has_rows, out_list)
+    if (!length(out_list)) return(NULL)
+
+    outliers <- do.call(rbind, out_list)
+    rownames(outliers) <- NULL
+    return(outliers)
+  }
+
+  bounds <- compute_outlier_bounds(data[[value_col]])
+  if (is.null(bounds)) return(NULL)
+
+  idx <- which(data[[value_col]] < bounds$lower | data[[value_col]] > bounds$upper)
+  if (!length(idx)) return(NULL)
+
+  data.frame(
+    x = factor(rep(1, length(idx))),
+    y = data[[value_col]][idx],
+    group = NA,
+    label = extract_labels(data, idx),
+    stringsAsFactors = FALSE
+  )
+}
+
+# ===============================================================
+# 🟦 Descriptive Visualization — Numeric Histograms
+# ===============================================================
+
+visualize_numeric_histograms_ui <- function(id) {
+  ns <- NS(id)
+  tagList(
+    with_help_tooltip(
+      checkboxInput(ns("use_density"), "Show density instead of count", FALSE),
+      "Switch between showing counts or densities for each histogram."
+    ),
+    fluidRow(
+      column(6, with_help_tooltip(
+        numericInput(ns("plot_width"),  "Subplot width (px)",  400, 200, 2000, 50),
+        "Set the width of each histogram panel in pixels."
+      )),
+      column(6, with_help_tooltip(
+        numericInput(ns("plot_height"), "Subplot height (px)", 300, 200, 2000, 50),
+        "Set the height of each histogram panel in pixels."
+      ))
+    ),
+    plot_grid_ui(
+      id = ns("plot_grid"),
+      rows_help = "Choose how many rows of histograms to display when several charts are shown.",
+      cols_help = "Choose how many columns of histograms to display when several charts are shown."
+    ),
+    fluidRow(
+      column(6, add_color_customization_ui(ns, multi_group = TRUE)),
+      column(6, base_size_ui(
+        ns,
+        default = 13,
+        help_text = "Adjust the base font size used for histogram text elements."
+      ))
+    ),
+    hr(),
+    with_help_tooltip(
+      downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;"),
+      "Save the histograms as an image file."
+    )
+  )
+}
+
+
+visualize_numeric_histograms_plot_ui <- function(id) {
+  ns <- NS(id)
+  div(
+    class = "ta-plot-container",
+    uiOutput(ns("grid_warning")),
+    plotOutput(ns("plot"), width = "100%", height = "auto")
+  )
+}
+
+
+visualize_numeric_histograms_server <- function(id, filtered_data, summary_info, is_active = NULL) {
+  moduleServer(id, function(input, output, session) {
+    ns <- session$ns
+    
+    module_active <- reactive({
+      if (is.null(is_active)) TRUE else isTRUE(is_active())
+    })
+    
+    plot_width  <- reactive({ w <- input$plot_width;  if (is.null(w) || is.na(w)) 400 else as.numeric(w) })
+    plot_height <- reactive({ h <- input$plot_height; if (is.null(h) || is.na(h)) 300 else as.numeric(h) })
+    
+    grid <- plot_grid_server("plot_grid")
+    
+    color_var_reactive <- reactive({
+      info <- summary_info()
+      if (is.null(info)) return(NULL)
+      g <- resolve_reactive(info$group_var)
+      dat <- filtered_data()
+      if (is.null(g) || identical(g, "") || identical(g, "None")) return(NULL)
+      if (is.null(dat) || !is.data.frame(dat) || !g %in% names(dat)) return(NULL)
+      g
+    })
+    
+    custom_colors <- add_color_customization_server(
+      ns = ns,
+      input = input,
+      output = output,
+      data = filtered_data,
+      color_var_reactive = color_var_reactive,
+      multi_group = TRUE
+    )
+    
+    base_size <- base_size_server(input = input, default = 13)
+    
+    state <- reactive({
+      list(
+        info        = summary_info(),
+        dat         = filtered_data(),
+        use_density = isTRUE(input$use_density),
+        colors      = custom_colors(),
+        base_size   = base_size(),
+        rows_input  = grid$rows(),
+        cols_input  = grid$cols()
+      )
+    })
+    
+    plot_info <- reactive({
+      req(module_active())
+      s <- state()
+      req(!is.null(s$info))
+      processed <- resolve_reactive(s$info$processed_data)
+      dat <- if (!is.null(processed)) processed else s$dat
+      req(!is.null(dat), is.data.frame(dat), nrow(dat) > 0)
+
+      selected_vars <- resolve_reactive(s$info$selected_vars)
+      group_var     <- resolve_reactive(s$info$group_var)
+      strata_levels <- resolve_reactive(s$info$strata_levels)
+      
+      build_descriptive_numeric_histogram(
+        df            = dat,
+        selected_vars = selected_vars,
+        group_var     = group_var,
+        strata_levels = strata_levels,
+        use_density   = s$use_density,
+        nrow_input    = s$rows_input,
+        ncol_input    = s$cols_input,
+        custom_colors = s$colors,
+        base_size     = s$base_size
+      )
+    })
+    
+    plot_dimensions <- reactive({
+      req(module_active())
+      info <- plot_info()
+      lay <- info$layout
+
+      nrow_l <- 1L
+      if (!is.null(lay) && !is.null(lay$nrow) && !is.na(lay$nrow)) {
+        nrow_l <- as.integer(lay$nrow)
+      }
+
+      ncol_l <- 1L
+      if (!is.null(lay) && !is.null(lay$ncol) && !is.na(lay$ncol)) {
+        ncol_l <- as.integer(lay$ncol)
+      }
+
+      list(
+        width = plot_width() * ncol_l,
+        height = plot_height() * nrow_l
+      )
+    })
+    
+    output$grid_warning <- renderUI({
+      req(module_active())
+      info <- plot_info()
+      if (!is.null(info$warning)) div(class = "alert alert-warning", info$warning) else NULL
+    })
+    
+    output$download_plot <- downloadHandler(
+      filename = function() paste0("numeric_histograms_", Sys.Date(), ".png"),
+      content = function(file) {
+        req(module_active())
+        info <- plot_info()
+        req(is.null(info$warning), !is.null(info$plot))
+        s <- plot_dimensions()
+        ggplot2::ggsave(
+          filename = file,
+          plot = info$plot,
+          device = "png",
+          dpi = 300,
+          width  = s$width / 96,
+          height = s$height / 96,
+          units = "in",
+          limitsize = FALSE
+        )
+      }
+    )
+
+    output$plot <- renderPlot({
+      req(module_active())
+      info <- plot_info()
+      if (!is.null(info$warning) || is.null(info$plot)) return(NULL)
+      print(info$plot)
+    },
+    width = function() { plot_dimensions()$width },
+    height = function() { plot_dimensions()$height },
+    res = 96)
+  })
+}
+
+
+
+build_descriptive_numeric_histogram <- function(df,
+                                                selected_vars = NULL,
+                                                group_var = NULL,
+                                                strata_levels = NULL,
+                                                use_density = FALSE,
+                                                nrow_input = NULL,
+                                                ncol_input = NULL,
+                                                custom_colors = NULL,
+                                                base_size = 13) {
+  if (is.null(df) || !is.data.frame(df) || nrow(df) == 0) return(NULL)
+
+  num_vars <- names(Filter(is.numeric, df))
+  if (!is.null(selected_vars) && length(selected_vars) > 0) {
+    num_vars <- intersect(num_vars, selected_vars)
+  }
+  if (length(num_vars) == 0) return(NULL)
+
+  if (is.null(group_var) || !group_var %in% names(df)) {
+    group_var <- NULL
+  } else {
+    df[[group_var]] <- as.character(df[[group_var]])
+    df[[group_var]][is.na(df[[group_var]]) | trimws(df[[group_var]]) == ""] <- "Missing"
+
+    if (!is.null(strata_levels) && length(strata_levels) > 0) {
+      keep_levels <- unique(strata_levels)
+      df <- df[df[[group_var]] %in% keep_levels, , drop = FALSE]
+      if (nrow(df) == 0) return(NULL)
+      df[[group_var]] <- factor(df[[group_var]], levels = keep_levels)
+    } else {
+      df[[group_var]] <- factor(df[[group_var]], levels = unique(df[[group_var]]))
+    }
+  }
+
+  plots <- lapply(num_vars, function(var) {
+    cols <- intersect(c(var, group_var), names(df))
+    plot_data <- df[, cols, drop = FALSE]
+
+    keep <- is.finite(plot_data[[var]])
+    keep[is.na(keep)] <- FALSE
+    plot_data <- plot_data[keep, , drop = FALSE]
+    if (nrow(plot_data) == 0) return(NULL)
+
+    if (!is.null(group_var)) {
+      plot_data[[group_var]] <- droplevels(plot_data[[group_var]])
+    }
+
+    density_mode <- isTRUE(use_density) && length(unique(plot_data[[var]])) > 1
+    base <- ggplot(plot_data, aes(x = .data[[var]]))
+    y_label <- if (density_mode) "Density" else "Count"
+
+    if (!is.null(group_var)) {
+      group_levels <- levels(plot_data[[group_var]])
+      palette <- resolve_palette_for_levels(group_levels, custom = custom_colors)
+      if (density_mode) {
+        base <- base +
+          geom_density(aes(color = .data[[group_var]], fill = .data[[group_var]]), alpha = 0.3) +
+          scale_color_manual(values = palette) +
+          scale_fill_manual(values = palette) +
+          labs(color = group_var, fill = group_var)
+      } else {
+        base <- base +
+          geom_histogram(
+            aes(fill = .data[[group_var]]),
+            position = "identity",
+            alpha = 0.5,
+            bins = 30
+          ) +
+          scale_fill_manual(values = palette) +
+          labs(fill = group_var)
+      }
+    } else {
+      single_color <- resolve_single_color(custom_colors)
+      if (density_mode) {
+        base <- base + geom_density(fill = single_color, color = single_color, alpha = 0.35)
+      } else {
+        base <- base + geom_histogram(fill = single_color, color = single_color, bins = 30)
+      }
+    }
+
+    base +
+      theme_minimal(base_size = base_size) +
+      labs(title = var, x = var, y = y_label)
+  })
+
+  plots <- Filter(Negate(is.null), plots)
+  if (length(plots) == 0) return(NULL)
+
+  n_panels <- length(plots)
+  defaults <- compute_default_grid(n_panels)
+  layout <- basic_grid_layout(
+    rows = suppressWarnings(as.numeric(nrow_input)),
+    cols = suppressWarnings(as.numeric(ncol_input)),
+    default_rows = defaults$rows,
+    default_cols = defaults$cols
+  )
+  layout <- adjust_grid_layout(n_panels, layout)
+
+  validation <- validate_grid(n_panels, layout$nrow, layout$ncol)
+  combined <- if (isTRUE(validation$valid)) {
+    patchwork::wrap_plots(plots, nrow = layout$nrow, ncol = layout$ncol) +
+      patchwork::plot_annotation(
+        theme = theme(plot.title = element_text(size = 16, face = "bold"))
+      )
+  } else {
+    NULL
+  }
+
+  list(
+    plot = combined,
+    layout = list(nrow = layout$nrow, ncol = layout$ncol),
+    panels = n_panels,
+    warning = validation$message,
+    defaults = defaults
+  )
+}

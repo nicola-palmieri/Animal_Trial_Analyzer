@@ -64,13 +64,19 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
+    if (!requireNamespace("digest", quietly = TRUE)) stop("Please install the 'digest' package.")
+    hash_key <- function(data, cols = NULL) {
+      if (is.null(data) || !is.data.frame(data)) return("no-data")
+      keep <- if (is.null(cols)) names(data) else intersect(cols, names(data))
+      digest::digest(data[, keep, drop = FALSE], algo = "xxhash64")
+    }
+    
     module_active <- reactive({
       if (is.null(is_active)) TRUE else isTRUE(is_active())
     })
     
     plot_width  <- reactive({ w <- input$plot_width;  if (is.null(w) || is.na(w)) 200 else as.numeric(w) })
     plot_height <- reactive({ h <- input$plot_height; if (is.null(h) || is.na(h)) 800 else as.numeric(h) })
-    
     grid <- plot_grid_server("plot_grid", cols_max = 100L)
     
     color_var_reactive <- reactive({
@@ -105,10 +111,8 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
         )]
         cat_cols <- sort(unique(cat_cols))
       }
-      
       current <- isolate(input$outlier_label)
       if (is.null(current) || !nzchar(current) || !current %in% cat_cols) current <- ""
-      
       with_help_tooltip(
         selectInput(
           ns("outlier_label"),
@@ -141,10 +145,8 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
       processed <- resolve_reactive(s$info$processed_data)
       dat <- if (!is.null(processed)) processed else s$dat
       req(!is.null(dat), is.data.frame(dat), nrow(dat) > 0)
-
       selected_vars <- resolve_reactive(s$info$selected_vars)
       group_var     <- resolve_reactive(s$info$group_var)
-      
       build_descriptive_numeric_boxplot(
         df                = dat,
         selected_vars     = selected_vars,
@@ -163,27 +165,17 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
       req(module_active())
       info <- plot_info()
       lay <- info$layout
-
-      nrow_l <- 1L
-      if (!is.null(lay) && !is.null(lay$nrow) && !is.na(lay$nrow)) {
-        nrow_l <- as.integer(lay$nrow)
-      }
-
-      ncol_l <- 1L
-      if (!is.null(lay) && !is.null(lay$ncol) && !is.na(lay$ncol)) {
-        ncol_l <- as.integer(lay$ncol)
-      }
-
-      list(
-        width = plot_width() * ncol_l,
-        height = plot_height() * nrow_l
-      )
+      nrow_l <- if (!is.null(lay$nrow)) as.integer(lay$nrow) else 1L
+      ncol_l <- if (!is.null(lay$ncol)) as.integer(lay$ncol) else 1L
+      width_px  <- max(200, plot_width()  * ncol_l)
+      height_px <- max(200, plot_height() * nrow_l)
+      list(width = width_px, height = height_px)
     })
     
     output$grid_warning <- renderUI({
       req(module_active())
       info <- plot_info()
-      if (!is.null(info$warning)) div(class = "alert alert-warning", info$warning) else NULL
+      if (!is.null(info$warning)) div(class = "alert alert-warning", info$warning)
     })
     
     output$download_plot <- downloadHandler(
@@ -205,18 +197,52 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
         )
       }
     )
-
+    
+    # ---- Cached ggplot object to avoid flicker ----
+    cached_plot <- reactiveVal(NULL)
+    cached_key  <- reactiveVal(NULL)
+    
+    observe({
+      req(module_active())
+      s <- state()
+      dat <- s$dat
+      cols <- resolve_reactive(s$info$selected_vars)
+      key <- paste(
+        hash_key(dat, cols),
+        resolve_reactive(s$info$group_var),
+        s$show_points,
+        s$show_outliers,
+        s$label_var,
+        s$colors,
+        s$base_size,
+        sep = "_"
+      )
+      
+      if (!identical(key, cached_key())) {
+        info <- isolate(plot_info())
+        if (!is.null(info$plot)) {
+          cached_plot(info$plot)
+          cached_key(key)
+        }
+      }
+    })
+    
     output$plot <- renderPlot({
       req(module_active())
-      info <- plot_info()
-      if (!is.null(info$warning) || is.null(info$plot)) return(NULL)
-      print(info$plot)
+      p <- cached_plot()
+      validate(need(!is.null(p), "Plot not ready"))
+      print(p)
     },
-    width = function() { plot_dimensions()$width },
+    width  = function() { plot_dimensions()$width },
     height = function() { plot_dimensions()$height },
     res = 96)
+    
+    outputOptions(output, "plot", suspendWhenHidden = TRUE)
+    
+    
   })
 }
+
 
 
 
