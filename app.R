@@ -72,7 +72,7 @@ ui <- navbarPage(
       pre.shiny-text-output {
         white-space: pre;
         overflow-x: auto;
-        font-family: "Fira Mono", "Source Code Pro", Monaco, monospace;
+        font-family: Fira Mono, Source Code Pro, Monaco, monospace;
         font-size: 0.9rem;
       }
     "))
