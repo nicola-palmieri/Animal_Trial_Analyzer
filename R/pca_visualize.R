@@ -498,19 +498,21 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
     # ---- Unified sizing logic ----
     size_val <- reactiveVal(list(w = 800, h = 600))
     
-    observeEvent(plot_info(), {
+    observe({
       info <- plot_info()
+      req(info)
+
       layout <- info$layout
       base_w <- suppressWarnings(as.numeric(input$plot_width))
       base_h <- suppressWarnings(as.numeric(input$plot_height))
-      
+
       valid_size <- function(x, default) {
         if (is.na(x) || x <= 0) default else x
       }
-      
+
       subplot_w <- valid_size(base_w, 400)
       subplot_h <- valid_size(base_h, 300)
-      
+
       if (is.null(layout)) {
         size_val(list(w = subplot_w, h = subplot_h))
       } else {
@@ -518,7 +520,7 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
         nrow <- if (!is.null(layout$nrow)) max(1, layout$nrow) else 1
         size_val(list(w = subplot_w * ncol, h = subplot_h * nrow))
       }
-    }, ignoreInit = FALSE)
+    })
     
     output$plot_warning <- renderUI({
       info <- plot_info()

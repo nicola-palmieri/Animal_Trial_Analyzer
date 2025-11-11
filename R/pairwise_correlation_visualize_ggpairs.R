@@ -183,20 +183,28 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
     # ---- New unified sizing logic ----
     size_val <- reactiveVal(list(w = 800, h = 600))
     
-    observeEvent(plot_info(), {
+    observe({
       info <- plot_info()
+      req(info)
+
       layout <- info$layout
+      base_w <- plot_width()
+      base_h <- plot_height()
+
+      plot_w <- if (is.null(base_w) || is.na(base_w) || base_w <= 0) 800 else base_w
+      plot_h <- if (is.null(base_h) || is.na(base_h) || base_h <= 0) 600 else base_h
+
       if (is.null(layout)) {
-        size_val(list(w = plot_width(), h = plot_height()))
+        size_val(list(w = plot_w, h = plot_h))
       } else {
         nrow_l <- ifelse(is.null(layout$nrow), 1L, as.integer(layout$nrow))
         ncol_l <- ifelse(is.null(layout$ncol), 1L, as.integer(layout$ncol))
         size_val(list(
-          w = plot_width()  * ncol_l,
-          h = plot_height() * nrow_l
+          w = plot_w * ncol_l,
+          h = plot_h * nrow_l
         ))
       }
-    }, ignoreInit = FALSE)
+    })
     
     output$download_plot <- downloadHandler(
       filename = function() paste0("pairwise_correlation_ggpairs_", Sys.Date(), ".png"),
