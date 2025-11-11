@@ -57,133 +57,144 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
-    module_active <- reactive({
+    if (!requireNamespace("digest", quietly = TRUE)) stop("Please install the 'digest' package.")
+    
+    hash_key <- function(data, cols = NULL) {
+      if (is.null(data) || !is.data.frame(data)) return("no-data")
+      keep <- if (is.null(cols)) names(data) else intersect(cols, names(data))
+      digest::digest(data[, keep, drop = FALSE], algo = "xxhash64")
+    }
+    
+    active <- reactive({
       if (is.null(is_active)) TRUE else isTRUE(is_active())
     })
     
-    plot_width  <- reactive({ w <- input$plot_width;  if (is.null(w) || is.na(w)) 400 else as.numeric(w) })
-    plot_height <- reactive({ h <- input$plot_height; if (is.null(h) || is.na(h)) 300 else as.numeric(h) })
+    plot_width  <- reactive({ as.numeric(input$plot_width  %||% 400) })
+    plot_height <- reactive({ as.numeric(input$plot_height %||% 300) })
+    grid <- plot_grid_server("plot_grid", cols_max = 100L)
+    base_size <- base_size_server(input, default = 13)
     
-    grid <- plot_grid_server("plot_grid")
-    
-    color_var_reactive <- reactive({
+    color_var <- reactive({
       info <- summary_info()
-      if (is.null(info)) return(NULL)
-      g <- resolve_reactive(info$group_var)
       dat <- filtered_data()
-      if (is.null(g) || identical(g, "") || identical(g, "None")) return(NULL)
-      if (is.null(dat) || !is.data.frame(dat) || !g %in% names(dat)) return(NULL)
+      g <- resolve_reactive(info$group_var)
+      if (is.null(info) || is.null(dat) || !is.data.frame(dat)) return(NULL)
+      if (is.null(g) || g == "" || g == "None" || !g %in% names(dat)) return(NULL)
       g
     })
     
     custom_colors <- add_color_customization_server(
-      ns = ns,
-      input = input,
-      output = output,
-      data = filtered_data,
-      color_var_reactive = color_var_reactive,
-      multi_group = TRUE
+      ns, input, output, filtered_data, color_var, multi_group = TRUE
     )
-    
-    base_size <- base_size_server(input = input, default = 13)
     
     state <- reactive({
       list(
-        info          = summary_info(),
-        dat           = filtered_data(),
-        proportions   = isTRUE(input$show_proportions),
-        labels        = isTRUE(input$show_value_labels),
-        colors        = custom_colors(),
-        base_size     = base_size(),
-        rows_input    = grid$rows(),
-        cols_input    = grid$cols()
+        info = summary_info(),
+        dat = filtered_data(),
+        proportions = isTRUE(input$show_proportions),
+        labels = isTRUE(input$show_value_labels),
+        colors = custom_colors(),
+        base_size = base_size(),
+        rows = grid$rows(),
+        cols = grid$cols()
       )
     })
     
     plot_info <- reactive({
-      req(module_active())
+      req(active())
       s <- state()
-      req(!is.null(s$info))
-      processed <- resolve_reactive(s$info$processed_data)
+      info <- s$info
+      req(!is.null(info))
+      processed <- resolve_reactive(info$processed_data)
       dat <- if (!is.null(processed)) processed else s$dat
       req(!is.null(dat), is.data.frame(dat), nrow(dat) > 0)
-
-      selected_vars <- resolve_reactive(s$info$selected_vars)
-      group_var     <- resolve_reactive(s$info$group_var)
-      strata_levels <- resolve_reactive(s$info$strata_levels)
-      
       build_descriptive_categorical_plot(
-        df                = dat,
-        selected_vars     = selected_vars,
-        group_var         = group_var,
-        strata_levels     = strata_levels,
-        show_proportions  = s$proportions,
-        nrow_input        = s$rows_input,
-        ncol_input        = s$cols_input,
-        fill_colors       = s$colors,
+        df = dat,
+        selected_vars = resolve_reactive(info$selected_vars),
+        group_var = resolve_reactive(info$group_var),
+        strata_levels = resolve_reactive(info$strata_levels),
+        show_proportions = s$proportions,
         show_value_labels = s$labels,
-        base_size         = s$base_size
+        nrow_input = s$rows,
+        ncol_input = s$cols,
+        fill_colors = s$colors,
+        base_size = s$base_size
       )
     })
     
     plot_dimensions <- reactive({
-      req(module_active())
-      info <- plot_info()
-      lay <- info$layout
-
-      nrow_l <- 1L
-      if (!is.null(lay) && !is.null(lay$nrow) && !is.na(lay$nrow)) {
-        nrow_l <- as.integer(lay$nrow)
-      }
-
-      ncol_l <- 1L
-      if (!is.null(lay) && !is.null(lay$ncol) && !is.na(lay$ncol)) {
-        ncol_l <- as.integer(lay$ncol)
-      }
-
+      req(active())
+      lay <- plot_info()$layout
+      nrow_l <- if (!is.null(lay$nrow)) as.integer(lay$nrow) else 1L
+      ncol_l <- if (!is.null(lay$ncol)) as.integer(lay$ncol) else 1L
       list(
-        width = plot_width() * ncol_l,
-        height = plot_height() * nrow_l
+        width = max(200, plot_width()  * ncol_l),
+        height = max(200, plot_height() * nrow_l)
       )
     })
     
     output$grid_warning <- renderUI({
-      req(module_active())
+      req(active())
       info <- plot_info()
-      if (!is.null(info$warning)) div(class = "alert alert-warning", info$warning) else NULL
+      if (!is.null(info$warning)) div(class = "alert alert-warning", info$warning)
     })
     
     output$download_plot <- downloadHandler(
       filename = function() paste0("categorical_barplots_", Sys.Date(), ".png"),
       content = function(file) {
-        req(module_active())
+        req(active())
         info <- plot_info()
         req(is.null(info$warning), !is.null(info$plot))
         s <- plot_dimensions()
         ggplot2::ggsave(
-          filename = file,
-          plot = info$plot,
-          device = "png",
-          dpi = 300,
-          width  = s$width / 96,
-          height = s$height / 96,
-          units = "in",
-          limitsize = FALSE
+          file, info$plot, device = "png", dpi = 300,
+          width = s$width / 96, height = s$height / 96,
+          units = "in", limitsize = FALSE
         )
       }
     )
-
+    
+    cached_plot <- reactiveVal(NULL)
+    cached_key  <- reactiveVal(NULL)
+    
+    observe({
+      req(active())
+      s <- state()
+      dat <- s$dat
+      cols <- resolve_reactive(s$info$selected_vars)
+      key <- paste(
+        hash_key(dat, cols),
+        resolve_reactive(s$info$group_var),
+        resolve_reactive(s$info$strata_levels),
+        s$proportions,
+        s$labels,
+        s$colors,
+        s$base_size,
+        sep = "_"
+      )
+      if (!identical(key, cached_key())) {
+        info <- isolate(plot_info())
+        if (!is.null(info$plot)) {
+          cached_plot(info$plot)
+          cached_key(key)
+        }
+      }
+    })
+    
     output$plot <- renderPlot({
-      req(module_active())
-      info <- plot_info()
-      if (!is.null(info$warning) || is.null(info$plot)) return(NULL)
-      print(info$plot)
+      req(active())
+      p <- cached_plot()
+      validate(need(!is.null(p), "Plot not ready"))
+      print(p)
     },
-    width = function() { plot_dimensions()$width },
-    height = function() { plot_dimensions()$height },
+    width  = function() plot_dimensions()$width,
+    height = function() plot_dimensions()$height,
     res = 96)
+    
+    outputOptions(output, "plot", suspendWhenHidden = TRUE)
   })
 }
+
 
 
 
