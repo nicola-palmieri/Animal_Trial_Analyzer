@@ -1207,7 +1207,7 @@ build_single_factor_barplot <- function(stats_df,
     )
   
   if (isTRUE(show_value_labels)) {
-    plot_obj <- add_bar_value_labels(plot_obj, stats_df, factor1, format_numeric_labels)
+    plot_obj <- add_bar_value_labels(plot_obj, stats_df, factor1, format_numeric_labels, base_size)
   }
   
   if (!is.null(posthoc_entry)) {
@@ -1264,7 +1264,7 @@ build_two_factor_barplot <- function(stats_df,
     scale_fill_manual(values = palette)
   
   if (isTRUE(show_value_labels)) {
-    plot_obj <- add_grouped_bar_value_labels(plot_obj, stats_df, factor1, factor2, format_numeric_labels, dodge)
+    plot_obj <- add_grouped_bar_value_labels(plot_obj, stats_df, factor1, factor2, format_numeric_labels, dodge, base_size)
   }
   
   if (!is.null(nested_posthoc)) {
@@ -1277,7 +1277,7 @@ build_two_factor_barplot <- function(stats_df,
 # ===============================================================
 # 🔹 Helper: Add value labels to single-factor barplots
 # ===============================================================
-add_bar_value_labels <- function(plot_obj, stats_df, factor1, format_numeric_labels) {
+add_bar_value_labels <- function(plot_obj, stats_df, factor1, format_numeric_labels, base_size) {
   label_df <- stats_df |>
     dplyr::mutate(
       .se = dplyr::coalesce(se, 0),
@@ -1285,13 +1285,13 @@ add_bar_value_labels <- function(plot_obj, stats_df, factor1, format_numeric_lab
       label_y = ifelse(mean >= 0, mean + .se, mean - .se),
       label_vjust = ifelse(mean >= 0, -0.4, 1.2)
     )
-  
+
   plot_obj +
     geom_text(
       data = label_df,
       aes(x = !!sym(factor1), y = label_y, label = label_text, vjust = label_vjust),
       color = "gray20",
-      size = 3.8,
+      size = compute_label_text_size(base_size),
       fontface = "bold",
       inherit.aes = FALSE
     ) +
@@ -1301,7 +1301,7 @@ add_bar_value_labels <- function(plot_obj, stats_df, factor1, format_numeric_lab
 # ===============================================================
 # 🔹 Helper: Add value labels to grouped (two-factor) barplots
 # ===============================================================
-add_grouped_bar_value_labels <- function(plot_obj, stats_df, factor1, factor2, format_numeric_labels, dodge) {
+add_grouped_bar_value_labels <- function(plot_obj, stats_df, factor1, factor2, format_numeric_labels, dodge, base_size) {
   label_df <- stats_df |>
     dplyr::mutate(
       .se = dplyr::coalesce(se, 0),
@@ -1323,7 +1323,7 @@ add_grouped_bar_value_labels <- function(plot_obj, stats_df, factor1, factor2, f
       ),
       position = dodge,
       color = "gray20",
-      size = 3.6,
+      size = compute_label_text_size(base_size),
       fontface = "bold",
       inherit.aes = FALSE
     ) +
