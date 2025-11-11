@@ -1486,22 +1486,258 @@ add_nested_significance_annotations <- function(plot_obj, stats_df, factor1, fac
                                 limits = c(NA, max_y_total * 1.1))
 }
 
+
+compute_oneway_significance_ceiling <- function(stats_df, posthoc_entry) {
+  if (is.null(posthoc_entry) || !is.data.frame(posthoc_entry)) return(NA_real_)
+  if (!all(c("contrast", "p.value") %in% names(posthoc_entry))) return(NA_real_)
+
+  signif_df <- posthoc_entry
+  signif_df$p.value <- as.character(signif_df$p.value)
+  signif_df$p.value <- gsub("[[:space:]]", "", signif_df$p.value)
+  signif_df$p.value <- gsub("^<\\.?0*", "0.", signif_df$p.value)
+  signif_df$p.value <- suppressWarnings(as.numeric(signif_df$p.value))
+  signif_df <- dplyr::filter(signif_df, !is.na(.data$p.value) & .data$p.value < 0.05)
+  if (nrow(signif_df) == 0) return(NA_real_)
+
+  max_y <- suppressWarnings(max(stats_df$mean + dplyr::coalesce(stats_df$se, 0), na.rm = TRUE))
+  if (!is.finite(max_y)) {
+    max_y <- suppressWarnings(max(stats_df$mean, na.rm = TRUE))
+  }
+  if (!is.finite(max_y)) max_y <- 0
+
+  step <- abs(max_y) * 0.15
+  if (!is.finite(step) || step == 0) step <- 0.1
+  y_positions <- seq(from = max_y + step, by = step, length.out = nrow(signif_df))
+  max(y_positions, na.rm = TRUE) * 1.1
+}
+
+
+compute_grouped_significance_ceiling <- function(stats_df, factor1, factor2, nested_posthoc, dodge_width = 0.7) {
+  nested_name <- paste0(factor2, "_within_", factor1)
+
+  df <- NULL
+  if (is.data.frame(nested_posthoc)) {
+    if ("Factor" %in% names(nested_posthoc)) {
+      df <- dplyr::filter(nested_posthoc, .data$Factor == nested_name)
+    }
+  } else if (is.list(nested_posthoc) && nested_name %in% names(nested_posthoc)) {
+    df <- nested_posthoc[[nested_name]]
+  }
+
+  if (is.null(df) || nrow(df) == 0) return(NA_real_)
+  if (!all(c("contrast", "p.value", factor1) %in% names(df))) return(NA_real_)
+
+  df$p.value <- as.character(df$p.value)
+  df$p.value <- gsub("[[:space:]]", "", df$p.value)
+  df$p.value <- gsub("^<\\.?0*", "0.", df$p.value)
+  df$p.value <- suppressWarnings(as.numeric(df$p.value))
+  df <- dplyr::filter(df, !is.na(.data$p.value) & .data$p.value < 0.05)
+  if (nrow(df) == 0) return(NA_real_)
+
+  lev1 <- levels(stats_df[[factor1]])
+  lev2 <- levels(stats_df[[factor2]])
+  if (is.null(lev1)) lev1 <- unique(as.character(stats_df[[factor1]]))
+  if (is.null(lev2)) lev2 <- unique(as.character(stats_df[[factor2]]))
+
+  k <- length(lev2)
+  offsets <- seq_len(k)
+  offsets <- (offsets - (k + 1) / 2) * (dodge_width / max(1, k))
+
+  idx2 <- function(g) match(g, lev2)
+  x_center <- function(xlvl, glvl) {
+    as.numeric(match(xlvl, lev1)) + offsets[idx2(glvl)]
+  }
+
+  df$g1 <- sub(" - .*", "", df$contrast)
+  df$g2 <- sub(".*- ", "", df$contrast)
+  df$x_base <- as.numeric(match(df[[factor1]], lev1))
+  df$xmin <- mapply(x_center, df[[factor1]], df$g1)
+  df$xmax <- mapply(x_center, df[[factor1]], df$g2)
+
+  local_max <- dplyr::summarise(
+    dplyr::group_by(stats_df, .data[[factor1]]),
+    ymax = max(mean + dplyr::coalesce(se, 0), na.rm = TRUE),
+    .groups = "drop"
+  )
+  y_lookup <- setNames(local_max$ymax, as.character(local_max[[factor1]]))
+  df$y0 <- unname(y_lookup[as.character(df[[factor1]])])
+
+  step <- diff(range(stats_df$mean + dplyr::coalesce(stats_df$se, 0), na.rm = TRUE))
+  if (!is.finite(step) || step == 0) {
+    step <- suppressWarnings(max(stats_df$mean + dplyr::coalesce(stats_df$se, 0), na.rm = TRUE)) * 0.05
+  }
+  if (!is.finite(step) || step == 0) step <- 0.1
+  step <- step * 0.08
+  base_offset <- step * 0.6
+
+  df <- dplyr::group_by(df, .data[[factor1]])
+  df <- dplyr::mutate(
+    df,
+    row_id = dplyr::row_number(),
+    y_position = y0 + base_offset + row_id * step
+  )
+  df <- dplyr::ungroup(df)
+
+  max(df$y_position, na.rm = TRUE) * 1.1
+}
+
+
+compute_barplot_axis_bounds <- function(stats_df, factor1, factor2, show_value_labels, posthoc_entry, nested_posthoc) {
+  if (is.null(stats_df) || nrow(stats_df) == 0) return(NULL)
+
+  se_vals <- dplyr::coalesce(stats_df$se, 0)
+  y_min <- suppressWarnings(min(stats_df$mean - se_vals, na.rm = TRUE))
+  y_max <- suppressWarnings(max(stats_df$mean + se_vals, na.rm = TRUE))
+  if (!is.finite(y_min)) y_min <- 0
+  if (!is.finite(y_max)) y_max <- 0
+
+  if (isTRUE(show_value_labels)) {
+    label_y <- ifelse(stats_df$mean >= 0, stats_df$mean + se_vals, stats_df$mean - se_vals)
+    label_top <- suppressWarnings(max(label_y, na.rm = TRUE))
+    label_bottom <- suppressWarnings(min(label_y, na.rm = TRUE))
+    if (is.finite(label_top)) {
+      y_max <- max(y_max, label_top * 1.12)
+    }
+    if (is.finite(label_bottom)) {
+      y_min <- min(y_min, label_bottom)
+    }
+  }
+
+  signif_ceiling <- if (is.null(factor2) || !factor2 %in% names(stats_df)) {
+    compute_oneway_significance_ceiling(stats_df, posthoc_entry)
+  } else {
+    compute_grouped_significance_ceiling(stats_df, factor1, factor2, nested_posthoc)
+  }
+
+  if (is.finite(signif_ceiling)) {
+    y_max <- max(y_max, signif_ceiling)
+  }
+
+  list(min = y_min, max = y_max)
+}
+
+
+compute_global_barplot_limits <- function(data, context, posthoc_all, show_value_labels) {
+  bounds_min <- c()
+  bounds_max <- c()
+
+  for (resp in context$responses) {
+    posthoc_entry <- NULL
+    if (!is.null(posthoc_all) && !is.null(posthoc_all[[resp]])) {
+      posthoc_entry <- posthoc_all[[resp]]
+    }
+
+    if (context$has_strata && !is.null(context$strat_var) && context$strat_var %in% names(data)) {
+      for (stratum in context$strata_levels) {
+        subset_rows <- !is.na(data[[context$strat_var]]) & data[[context$strat_var]] == stratum
+        subset_data <- data[subset_rows, , drop = FALSE]
+        if (nrow(subset_data) == 0) next
+
+        stats_df <- anova_summarise_stats(subset_data, resp, context$factor1, context$factor2)
+        if (nrow(stats_df) == 0) next
+
+        stats_df <- apply_anova_factor_levels(stats_df, context$factor1, context$factor2, context$order1, context$order2)
+        stratum_posthoc <- NULL
+        if (!is.null(posthoc_entry) && !is.null(posthoc_entry[[stratum]])) {
+          stratum_posthoc <- posthoc_entry[[stratum]]
+        }
+
+        bounds <- compute_barplot_axis_bounds(
+          stats_df = stats_df,
+          factor1 = context$factor1,
+          factor2 = context$factor2,
+          show_value_labels = show_value_labels,
+          posthoc_entry = stratum_posthoc,
+          nested_posthoc = stratum_posthoc
+        )
+        if (!is.null(bounds)) {
+          bounds_min <- c(bounds_min, bounds$min)
+          bounds_max <- c(bounds_max, bounds$max)
+        }
+      }
+    } else {
+      stats_df <- anova_summarise_stats(data, resp, context$factor1, context$factor2)
+      if (nrow(stats_df) == 0) next
+
+      stats_df <- apply_anova_factor_levels(stats_df, context$factor1, context$factor2, context$order1, context$order2)
+      bounds <- compute_barplot_axis_bounds(
+        stats_df = stats_df,
+        factor1 = context$factor1,
+        factor2 = context$factor2,
+        show_value_labels = show_value_labels,
+        posthoc_entry = posthoc_entry,
+        nested_posthoc = posthoc_entry
+      )
+      if (!is.null(bounds)) {
+        bounds_min <- c(bounds_min, bounds$min)
+        bounds_max <- c(bounds_max, bounds$max)
+      }
+    }
+  }
+
+  if (length(bounds_max) == 0) return(NULL)
+
+  lower <- suppressWarnings(min(bounds_min, na.rm = TRUE))
+  upper <- suppressWarnings(max(bounds_max, na.rm = TRUE))
+  if (!is.finite(lower)) lower <- 0
+  if (!is.finite(upper)) upper <- 0
+
+  lower <- min(lower, 0)
+  range_ref <- max(abs(c(lower, upper)), 1)
+  padding <- range_ref * 0.05
+
+  if (lower < 0) {
+    lower <- lower - padding
+  } else {
+    lower <- 0
+  }
+  upper <- upper + padding
+
+  if (!is.finite(upper) || upper <= lower) {
+    upper <- lower + max(1, padding)
+  }
+
+  list(lower = lower, upper = upper)
+}
+
+
+apply_common_barplot_limits <- function(plot_obj, limits) {
+  if (is.null(plot_obj) || !inherits(plot_obj, "ggplot")) return(plot_obj)
+  if (is.null(limits) || is.null(limits$lower) || is.null(limits$upper)) return(plot_obj)
+  lower <- limits$lower
+  upper <- limits$upper
+  if (!is.finite(lower) || !is.finite(upper) || upper <= lower) return(plot_obj)
+  plot_obj + scale_y_continuous(limits = c(lower, upper))
+}
+
 plot_anova_barplot_meanse <- function(data,
                                       info,
                                       layout_values = list(),
                                       line_colors = NULL,
                                       show_value_labels = FALSE,
                                       base_size = 14,
-                                      posthoc_all = NULL) {
+                                      posthoc_all = NULL,
+                                      sync_y_axis = FALSE) {
   context <- initialize_anova_plot_context(data, info, layout_values)
   data <- context$data
   factor1 <- context$factor1
   factor2 <- context$factor2
-  
+
   if (is.null(factor1) || length(context$responses) == 0) {
     return(NULL)
   }
-  
+
+  use_common_axis <- isTRUE(sync_y_axis) && length(context$responses) > 1
+  global_limits <- NULL
+  if (use_common_axis) {
+    global_limits <- compute_global_barplot_limits(
+      data = data,
+      context = context,
+      posthoc_all = posthoc_all,
+      show_value_labels = show_value_labels
+    )
+  }
+
   base_fill <- if (!is.null(line_colors) && length(line_colors) > 0) {
     unname(line_colors)[1]
   } else {
@@ -1535,7 +1771,7 @@ plot_anova_barplot_meanse <- function(data,
           stratum_posthoc <- posthoc_entry[[stratum]]
         }
         
-        stratum_plots[[stratum]] <- build_bar_plot_panel(
+        stratum_plot <- build_bar_plot_panel(
           stats_df = stats_df,
           title_text = stratum,
           factor1 = factor1,
@@ -1547,8 +1783,12 @@ plot_anova_barplot_meanse <- function(data,
           posthoc_entry = stratum_posthoc,
           nested_posthoc = stratum_posthoc
         )
+        if (!is.null(global_limits)) {
+          stratum_plot <- apply_common_barplot_limits(stratum_plot, global_limits)
+        }
+        stratum_plots[[stratum]] <- stratum_plot
       }
-      
+
       if (length(stratum_plots) > 0) {
         strata_panel_count <- max(strata_panel_count, length(stratum_plots))
         current_layout <- adjust_grid_layout(length(stratum_plots), context$strata_layout)
@@ -1571,7 +1811,7 @@ plot_anova_barplot_meanse <- function(data,
       
       stats_df <- apply_anova_factor_levels(stats_df, factor1, factor2, context$order1, context$order2)
       
-      response_plots[[resp]] <- build_bar_plot_panel(
+      response_plot <- build_bar_plot_panel(
         stats_df = stats_df,
         title_text = resp,
         factor1 = factor1,
@@ -1583,6 +1823,10 @@ plot_anova_barplot_meanse <- function(data,
         posthoc_entry = posthoc_entry,
         nested_posthoc = posthoc_entry
       )
+      if (!is.null(global_limits)) {
+        response_plot <- apply_common_barplot_limits(response_plot, global_limits)
+      }
+      response_plots[[resp]] <- response_plot
     }
   }
   
