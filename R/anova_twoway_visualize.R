@@ -151,31 +151,7 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
       res <- compute_all_plots(s$data, s$info, layout_inputs, s$colors, s$base_size, s$show_labels)
       res[[if (!is.null(s$plot_type) && s$plot_type %in% names(res)) s$plot_type else "lineplot_mean_se"]]
     })
-
-    observeEvent(plot_info(), {
-      info <- plot_info()
-      if (is.null(info)) return()
-
-      layout <- info$layout
-      defaults <- info$defaults
-
-      if (!is.null(layout)) {
-        if (!is.null(layout$strata)) {
-          strata_grid$set(rows = layout$strata$rows, cols = layout$strata$cols)
-        }
-        if (!is.null(layout$responses)) {
-          response_grid$set(rows = layout$responses$rows, cols = layout$responses$cols)
-        }
-      } else if (!is.null(defaults)) {
-        if (!is.null(defaults$strata)) {
-          strata_grid$set(rows = defaults$strata$rows, cols = defaults$strata$cols)
-        }
-        if (!is.null(defaults$responses)) {
-          response_grid$set(rows = defaults$responses$rows, cols = defaults$responses$cols)
-        }
-      }
-    }, ignoreNULL = TRUE)
-
+    
     size_val <- reactiveVal(list(w = 400, h = 300))
     
     observe({

@@ -145,39 +145,20 @@ plot_grid_server <- function(id,
       v <- min(as.integer(max_value), v)
       as.integer(v)
     }
-
+    
     rows_raw <- reactive(sanitize(input$rows, rows_min, rows_max))
     cols_raw <- reactive(sanitize(input$cols, cols_min, cols_max))
-
+    
     values_raw <- reactive(list(rows = rows_raw(), cols = cols_raw()))
     values_debounced <- debounce(values_raw, millis = debounce_ms)
-
+    
     rows <- reactive(values_debounced()$rows)
     cols <- reactive(values_debounced()$cols)
-
-    update_inputs <- function(rows = NULL, cols = NULL) {
-      if (!is.null(rows)) {
-        target <- sanitize(rows, rows_min, rows_max)
-        current <- isolate(rows_raw())
-        if (!is.na(target) && (is.na(current) || !identical(target, current))) {
-          updateNumericInput(session, "rows", value = target)
-        }
-      }
-
-      if (!is.null(cols)) {
-        target <- sanitize(cols, cols_min, cols_max)
-        current <- isolate(cols_raw())
-        if (!is.na(target) && (is.na(current) || !identical(target, current))) {
-          updateNumericInput(session, "cols", value = target)
-        }
-      }
-    }
-
+    
     list(
       rows = rows,
       cols = cols,
-      values = reactive(list(rows = rows(), cols = cols())),
-      set = update_inputs
+      values = reactive(list(rows = rows(), cols = cols()))
     )
   })
 }
