@@ -125,7 +125,7 @@ analysis_server <- function(id, filtered_data) {
 
       # --- Standardize all outputs to a reactive returning a list ---
       standardized <- reactive({
-        val <- if (is.reactive(result)) result() else result
+        val <- resolve_reactive(result)
         req(val)
         fill_defaults(val)
       })

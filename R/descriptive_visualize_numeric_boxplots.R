@@ -64,11 +64,6 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
-    resolve_input_value <- function(x) {
-      if (is.null(x)) return(NULL)
-      if (is.reactive(x)) x() else x
-    }
-    
     module_active <- reactive({
       if (is.null(is_active)) TRUE else isTRUE(is_active())
     })
@@ -81,7 +76,7 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
     color_var_reactive <- reactive({
       info <- summary_info()
       if (is.null(info)) return(NULL)
-      g <- resolve_input_value(info$group_var)
+      g <- resolve_reactive(info$group_var)
       dat <- filtered_data()
       if (is.null(g) || identical(g, "") || identical(g, "None")) return(NULL)
       if (is.null(dat) || !is.data.frame(dat) || !g %in% names(dat)) return(NULL)
@@ -143,12 +138,12 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
       req(module_active())
       s <- state()
       req(!is.null(s$info))
-      processed <- resolve_input_value(s$info$processed_data)
+      processed <- resolve_reactive(s$info$processed_data)
       dat <- if (!is.null(processed)) processed else s$dat
       req(!is.null(dat), is.data.frame(dat), nrow(dat) > 0)
-      
-      selected_vars <- resolve_input_value(s$info$selected_vars)
-      group_var     <- resolve_input_value(s$info$group_var)
+
+      selected_vars <- resolve_reactive(s$info$selected_vars)
+      group_var     <- resolve_reactive(s$info$group_var)
       
       build_descriptive_numeric_boxplot(
         df                = dat,

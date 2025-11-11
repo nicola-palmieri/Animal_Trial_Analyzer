@@ -41,7 +41,6 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
-    resolve_input_value <- function(x) if (is.reactive(x)) x() else x
     sanitize_numeric <- function(value, default, min_val, max_val) {
       v <- suppressWarnings(as.numeric(value))
       if (!length(v) || is.na(v)) return(default)
@@ -54,7 +53,7 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
     color_var_reactive <- reactive({
       info <- correlation_info()
       if (is.null(info)) return(NULL)
-      group_var <- resolve_input_value(info$group_var)
+      group_var <- resolve_reactive(info$group_var)
       if (is.null(group_var)) return(NULL)
       group_var <- as.character(group_var)[1]
       if (identical(group_var, "None") || !nzchar(group_var)) return(NULL)
@@ -111,7 +110,7 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
       info <- correlation_info()
       validate(need(!is.null(info), "Correlation results are not available."))
       results_accessor <- info$results
-      results <- resolve_input_value(results_accessor)
+      results <- resolve_reactive(results_accessor)
       validate(need(!is.null(results), "Run the correlation analysis to generate plots."))
       
       if (!is.null(results$message)) validate(need(FALSE, results$message))
@@ -119,16 +118,16 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
       data <- filtered_data()
       validate(need(!is.null(data) && nrow(data) > 0, "No data available."))
       
-      selected_vars <- resolve_input_value(results$selected_vars)
+      selected_vars <- resolve_reactive(results$selected_vars)
       if (is.null(selected_vars) || length(selected_vars) < 2)
         selected_vars <- names(data)[vapply(data, is.numeric, logical(1))]
       validate(need(length(selected_vars) >= 2, "Need at least two numeric columns for GGPairs plot."))
       
-      group_var <- resolve_input_value(info$group_var)
+      group_var <- resolve_reactive(info$group_var)
       if (!is.null(group_var)) group_var <- as.character(group_var)[1]
       if (is.null(group_var) || identical(group_var, "None") || !nzchar(group_var)) group_var <- NULL
       
-      strata_order <- resolve_input_value(info$strata_order)
+      strata_order <- resolve_reactive(info$strata_order)
       
       if (is.null(group_var)) {
         plot_data <- data[, selected_vars, drop = FALSE]

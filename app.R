@@ -21,7 +21,6 @@ library(skimr)
 library(tidyr)
 library(zoo)
 
-options(shiny.autoreload = TRUE)
 options(shiny.maxRequestSize = 200 * 1024^2)
 
 for (f in list.files("R", full.names = TRUE, pattern = "\\.R$")) source(f)
