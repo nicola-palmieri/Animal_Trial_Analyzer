@@ -131,16 +131,26 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
       )
     })
     
-    size_val <- reactiveVal(list(w = 400, h = 300))
-    
-    observeEvent(plot_info(), {
+    plot_dimensions <- reactive({
       req(module_active())
       info <- plot_info()
       lay <- info$layout
-      nrow_l <- if (is.null(lay) || is.null(lay$nrow) || is.na(lay$nrow)) 1L else as.integer(lay$nrow)
-      ncol_l <- if (is.null(lay) || is.null(lay$ncol) || is.na(lay$ncol)) 1L else as.integer(lay$ncol)
-      size_val(list(w = plot_width() * ncol_l, h = plot_height() * nrow_l))
-    }, ignoreInit = FALSE)
+
+      nrow_l <- 1L
+      if (!is.null(lay) && !is.null(lay$nrow) && !is.na(lay$nrow)) {
+        nrow_l <- as.integer(lay$nrow)
+      }
+
+      ncol_l <- 1L
+      if (!is.null(lay) && !is.null(lay$ncol) && !is.na(lay$ncol)) {
+        ncol_l <- as.integer(lay$ncol)
+      }
+
+      list(
+        width = plot_width() * ncol_l,
+        height = plot_height() * nrow_l
+      )
+    })
     
     output$grid_warning <- renderUI({
       req(module_active())
@@ -154,28 +164,28 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
         req(module_active())
         info <- plot_info()
         req(is.null(info$warning), !is.null(info$plot))
-        s <- size_val()
+        s <- plot_dimensions()
         ggplot2::ggsave(
           filename = file,
           plot = info$plot,
           device = "png",
           dpi = 300,
-          width  = s$w / 96,
-          height = s$h / 96,
+          width  = s$width / 96,
+          height = s$height / 96,
           units = "in",
           limitsize = FALSE
         )
       }
     )
-    
+
     output$plot <- renderPlot({
       req(module_active())
       info <- plot_info()
       if (!is.null(info$warning) || is.null(info$plot)) return(NULL)
       print(info$plot)
     },
-    width = function() { size_val()$w },
-    height = function() { size_val()$h },
+    width = function() { plot_dimensions()$width },
+    height = function() { plot_dimensions()$height },
     res = 96)
   })
 }
