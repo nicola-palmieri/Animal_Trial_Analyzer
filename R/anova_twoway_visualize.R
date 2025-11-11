@@ -159,11 +159,18 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
       info <- plot_info()
       req(info)
 
-      width_input <- suppressWarnings(as.numeric(input$plot_width))
-      height_input <- suppressWarnings(as.numeric(input$plot_height))
+      sanitize_dim <- function(value, default) {
+        if (is.null(value)) return(default)
+        numeric_value <- suppressWarnings(as.numeric(value))
+        if (length(numeric_value) == 0 || is.na(numeric_value) || numeric_value <= 0) {
+          default
+        } else {
+          numeric_value
+        }
+      }
 
-      plot_w <- if (is.na(width_input) || width_input <= 0) 400 else width_input
-      plot_h <- if (is.na(height_input) || height_input <= 0) 300 else height_input
+      plot_w <- sanitize_dim(input$plot_width, 400)
+      plot_h <- sanitize_dim(input$plot_height, 300)
 
       layout <- info$layout
       if (is.null(layout)) {
