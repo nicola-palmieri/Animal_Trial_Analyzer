@@ -2,20 +2,41 @@
 # 🎨 Module for colors customization
 # ===============================================================
 
+# ---- Palette ----
+basic_color_palette <- c(
+  "steelblue" = "#4682B4",
+  "red"       = "#FF0000",
+  "green"     = "#008000",  # ✅ web green (not ggplot's neon)
+  "blue"      = "#0000FF",
+  "orange"    = "#FFA500",
+  "purple"    = "#800080",
+  "brown"     = "#A52A2A",
+  "gold"      = "#FFD700",
+  "pink"      = "#FF69B4",
+  "cyan"      = "#00FFFF",
+  "magenta"   = "#FF00FF",
+  "yellow"    = "#FFFF00",
+  "black"     = "#000000",
+  "gray"      = "#808080",
+  "darkgreen" = "#006400",
+  "darkred"   = "#8B0000"
+)
+
+# ---- UI ----
 add_color_customization_ui <- function(ns, multi_group = TRUE) {
   uiOutput(ns("color_custom_ui"))
 }
 
-# ---- SERVER ----
+# ---- Server ----
 add_color_customization_server <- function(ns, input, output, data, color_var_reactive, multi_group = TRUE) {
   default_color <- "steelblue"
-  
+
   # ---- Dynamic UI ----
   output$color_custom_ui <- renderUI({
     req(data())
-    
+
     color_var <- color_var_reactive() %||% ""
-    
+
     # Single color UI shown when multi-group off or no color_var available
     if (!isTRUE(multi_group) || color_var %in% c("", "None")) {
       tagList(
@@ -29,33 +50,33 @@ add_color_customization_server <- function(ns, input, output, data, color_var_re
       render_color_inputs(ns, data, color_var)
     }
   })
-  
+
   # ---- Reactive color mapping ----
   reactive({
     # --- Single-color mode (no grouping variable or disabled) ---
     if (!isTRUE(multi_group)) {
       return(input$single_color %||% default_color)
     }
-    
+
     color_var <- color_var_reactive() %||% ""
     if (color_var %in% c("", "None")) {
       return(input$single_color %||% default_color)
     }
-    
+
     dataset <- data()
     req(dataset)
-    
+
     if (!color_var %in% names(dataset)) {
       return(input$single_color %||% default_color)
     }
-    
+
     lvls <- levels(as.factor(dataset[[color_var]]))
     base_palette <- rep(basic_color_palette, length.out = length(lvls))
-    
+
     cols <- vapply(seq_along(lvls), function(i) {
       input[[paste0("col_", color_var, "_", i)]] %||% base_palette[i]
     }, character(1))
-    
+
     names(cols) <- lvls
     cols
   })
@@ -68,12 +89,12 @@ add_color_customization_server <- function(ns, input, output, data, color_var_re
 render_color_inputs <- function(ns, data, color_var) {
   if (is.null(color_var) || color_var == "None") return(NULL)
   if (!color_var %in% names(data())) return(NULL)
-  
+
   values <- data()[[color_var]]
   lvls <- if (is.factor(values)) levels(values) else unique(as.character(values))
   lvls <- lvls[!is.na(lvls)]
   default_palette <- rep(basic_color_palette, length.out = length(lvls))
-  
+
   tagList(
     h5("Colors"),
     lapply(seq_along(lvls), function(i) {
@@ -96,25 +117,160 @@ render_color_inputs <- function(ns, data, color_var) {
   )
 }
 
-resolve_single_color <- function(custom = NULL) {
-  if (!is.null(custom) && length(custom) > 0) {
-    candidate <- unname(custom[[1]])
-    if (!is.null(candidate) && nzchar(candidate)) {
-      return(candidate)
-    }
-  }
-  basic_color_palette[1]
+# ===============================================================
+# 🎨 Compact dropdown-style color picker (4x4 grid)
+# ===============================================================
+
+color_dropdown_input <- function(ns, id = "color_choice", palette = basic_color_palette,
+                                 ncol = 4, selected = NULL) {
+  selected_color <- if (is.null(selected)) palette[1] else selected
+
+  cell_size <- 26
+  gap_size <- 4
+  padding_size <- 3
+  button_size <- cell_size + (2 * padding_size)
+  button_height <- button_size
+  dropdown_width <- cell_size * ncol + gap_size * (ncol - 1) + 2 * padding_size
+  dropdown_top <- button_height + 4
+
+  tagList(
+    tags$style(HTML(sprintf(
+        "        .color-dropdown {
+          position: relative;
+          display: inline-block;
+          user-select: none;
+          width: %dpx;
+        }
+        .color-dropdown-button {
+          width: 100%%;
+          border: 1px solid #ccc;
+          border-radius: 6px;
+          padding: %dpx;
+          background-color: #fff;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        }
+        .color-dropdown-swatch {
+          flex: 0 0 %dpx;
+          width: %dpx;
+          height: %dpx;
+          border-radius: 4px;
+          border: 1px solid #ccc;
+          box-sizing: border-box;
+        }
+        .color-dropdown-grid {
+          display: none;
+          position: absolute;
+          top: %dpx;
+          left: 0;
+          z-index: 999;
+          background: #fff;
+          border: 1px solid #ccc;
+          border-radius: 6px;
+          padding: %dpx;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+          width: %dpx;
+          grid-template-columns: repeat(%d, %dpx);
+          gap: %dpx;
+          box-sizing: border-box;
+        }
+        .color-dropdown-grid.open {
+          display: grid;
+        }
+        .color-cell {
+          width: %dpx;
+          height: %dpx;
+          border-radius: 4px;
+          cursor: pointer;
+          border: 1px solid #ccc;
+          box-sizing: border-box;
+          transition: transform 0.1s ease;
+        }
+        .color-cell:hover {
+          transform: scale(1.05);
+        }
+      ",
+      button_size, padding_size, cell_size, cell_size, cell_size,
+      dropdown_top, padding_size, dropdown_width, ncol, cell_size, gap_size,
+      cell_size, cell_size
+    ))),
+    tags$div(
+      class = "color-dropdown",
+      tags$div(
+        id = ns(paste0(id, "_button")),
+        class = "color-dropdown-button",
+        tags$span(
+          class = "color-dropdown-swatch",
+          style = sprintf("background-color:%s;", selected_color)
+        )
+      ),
+      tags$div(
+        id = ns(paste0(id, "_grid")),
+        class = "color-dropdown-grid",
+        lapply(names(palette), function(col_name) {
+          hex <- palette[[col_name]]
+          tags$div(
+            class = "color-cell",
+            title = col_name,  # tooltip shows readable color name
+            style = sprintf("background-color:%s;", hex),
+            onclick = sprintf(
+              "      var button = $('#%s_button');
+      button.find('.color-dropdown-swatch').css('background-color','%s');
+      $('#%s_grid').removeClass('open');
+      Shiny.setInputValue('%s','%s',{priority:'event'});
+      ",
+              ns(id), hex, ns(id), ns(id), hex
+            )
+          )
+        })
+
+      )
+    ),
+    tags$script(HTML(sprintf(
+        "        $('#%s_button').on('click', function(e){
+          e.stopPropagation();
+          var grid = $('#%s_grid');
+          $('.color-dropdown-grid').not(grid).removeClass('open');
+          grid.toggleClass('open');
+        });
+        $(document).on('click', function(){
+          $('.color-dropdown-grid').removeClass('open');
+        });
+        Shiny.setInputValue('%s','%s',{priority:'event'});
+      ",
+      ns(id), ns(id), ns(id), selected_color
+    )))
+  )
 }
+
+# ===============================================================
+# 🛈 Consistent tooltip helper for UI widgets
+# ===============================================================
+
+with_help_tooltip <- function(widget, text) {
+  tags$div(
+    class = "ta-help-tooltip",
+    title = text,
+    widget
+  )
+}
+
+# ===============================================================
+# 🎨 Palette resolution helpers
+# ===============================================================
 
 resolve_palette_for_levels <- function(levels, custom = NULL) {
   if (is.null(levels) || length(levels) == 0) {
     return(resolve_single_color())
   }
-  
+
   unique_levels <- unique(as.character(levels))
   palette_size <- length(basic_color_palette)
   n_levels <- length(unique_levels)
-  
+
   if (!is.null(custom) && length(custom) > 0) {
     if (!is.null(names(custom))) {
       ordered <- custom[unique_levels]
@@ -125,13 +281,23 @@ resolve_palette_for_levels <- function(levels, custom = NULL) {
       return(stats::setNames(custom[seq_len(n_levels)], unique_levels))
     }
   }
-  
+
   if (n_levels <= palette_size) {
     palette <- basic_color_palette[seq_len(n_levels)]
   } else {
     repeats <- ceiling(n_levels / palette_size)
     palette <- rep(basic_color_palette, repeats)[seq_len(n_levels)]
   }
-  
+
   stats::setNames(palette, unique_levels)
+}
+
+resolve_single_color <- function(custom = NULL) {
+  if (!is.null(custom) && length(custom) > 0) {
+    candidate <- unname(custom[[1]])
+    if (!is.null(candidate) && nzchar(candidate)) {
+      return(candidate)
+    }
+  }
+  basic_color_palette[1]
 }
