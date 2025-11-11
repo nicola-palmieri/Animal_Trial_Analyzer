@@ -121,7 +121,21 @@ visualize_numeric_histograms_server <- function(id, filtered_data, summary_info,
         base_size     = s$base_size
       )
     })
-    
+
+    observeEvent(plot_info(), {
+      info <- plot_info()
+      if (is.null(info)) return()
+
+      layout <- info$layout
+      defaults <- info$defaults
+
+      if (!is.null(layout) && !is.null(layout$nrow) && !is.null(layout$ncol)) {
+        grid$set(rows = layout$nrow, cols = layout$ncol)
+      } else if (!is.null(defaults)) {
+        grid$set(rows = defaults$rows, cols = defaults$cols)
+      }
+    }, ignoreNULL = TRUE)
+
     plot_dimensions <- reactive({
       req(module_active())
       info <- plot_info()
