@@ -146,7 +146,6 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
     }
     
     plot_info <- reactive({
-      req(active())
       s <- state()
       req(!is.null(s$data), !is.null(s$info))
       layout_inputs <- list(
@@ -170,7 +169,6 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
     cached_key  <- reactiveVal(NULL)
     
     observe({
-      req(active())
       s <- state()
       dat <- s$data
       key <- paste(
@@ -182,7 +180,7 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
         sep = "_"
       )
       if (!identical(key, cached_key())) {
-        info <- isolate(plot_info())
+        info <- plot_info()
         if (!is.null(info$plot)) {
           cached_plot(info$plot)
           cached_key(key)
@@ -191,7 +189,6 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
     })
     
     plot_dimensions <- reactive({
-      req(active())
       info <- plot_info()
       lay <- info$layout
       nrow_l <- (lay$strata$rows %||% 1L) * (lay$responses$rows %||% 1L)
@@ -215,28 +212,28 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
     })
     
     output$plot_line <- renderPlot({
-      info <- isolate(plot_info())
-      if (is.null(info$plot) || input$plot_type != "lineplot_mean_se") return(NULL)
-      print(info$plot)
+      p <- cached_plot()
+      if (is.null(p) || input$plot_type != "lineplot_mean_se") return(NULL)
+      print(p)
     },
     width  = function() plot_dimensions()$width,
     height = function() plot_dimensions()$height,
     res = 96)
     
     output$plot_bar <- renderPlot({
-      info <- isolate(plot_info())
-      if (is.null(info$plot) || input$plot_type != "barplot_mean_se") return(NULL)
-      print(info$plot)
+      p <- cached_plot()
+      if (is.null(p) || input$plot_type != "barplot_mean_se") return(NULL)
+      print(p)
     },
     width  = function() plot_dimensions()$width,
     height = function() plot_dimensions()$height,
     res = 96)
     
     
+    
     output$download_plot <- downloadHandler(
       filename = function() paste0("anova_plot_", Sys.Date(), ".png"),
       content = function(file) {
-        req(active())
         p <- cached_plot()
         req(!is.null(p))
         s <- plot_dimensions()

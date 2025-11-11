@@ -311,13 +311,14 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
         sep = "_"
       )
       if (!identical(key, cached_key())) {
-        info <- isolate(plot_info())
+        info <- plot_info()   # ✅ remove isolate()
         if (!is.null(info$plot)) {
           cached_plot(info$plot)
           cached_key(key)
         }
       }
     })
+    
     
     plot_dimensions <- reactive({
       info <- plot_info()
@@ -344,7 +345,7 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
     
     output$plot_line <- renderPlot({
       info <- isolate(plot_info())
-      if (is.null(info$plot) || s$plot_type != "lineplot_mean_se") return(NULL)
+      if (is.null(info$plot) || input$plot_type != "lineplot_mean_se") return(NULL)
       print(info$plot)
     },
     width  = function() plot_dimensions()$width,
@@ -353,7 +354,7 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
     
     output$plot_bar <- renderPlot({
       info <- isolate(plot_info())
-      if (is.null(info$plot) || s$plot_type != "barplot_mean_se") return(NULL)
+      if (is.null(info$plot) || input$plot_type != "barplot_mean_se") return(NULL)
       print(info$plot)
     },
     width  = function() plot_dimensions()$width,
@@ -363,7 +364,6 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
     output$download_plot <- downloadHandler(
       filename = function() paste0("anova_plot_", Sys.Date(), ".png"),
       content = function(file) {
-        req(module_active())
         p <- cached_plot()
         req(!is.null(p))
         s <- plot_dimensions()
@@ -2356,7 +2356,6 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
     }
     
     plot_info <- reactive({
-      req(active())
       s <- state()
       req(!is.null(s$data), !is.null(s$info))
       layout_inputs <- list(
@@ -2380,7 +2379,6 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
     cached_key  <- reactiveVal(NULL)
     
     observe({
-      req(active())
       s <- state()
       dat <- s$data
       key <- paste(
@@ -2392,7 +2390,7 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
         sep = "_"
       )
       if (!identical(key, cached_key())) {
-        info <- isolate(plot_info())
+        info <- plot_info()
         if (!is.null(info$plot)) {
           cached_plot(info$plot)
           cached_key(key)
@@ -2401,7 +2399,6 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
     })
     
     plot_dimensions <- reactive({
-      req(active())
       info <- plot_info()
       lay <- info$layout
       nrow_l <- (lay$strata$rows %||% 1L) * (lay$responses$rows %||% 1L)
@@ -2426,7 +2423,7 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
     
     output$plot_line <- renderPlot({
       info <- isolate(plot_info())
-      if (is.null(info$plot) || s$plot_type != "lineplot_mean_se") return(NULL)
+      if (is.null(info$plot) || input$plot_type != "lineplot_mean_se") return(NULL)
       print(info$plot)
     },
     width  = function() plot_dimensions()$width,
@@ -2435,7 +2432,7 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
     
     output$plot_bar <- renderPlot({
       info <- isolate(plot_info())
-      if (is.null(info$plot) || s$plot_type != "barplot_mean_se") return(NULL)
+      if (is.null(info$plot) || input$plot_type != "barplot_mean_se") return(NULL)
       print(info$plot)
     },
     width  = function() plot_dimensions()$width,
@@ -2446,7 +2443,6 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
     output$download_plot <- downloadHandler(
       filename = function() paste0("anova_plot_", Sys.Date(), ".png"),
       content = function(file) {
-        req(active())
         p <- cached_plot()
         req(!is.null(p))
         s <- plot_dimensions()
