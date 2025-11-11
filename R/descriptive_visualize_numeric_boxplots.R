@@ -64,8 +64,6 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
-    if (!requireNamespace("digest", quietly = TRUE)) stop("Please install the 'digest' package.")
-    
     hash_key <- function(data, cols = NULL) {
       if (is.null(data) || !is.data.frame(data)) return("no-data")
       keep <- if (is.null(cols)) names(data) else intersect(cols, names(data))
