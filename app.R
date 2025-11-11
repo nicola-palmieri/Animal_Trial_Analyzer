@@ -69,6 +69,12 @@ ui <- navbarPage(
         margin-bottom: 0;
         color: #6c757d;
       }
+      pre.shiny-text-output {
+        white-space: pre;
+        overflow-x: auto;
+        font-family: "Fira Mono", "Source Code Pro", Monaco, monospace;
+        font-size: 0.9rem;
+      }
     "))
   ),
 
