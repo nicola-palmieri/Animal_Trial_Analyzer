@@ -179,21 +179,7 @@ pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, cor
         )
       }
     })
-
-    observeEvent(plot_info(), {
-      info <- plot_info()
-      if (is.null(info)) return()
-
-      layout <- info$layout
-      defaults <- info$defaults
-
-      if (!is.null(layout) && !is.null(layout$nrow) && !is.null(layout$ncol)) {
-        grid_inputs$set(rows = layout$nrow, cols = layout$ncol)
-      } else if (!is.null(defaults)) {
-        grid_inputs$set(rows = defaults$rows, cols = defaults$cols)
-      }
-    }, ignoreNULL = TRUE)
-
+    
     # ---- New unified sizing logic ----
     size_val <- reactiveVal(list(w = 800, h = 600))
     
