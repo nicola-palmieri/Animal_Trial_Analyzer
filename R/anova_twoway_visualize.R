@@ -25,13 +25,16 @@ visualize_twoway_ui <- function(id) {
       uiOutput(ns("layout_controls")),
       conditionalPanel(
         condition = sprintf("input['%s'] === 'barplot_mean_se'", ns("plot_type")),
-        with_help_tooltip(
-          checkboxInput(
-            ns("show_bar_labels"),
-            "Show value labels on bars",
-            value = FALSE
+        tagList(
+          with_help_tooltip(
+            checkboxInput(
+              ns("show_bar_labels"),
+              "Show value labels on bars",
+              value = FALSE
+            ),
+            "Turn on labels to display the mean value on each bar."
           ),
-          "Turn on labels to display the mean value on each bar."
+          uiOutput(ns("barplot_axis_ui"))
         )
       ),
       fluidRow(
@@ -118,11 +121,12 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
         colors      = custom_colors(),
         base_size   = base_size(),
         show_labels = isTRUE(input$show_bar_labels),
+        sync_axis   = isTRUE(input$sync_bar_y_axis),
         plot_type   = input$plot_type
       )
     })
-    
-    compute_all_plots <- function(data, info, layout_inputs, colors, base_size_value, show_labels) {
+
+    compute_all_plots <- function(data, info, layout_inputs, colors, base_size_value, show_labels, sync_axis) {
       if (is.null(info) || !identical(info$type, "twoway_anova") || is.null(data) || nrow(data) == 0) {
         return(list(
           lineplot_mean_se = list(plot = NULL, warning = "No data or results available.", layout = NULL),
@@ -140,7 +144,8 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
           line_colors = colors,
           show_value_labels = show_labels,
           base_size = base_size_value,
-          posthoc_all = info$posthoc
+          posthoc_all = info$posthoc,
+          sync_y_axis = sync_axis
         )
       )
     }
@@ -155,7 +160,7 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
         resp_rows   = s$resp_rows,
         resp_cols   = s$resp_cols
       )
-      res <- compute_all_plots(s$data, s$info, layout_inputs, s$colors, s$base_size, s$show_labels)
+      res <- compute_all_plots(s$data, s$info, layout_inputs, s$colors, s$base_size, s$show_labels, s$sync_axis)
       res[[if (!is.null(s$plot_type) && s$plot_type %in% names(res)) s$plot_type else "lineplot_mean_se"]]
     })
     
@@ -206,6 +211,21 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
       info <- model_info()
       req(info)
       build_anova_layout_controls(ns, input, info)
+    })
+
+    output$barplot_axis_ui <- renderUI({
+      info <- model_info()
+      if (is.null(info) || length(info$responses %||% list()) <= 1) {
+        return(NULL)
+      }
+      with_help_tooltip(
+        checkboxInput(
+          ns("sync_bar_y_axis"),
+          "Use common Y-axis limits across responses",
+          value = FALSE
+        ),
+        "Apply the same Y-axis range to every response panel so heights can be compared directly."
+      )
     })
     
     output$plot_warning <- renderUI({
