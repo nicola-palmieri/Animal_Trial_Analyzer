@@ -1099,7 +1099,13 @@ build_line_plot_panel <- function(stats_df,
   }
 
   p + ggtitle(title_text) +
-    theme(plot.title = element_text(size = 12, face = "bold"))
+    theme(
+      plot.title = element_text(
+        size = base_size,
+        face = "bold",
+        hjust = 0.5
+      )
+    )
 }
 
 prepare_lineplot_raw_data <- function(df, response_var, factor1, factor2 = NULL) {
@@ -1271,7 +1277,11 @@ plot_anova_lineplot_meanse <- function(data,
         theme_void() +
         ggtitle(resp) +
         theme(
-          plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+          plot.title = element_text(
+            size = base_size,
+            face = "bold",
+            hjust = 0.5
+          ),
           plot.margin = margin(t = 0, r = 0, b = 6, l = 0)
         )
 
