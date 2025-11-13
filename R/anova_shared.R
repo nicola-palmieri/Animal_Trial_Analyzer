@@ -1742,7 +1742,10 @@ add_nested_significance_annotations <- function(plot_obj,
 
   plot_obj <- plot_obj + ggsignif::geom_signif(
     data        = prep$data,
-    aes(annotations = annotations,
+    aes(xmin = xmin,
+        xmax = xmax,
+        annotations = annotations,
+        y_position = y_position,
         group = .group_id),
     manual      = TRUE,
     inherit.aes = FALSE,
