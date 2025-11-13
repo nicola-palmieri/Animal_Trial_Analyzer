@@ -34,6 +34,27 @@ visualize_twoway_ui <- function(id) {
           "Turn on labels to display the mean value on each bar."
         )
       ),
+      conditionalPanel(
+        condition = sprintf("input['%s'] === 'lineplot_mean_se'", ns("plot_type")),
+        fluidRow(
+          column(6, with_help_tooltip(
+            checkboxInput(
+              ns("lineplot_show_lines"),
+              "Connect means with lines",
+              value = FALSE
+            ),
+            "Draw connecting lines between group means."
+          )),
+          column(6, with_help_tooltip(
+            checkboxInput(
+              ns("lineplot_show_jitter"),
+              "Overlay jittered data",
+              value = FALSE
+            ),
+            "Overlay raw observations with light jitter for context."
+          ))
+        )
+      ),
       fluidRow(
         column(6, with_help_tooltip(
           numericInput(ns("plot_width"),  "Subplot width (px)",  value = 400, min = 200, max = 1200, step = 50),
@@ -118,11 +139,20 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
         colors      = custom_colors(),
         base_size   = base_size(),
         show_labels = isTRUE(input$show_bar_labels),
+        show_lines  = isTRUE(input$lineplot_show_lines),
+        show_jitter = isTRUE(input$lineplot_show_jitter),
         plot_type   = input$plot_type
       )
     })
-    
-    compute_all_plots <- function(data, info, layout_inputs, colors, base_size_value, show_labels) {
+
+    compute_all_plots <- function(data,
+                                  info,
+                                  layout_inputs,
+                                  colors,
+                                  base_size_value,
+                                  show_labels,
+                                  show_lines,
+                                  show_jitter) {
       if (is.null(info) || !identical(info$type, "twoway_anova") || is.null(data) || nrow(data) == 0) {
         return(list(
           lineplot_mean_se = list(plot = NULL, warning = "No data or results available.", layout = NULL),
@@ -133,7 +163,9 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
         lineplot_mean_se = plot_anova_lineplot_meanse(
           data, info, layout_inputs,
           line_colors = colors,
-          base_size = base_size_value
+          base_size = base_size_value,
+          show_lines = show_lines,
+          show_jitter = show_jitter
         ),
         barplot_mean_se = plot_anova_barplot_meanse(
           data, info, layout_values = layout_inputs,
@@ -154,7 +186,13 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
         resp_rows   = s$resp_rows,
         resp_cols   = s$resp_cols
       )
-      res <- compute_all_plots(s$data, s$info, layout_inputs, s$colors, s$base_size, s$show_labels)
+      res <- compute_all_plots(
+        s$data, s$info, layout_inputs,
+        s$colors, s$base_size,
+        s$show_labels,
+        s$show_lines,
+        s$show_jitter
+      )
       res[[if (!is.null(s$plot_type) && s$plot_type %in% names(res)) s$plot_type else "lineplot_mean_se"]]
     })
     
@@ -175,6 +213,8 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
         hash_key(dat),
         s$plot_type,
         s$show_labels,
+        s$show_lines,
+        s$show_jitter,
         s$colors,
         s$base_size,
         sep = "_"
