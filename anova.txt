@@ -176,6 +176,27 @@ visualize_oneway_ui <- function(id) {
           "Turn on labels to display the mean value on top of each bar."
         )
       ),
+      conditionalPanel(
+        condition = sprintf("input['%s'] === 'lineplot_mean_se'", ns("plot_type")),
+        fluidRow(
+          column(6, with_help_tooltip(
+            checkboxInput(
+              ns("lineplot_show_lines"),
+              "Connect means with lines",
+              value = FALSE
+            ),
+            "Draw connecting lines between group means."
+          )),
+          column(6, with_help_tooltip(
+            checkboxInput(
+              ns("lineplot_show_jitter"),
+              "Overlay jittered data",
+              value = FALSE
+            ),
+            "Overlay raw observations with light jitter for context."
+          ))
+        )
+      ),
       fluidRow(
         column(6, with_help_tooltip(
           numericInput(ns("plot_width"), "Subplot width (px)", value = 400, min = 200, max = 1200, step = 50),
@@ -248,23 +269,34 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
         colors      = custom_colors(),
         base_size   = base_size(),
         show_labels = isTRUE(input$show_bar_labels),
+        show_lines  = isTRUE(input$lineplot_show_lines),
+        show_jitter = isTRUE(input$lineplot_show_jitter),
         plot_type   = input$plot_type
       )
     })
-    
-    compute_all_plots <- function(data, info, layout_inputs, colors, base_size_value, show_labels) {
+
+    compute_all_plots <- function(data,
+                                  info,
+                                  layout_inputs,
+                                  colors,
+                                  base_size_value,
+                                  show_labels,
+                                  show_lines,
+                                  show_jitter) {
       if (is.null(info) || !identical(info$type, "oneway_anova") || is.null(data) || nrow(data) == 0) {
         return(list(
           lineplot_mean_se = list(plot = NULL, warning = "No data or results available.", layout = NULL),
           barplot_mean_se  = list(plot = NULL, warning = "No data or results available.", layout = NULL)
         ))
       }
-      
+
       list(
         lineplot_mean_se = plot_anova_lineplot_meanse(
           data, info, layout_inputs,
           line_colors = colors,
-          base_size = base_size_value
+          base_size = base_size_value,
+          show_lines = show_lines,
+          show_jitter = show_jitter
         ),
         barplot_mean_se = plot_anova_barplot_meanse(
           data, info,
@@ -286,7 +318,13 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
         resp_rows   = s$resp_rows,
         resp_cols   = s$resp_cols
       )
-      res <- compute_all_plots(s$data, s$info, layout_inputs, s$colors, s$base_size, s$show_labels)
+      res <- compute_all_plots(
+        s$data, s$info, layout_inputs,
+        s$colors, s$base_size,
+        s$show_labels,
+        s$show_lines,
+        s$show_jitter
+      )
       res[[if (!is.null(s$plot_type) && s$plot_type %in% names(res)) s$plot_type else "lineplot_mean_se"]]
     })
     
@@ -306,12 +344,19 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
         hash_key(dat),
         s$plot_type,
         s$show_labels,
+        s$show_lines,
+        s$show_jitter,
         s$colors,
         s$base_size,
+        s$strata_rows,
+        s$strata_cols,
+        s$resp_rows,
+        s$resp_cols,
         sep = "_"
       )
+      
       if (!identical(key, cached_key())) {
-        info <- plot_info()   # ✅ remove isolate()
+        info <- plot_info()
         if (!is.null(info$plot)) {
           cached_plot(info$plot)
           cached_key(key)
@@ -344,22 +389,23 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
     })
     
     output$plot_line <- renderPlot({
-      info <- isolate(plot_info())
-      if (is.null(info$plot) || input$plot_type != "lineplot_mean_se") return(NULL)
-      print(info$plot)
+      p <- cached_plot()
+      if (is.null(p) || input$plot_type != "lineplot_mean_se") return(NULL)
+      print(p)
     },
     width  = function() plot_dimensions()$width,
     height = function() plot_dimensions()$height,
     res = 96)
     
     output$plot_bar <- renderPlot({
-      info <- isolate(plot_info())
-      if (is.null(info$plot) || input$plot_type != "barplot_mean_se") return(NULL)
-      print(info$plot)
+      p <- cached_plot()
+      if (is.null(p) || input$plot_type != "barplot_mean_se") return(NULL)
+      print(p)
     },
     width  = function() plot_dimensions()$width,
     height = function() plot_dimensions()$height,
     res = 96)
+    
     
     output$download_plot <- downloadHandler(
       filename = function() paste0("anova_plot_", Sys.Date(), ".png"),
@@ -1375,15 +1421,42 @@ build_line_plot_panel <- function(stats_df,
                                   factor1,
                                   factor2,
                                   line_colors,
-                                  base_size = 13) {
+                                  base_size = 13,
+                                  raw_data = NULL,
+                                  response_var = NULL,
+                                  show_lines = FALSE,
+                                  show_jitter = FALSE) {
   if (is.null(factor2) || !factor2 %in% names(stats_df)) {
     color_value <- if (!is.null(line_colors) && length(line_colors) > 0) {
       unname(line_colors)[1]
     } else {
       resolve_single_color()
     }
-    p <- ggplot(stats_df, aes(x = !!sym(factor1), y = mean)) +
-      geom_line(aes(group = 1), color = color_value, linewidth = 1) +
+    p <- ggplot(stats_df, aes(x = !!sym(factor1), y = mean))
+
+    if (isTRUE(show_jitter) && !is.null(raw_data) &&
+        !is.null(response_var) && response_var %in% names(raw_data) &&
+        factor1 %in% names(raw_data)) {
+      jitter_df <- raw_data[!is.na(raw_data[[response_var]]), , drop = FALSE]
+      if (nrow(jitter_df) > 0) {
+        p <- p + geom_jitter(
+          data = jitter_df,
+          aes(x = !!sym(factor1), y = !!sym(response_var)),
+          width = 0.12,
+          alpha = 0.35,
+          size = 1.7,
+          color = color_value,
+          inherit.aes = FALSE,
+          show.legend = FALSE
+        )
+      }
+    }
+
+    if (isTRUE(show_lines)) {
+      p <- p + geom_line(aes(group = 1), color = color_value, linewidth = 1)
+    }
+
+    p <- p +
       geom_point(size = 3, color = color_value) +
       geom_errorbar(
         aes(ymin = mean - se, ymax = mean + se),
@@ -1410,8 +1483,31 @@ build_line_plot_panel <- function(stats_df,
       y = mean,
       color = !!sym(factor2),
       group = !!sym(factor2)
-    )) +
-      geom_line(linewidth = 1) +
+    ))
+
+    if (isTRUE(show_jitter) && !is.null(raw_data) && !is.null(response_var) &&
+        all(c(factor1, factor2) %in% names(raw_data)) &&
+        response_var %in% names(raw_data)) {
+      jitter_df <- raw_data[!is.na(raw_data[[response_var]]), , drop = FALSE]
+      if (nrow(jitter_df) > 0) {
+        jitter_df[[factor2]] <- factor(as.character(jitter_df[[factor2]]), levels = group_levels)
+        p <- p + geom_jitter(
+          data = jitter_df,
+          aes(x = !!sym(factor1), y = !!sym(response_var), color = !!sym(factor2)),
+          position = position_jitterdodge(jitter.width = 0.15, dodge.width = 0.4),
+          size = 1.6,
+          alpha = 0.4,
+          inherit.aes = FALSE,
+          show.legend = FALSE
+        )
+      }
+    }
+
+    if (isTRUE(show_lines)) {
+      p <- p + geom_line(linewidth = 1)
+    }
+
+    p <- p +
       geom_point(size = 3) +
       geom_errorbar(
         aes(ymin = mean - se, ymax = mean + se),
@@ -1438,11 +1534,29 @@ build_line_plot_panel <- function(stats_df,
     theme(plot.title = element_text(size = 12, face = "bold"))
 }
 
+prepare_lineplot_raw_data <- function(df, response_var, factor1, factor2 = NULL) {
+  if (is.null(df) || is.null(response_var) || is.null(factor1)) return(NULL)
+  if (!response_var %in% names(df) || !factor1 %in% names(df)) return(NULL)
+
+  cols <- c(factor1, factor2, response_var)
+  cols <- cols[!vapply(cols, is.null, FUN.VALUE = logical(1), USE.NAMES = FALSE)]
+  cols <- unique(cols)
+  cols <- cols[cols %in% names(df)]
+  if (!response_var %in% cols || !factor1 %in% cols) return(NULL)
+
+  raw_subset <- df[, cols, drop = FALSE]
+  raw_subset <- raw_subset[!is.na(raw_subset[[response_var]]), , drop = FALSE]
+  if (nrow(raw_subset) == 0) return(NULL)
+  raw_subset
+}
+
 plot_anova_lineplot_meanse <- function(data,
                                        info,
                                        layout_values,
                                        line_colors = NULL,
-                                       base_size = 14) {
+                                       base_size = 14,
+                                       show_lines = FALSE,
+                                       show_jitter = FALSE) {
   context <- initialize_anova_plot_context(data, info, layout_values)
   data <- context$data
   factor1 <- context$factor1
@@ -1470,7 +1584,10 @@ plot_anova_lineplot_meanse <- function(data,
 
         stats_df <- apply_anova_factor_levels(stats_df, factor1, factor2, context$order1, context$order2)
         y_values <- c(y_values, stats_df$mean - stats_df$se, stats_df$mean + stats_df$se)
-        stratum_stats[[stratum]] <- stats_df
+        stratum_stats[[stratum]] <- list(
+          stats = stats_df,
+          raw = prepare_lineplot_raw_data(subset_data, resp, factor1, factor2)
+        )
       }
 
       if (length(stratum_stats) == 0) {
@@ -1485,14 +1602,19 @@ plot_anova_lineplot_meanse <- function(data,
       strata_panel_count <- max(strata_panel_count, length(stratum_stats))
 
       strata_plot_list <- lapply(names(stratum_stats), function(stratum_name) {
+        entry <- stratum_stats[[stratum_name]]
         build_line_plot_panel(
-          stats_df = stratum_stats[[stratum_name]],
+          stats_df = entry$stats,
           title_text = stratum_name,
           y_limits = y_limits,
           factor1 = factor1,
           factor2 = factor2,
           line_colors = line_colors,
-          base_size = base_size
+          base_size = base_size,
+          raw_data = entry$raw,
+          response_var = resp,
+          show_lines = show_lines,
+          show_jitter = show_jitter
         )
       })
 
@@ -1533,7 +1655,11 @@ plot_anova_lineplot_meanse <- function(data,
         factor1 = factor1,
         factor2 = factor2,
         line_colors = line_colors,
-        base_size = base_size
+        base_size = base_size,
+        raw_data = prepare_lineplot_raw_data(data, resp, factor1, factor2),
+        response_var = resp,
+        show_lines = show_lines,
+        show_jitter = show_jitter
       )
     }
   }
@@ -2244,6 +2370,27 @@ visualize_twoway_ui <- function(id) {
           "Turn on labels to display the mean value on each bar."
         )
       ),
+      conditionalPanel(
+        condition = sprintf("input['%s'] === 'lineplot_mean_se'", ns("plot_type")),
+        fluidRow(
+          column(6, with_help_tooltip(
+            checkboxInput(
+              ns("lineplot_show_lines"),
+              "Connect means with lines",
+              value = FALSE
+            ),
+            "Draw connecting lines between group means."
+          )),
+          column(6, with_help_tooltip(
+            checkboxInput(
+              ns("lineplot_show_jitter"),
+              "Overlay jittered data",
+              value = FALSE
+            ),
+            "Overlay raw observations with light jitter for context."
+          ))
+        )
+      ),
       fluidRow(
         column(6, with_help_tooltip(
           numericInput(ns("plot_width"),  "Subplot width (px)",  value = 400, min = 200, max = 1200, step = 50),
@@ -2328,11 +2475,20 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
         colors      = custom_colors(),
         base_size   = base_size(),
         show_labels = isTRUE(input$show_bar_labels),
+        show_lines  = isTRUE(input$lineplot_show_lines),
+        show_jitter = isTRUE(input$lineplot_show_jitter),
         plot_type   = input$plot_type
       )
     })
-    
-    compute_all_plots <- function(data, info, layout_inputs, colors, base_size_value, show_labels) {
+
+    compute_all_plots <- function(data,
+                                  info,
+                                  layout_inputs,
+                                  colors,
+                                  base_size_value,
+                                  show_labels,
+                                  show_lines,
+                                  show_jitter) {
       if (is.null(info) || !identical(info$type, "twoway_anova") || is.null(data) || nrow(data) == 0) {
         return(list(
           lineplot_mean_se = list(plot = NULL, warning = "No data or results available.", layout = NULL),
@@ -2343,7 +2499,9 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
         lineplot_mean_se = plot_anova_lineplot_meanse(
           data, info, layout_inputs,
           line_colors = colors,
-          base_size = base_size_value
+          base_size = base_size_value,
+          show_lines = show_lines,
+          show_jitter = show_jitter
         ),
         barplot_mean_se = plot_anova_barplot_meanse(
           data, info, layout_values = layout_inputs,
@@ -2364,7 +2522,13 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
         resp_rows   = s$resp_rows,
         resp_cols   = s$resp_cols
       )
-      res <- compute_all_plots(s$data, s$info, layout_inputs, s$colors, s$base_size, s$show_labels)
+      res <- compute_all_plots(
+        s$data, s$info, layout_inputs,
+        s$colors, s$base_size,
+        s$show_labels,
+        s$show_lines,
+        s$show_jitter
+      )
       res[[if (!is.null(s$plot_type) && s$plot_type %in% names(res)) s$plot_type else "lineplot_mean_se"]]
     })
     
@@ -2385,8 +2549,14 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
         hash_key(dat),
         s$plot_type,
         s$show_labels,
+        s$show_lines,
+        s$show_jitter,
         s$colors,
         s$base_size,
+        s$strata_rows,
+        s$strata_cols,
+        s$resp_rows,
+        s$resp_cols,
         sep = "_"
       )
       if (!identical(key, cached_key())) {
@@ -2422,22 +2592,23 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
     })
     
     output$plot_line <- renderPlot({
-      info <- isolate(plot_info())
-      if (is.null(info$plot) || input$plot_type != "lineplot_mean_se") return(NULL)
-      print(info$plot)
+      p <- cached_plot()
+      if (is.null(p) || input$plot_type != "lineplot_mean_se") return(NULL)
+      print(p)
     },
     width  = function() plot_dimensions()$width,
     height = function() plot_dimensions()$height,
     res = 96)
     
     output$plot_bar <- renderPlot({
-      info <- isolate(plot_info())
-      if (is.null(info$plot) || input$plot_type != "barplot_mean_se") return(NULL)
-      print(info$plot)
+      p <- cached_plot()
+      if (is.null(p) || input$plot_type != "barplot_mean_se") return(NULL)
+      print(p)
     },
     width  = function() plot_dimensions()$width,
     height = function() plot_dimensions()$height,
     res = 96)
+    
     
     
     output$download_plot <- downloadHandler(
