@@ -36,7 +36,7 @@ visualize_twoway_ui <- function(id) {
       conditionalPanel(
         condition = sprintf("input['%s'] === 'lineplot_mean_se'", ns("plot_type")),
         fluidRow(
-          column(4, with_help_tooltip(
+          column(6, with_help_tooltip(
             checkboxInput(
               ns("lineplot_show_lines"),
               "Connect means with lines",
@@ -44,32 +44,17 @@ visualize_twoway_ui <- function(id) {
             ),
             "Draw connecting lines between group means."
           )),
-          column(4, with_help_tooltip(
+          column(6, with_help_tooltip(
             checkboxInput(
               ns("lineplot_use_dodge"),
               "Dodge grouped means",
               value = TRUE
             ),
             "Offset the level means of the second factor along the x-axis to prevent overlap."
-          )),
-          column(4, with_help_tooltip(
-            checkboxInput(
-              ns("lineplot_show_jitter"),
-              "Overlay jittered data",
-              value = FALSE
-            ),
-            "Overlay raw observations with light jitter for context."
           ))
         )
       ),
-      with_help_tooltip(
-        checkboxInput(
-          ns("share_y_axis"),
-          "Use common y-axis across plots",
-          value = FALSE
-        ),
-        "Lock the y-axis range so every subplot uses the same scale."
-      ),
+      uiOutput(ns("axis_and_jitter")),
       fluidRow(
         column(6, with_help_tooltip(
           numericInput(ns("plot_width"),  "Subplot width (px)",  value = 400, min = 200, max = 1200, step = 50),
@@ -219,6 +204,75 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
       }
 
       tagList(checkbox, legend_position)
+    })
+
+    single_subplot <- reactive({
+      info <- model_info()
+      if (is.null(info)) {
+        return(FALSE)
+      }
+
+      responses <- info$responses
+      n_responses <- if (!is.null(responses) && length(responses) > 0) {
+        length(responses)
+      } else {
+        0L
+      }
+      n_responses <- max(1L, n_responses)
+
+      strata_info <- info$strata
+      strata_levels <- if (!is.null(strata_info)) strata_info$levels else NULL
+      n_strata <- if (!is.null(strata_levels) && length(strata_levels) > 0) {
+        length(strata_levels)
+      } else {
+        0L
+      }
+      n_strata <- max(1L, n_strata)
+
+      (n_responses * n_strata) <= 1L
+    })
+
+    observeEvent(single_subplot(), {
+      if (isTRUE(single_subplot()) && isTRUE(input$share_y_axis)) {
+        updateCheckboxInput(session, "share_y_axis", value = FALSE)
+      }
+    })
+
+    output$axis_and_jitter <- renderUI({
+      disable_share <- isTRUE(single_subplot())
+      share_checkbox <- checkboxInput(
+        ns("share_y_axis"),
+        "Use common y-axis across plots",
+        value = isTRUE(input$share_y_axis)
+      )
+      share_widget <- with_help_tooltip(
+        share_checkbox,
+        "Lock the y-axis range so every subplot uses the same scale."
+      )
+      if (disable_share) {
+        share_widget <- tags$fieldset(
+          class = "border-0 p-0 m-0",
+          disabled = "disabled",
+          share_widget
+        )
+      }
+
+      jitter_widget <- NULL
+      if (isTRUE(input$plot_type == "lineplot_mean_se")) {
+        jitter_widget <- with_help_tooltip(
+          checkboxInput(
+            ns("lineplot_show_jitter"),
+            "Overlay jittered data",
+            value = isTRUE(input$lineplot_show_jitter)
+          ),
+          "Overlay raw observations with light jitter for context."
+        )
+      }
+
+      fluidRow(
+        column(6, share_widget),
+        column(6, jitter_widget)
+      )
     })
 
     state <- reactive({
@@ -454,4 +508,3 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
     
   })
 }
-
