@@ -881,18 +881,23 @@ add_theme_to_plot <- function(plot_obj, theme_obj) {
 }
 
 collect_guides_safe <- function(plot_obj) {
-  if (is.null(plot_obj) || !inherits(plot_obj, "patchwork")) {
+  if (is.null(plot_obj) || !requireNamespace("patchwork", quietly = TRUE)) {
     return(plot_obj)
   }
-  if (!requireNamespace("patchwork", quietly = TRUE)) {
+
+  is_patchwork <- inherits(plot_obj, "patchwork")
+  if (!is_patchwork) {
     return(plot_obj)
   }
+
   exports <- tryCatch(getNamespaceExports("patchwork"), error = function(...) character())
-  if ("collect_guides" %in% exports) {
+  collected <- if ("collect_guides" %in% exports) {
     patchwork::collect_guides(plot_obj)
   } else {
-    plot_obj & patchwork::plot_layout(guides = "collect")
+    plot_obj + patchwork::plot_layout(guides = "collect")
   }
+
+  collected + patchwork::plot_layout(guides = "collect")
 }
 
 apply_common_legend_layout <- function(plot_obj,
@@ -1329,7 +1334,7 @@ plot_anova_lineplot_meanse <- function(data,
       )
 
       if (isTRUE(common_legend)) {
-        combined <- combined & patchwork::plot_layout(guides = "collect")
+        combined <- collect_guides_safe(combined)
       }
 
       title_plot <- ggplot() +
