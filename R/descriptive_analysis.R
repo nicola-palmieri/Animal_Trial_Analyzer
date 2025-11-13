@@ -223,13 +223,67 @@ compute_descriptive_summary <- function(data, group_var = NULL) {
       "missing",
       ~ 100 * mean(is.na(.x))
     ),
-    shapiro = summarise_numeric(
+    distribution = summarise_numeric(
       group_data,
       numeric_vars,
-      "shapiro",
-      ~ tryCatch(stats::shapiro.test(.x)$p.value, error = function(e) NA_real_)
+      "distribution",
+      ~ most_likely_distribution(.x)
     )
   )
+}
+
+most_likely_distribution <- function(values) {
+  values <- values[is.finite(values)]
+  if (length(values) < 5 || length(unique(values)) < 2) {
+    return(NA_character_)
+  }
+
+  candidates <- c(
+    norm = TRUE,
+    lnorm = all(values > 0),
+    gamma = all(values > 0),
+    weibull = all(values > 0),
+    exp = all(values > 0)
+  )
+
+  candidate_names <- names(candidates)[candidates]
+  if (length(candidate_names) == 0) {
+    return(NA_character_)
+  }
+
+  fits <- purrr::map(candidate_names, function(dist_name) {
+    fit <- tryCatch(
+      fitdistrplus::fitdist(values, dist_name),
+      error = function(e) NULL
+    )
+    if (is.null(fit)) {
+      return(NULL)
+    }
+    tibble::tibble(distribution = dist_name, aic = stats::AIC(fit))
+  })
+
+  fits <- purrr::compact(fits)
+  if (length(fits) == 0) {
+    return(NA_character_)
+  }
+
+  best <- dplyr::bind_rows(fits) |>
+    dplyr::arrange(.data$aic) |>
+    dplyr::slice(1)
+
+  label_map <- c(
+    norm = "Normal",
+    lnorm = "Log-normal",
+    gamma = "Gamma",
+    weibull = "Weibull",
+    exp = "Exponential"
+  )
+
+  label <- label_map[[best$distribution]]
+  if (is.null(label) || is.na(label)) {
+    label <- best$distribution
+  }
+  label
 }
 
 # ---- Shared printing ----
@@ -238,7 +292,7 @@ print_summary_sections <- function(results) {
   cat(paste(capture.output(print(results$skim)), collapse = "\n"), "\n\n", sep = "")
   
   # 2) Helper to detect if a grouping column exists and what it's called
-  metric_prefix <- "^(cv_|outliers_|missing_|shapiro_)"
+  metric_prefix <- "^(cv_|outliers_|missing_|distribution_)"
   first_col <- if (!is.null(results$cv) && ncol(results$cv) > 0) names(results$cv)[1] else NULL
   group_col <- if (!is.null(first_col) && !grepl(metric_prefix, first_col)) first_col else NULL
   
@@ -265,15 +319,14 @@ print_summary_sections <- function(results) {
   # 4) Build pieces (no "missing" here)
   cv_long   <- to_long(results$cv, "cv")
   out_long  <- to_long(results$outliers, "outliers")
-  shap_long <- to_long(results$shapiro, "shapiro_p")
+  dist_long <- to_long(results$distribution, "distribution")
 
   # 5) Join by the right keys
   join_keys <- c(if (!is.null(group_col)) group_col, "variable")
   merged <- dplyr::full_join(cv_long, out_long, by = join_keys) |>
-    dplyr::full_join(shap_long, by = join_keys) |>
+    dplyr::full_join(dist_long, by = join_keys) |>
     dplyr::mutate(
-      cv = round(cv, 2),
-      shapiro_p = signif(shapiro_p, 3)
+      cv = round(cv, 2)
     )
 
   numeric_order <- NULL
@@ -295,13 +348,13 @@ print_summary_sections <- function(results) {
 
   # 7) Print with/without group column
   cat("── Numeric variables summary ──\n")
-  final_cols <- c("variable", arrange_cols[-length(arrange_cols)], "cv", "outliers", "shapiro_p")
+  final_cols <- c("variable", arrange_cols[-length(arrange_cols)], "cv", "outliers", "distribution")
   final_df <- merged[, final_cols, drop = FALSE]
   print(as.data.frame(final_df), row.names = FALSE)
-  
+
   cat("\nInterpretation:\n")
   cat("  • outliers = # beyond 1.5×IQR\n")
-  cat("  • shapiro_p < 0.05 → non-normal distribution\n")
-  
+  cat("  • distribution = best fit (AIC) among Normal/Log-normal/Gamma/Weibull/Exponential\n")
+
   invisible(NULL)
 }
