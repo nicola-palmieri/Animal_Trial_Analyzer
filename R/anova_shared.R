@@ -1611,7 +1611,10 @@ add_significance_annotations <- function(plot_obj,
   plot_obj <- plot_obj + ggsignif::geom_signif(
     data = prep$data,
     aes(
+      xmin = xmin,
+      xmax = xmax,
       annotations = annotations,
+      y_position = y_position,
       group = .group_id
     ),
     manual = TRUE,
@@ -1642,15 +1645,15 @@ prepare_nested_significance_annotations_data <- function(stats_df,
   # Accept both a flat data.frame or a list entry
   df <- NULL
   if (is.data.frame(nested_posthoc)) {
-    if (!"Factor" %in% names(nested_posthoc)) return(plot_obj)
+    if (!"Factor" %in% names(nested_posthoc)) return(NULL)
     df <- dplyr::filter(nested_posthoc, .data$Factor == nested_name)
   } else if (is.list(nested_posthoc) && nested_name %in% names(nested_posthoc)) {
     df <- nested_posthoc[[nested_name]]
   } else {
-    return(plot_obj)
+    return(NULL)
   }
-  if (is.null(df) || nrow(df) == 0) return(plot_obj)
-  if (!all(c("contrast","p.value", factor1) %in% names(df))) return(plot_obj)
+  if (is.null(df) || nrow(df) == 0) return(NULL)
+  if (!all(c("contrast","p.value", factor1) %in% names(df))) return(NULL)
   
   # Clean p-values, keep only significant
   df$p.value <- as.character(df$p.value)
@@ -1658,7 +1661,7 @@ prepare_nested_significance_annotations_data <- function(stats_df,
   df$p.value <- gsub("^<\\.?0*", "0.", df$p.value)  # <.0001, <0.001 -> numeric-ish
   df$p.value <- suppressWarnings(as.numeric(df$p.value))
   df <- dplyr::filter(df, !is.na(.data$p.value) & .data$p.value < 0.05)
-  if (nrow(df) == 0) return(plot_obj)
+  if (nrow(df) == 0) return(NULL)
   
   # Parse pair labels from "A - B"
   df$g1 <- sub(" - .*", "", df$contrast)

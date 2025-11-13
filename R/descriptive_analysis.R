@@ -237,40 +237,33 @@ most_likely_distribution <- function(values) {
   if (length(values) < 5 || length(unique(values)) < 2) {
     return(NA_character_)
   }
-
+  
   candidates <- c(
-    norm = TRUE,
-    lnorm = all(values > 0),
-    gamma = all(values > 0),
+    norm   = TRUE,
+    lnorm  = all(values > 0),
+    gamma  = all(values > 0),
     weibull = all(values > 0),
-    exp = all(values > 0)
+    exp    = all(values > 0)
   )
-
+  
   candidate_names <- names(candidates)[candidates]
   if (length(candidate_names) == 0) {
     return(NA_character_)
   }
-
+  
   fits <- purrr::map(candidate_names, function(dist_name) {
-    fit <- tryCatch(
-      fitdistrplus::fitdist(values, dist_name),
-      error = function(e) NULL
-    )
-    if (is.null(fit)) {
-      return(NULL)
-    }
+    fit <- safe_fitdist(values, dist_name)
+    if (is.null(fit)) return(NULL)
     tibble::tibble(distribution = dist_name, aic = stats::AIC(fit))
   })
-
+  
   fits <- purrr::compact(fits)
-  if (length(fits) == 0) {
-    return(NA_character_)
-  }
-
+  if (length(fits) == 0) return(NA_character_)
+  
   best <- dplyr::bind_rows(fits) |>
     dplyr::arrange(.data$aic) |>
     dplyr::slice(1)
-
+  
   label_map <- c(
     norm = "Normal",
     lnorm = "Log-normal",
@@ -278,12 +271,17 @@ most_likely_distribution <- function(values) {
     weibull = "Weibull",
     exp = "Exponential"
   )
+  
+  label_map[[best$distribution]] %||% best$distribution
+}
 
-  label <- label_map[[best$distribution]]
-  if (is.null(label) || is.na(label)) {
-    label <- best$distribution
-  }
-  label
+safe_fitdist <- function(values, dist_name) {
+  suppressWarnings(
+    tryCatch(
+      fitdistrplus::fitdist(values, dist_name),
+      error = function(e) NULL
+    )
+  )
 }
 
 # ---- Shared printing ----
