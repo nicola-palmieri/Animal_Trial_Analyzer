@@ -872,6 +872,17 @@ apply_anova_factor_levels <- function(stats_df, factor1, factor2, order1, order2
   stats_df
 }
 
+compose_anova_plot_title <- function(prefix, responses, has_strata, strata_levels) {
+  pieces <- c(prefix)
+  if (!is.null(responses) && length(responses) > 0) {
+    pieces <- c(pieces, paste("Responses:", paste(responses, collapse = ", ")))
+  }
+  if (has_strata && length(strata_levels) > 0) {
+    pieces <- c(pieces, paste("Strata:", paste(strata_levels, collapse = ", ")))
+  }
+  paste(pieces, collapse = " | ")
+}
+
 finalize_anova_plot_result <- function(response_plots,
                                        context,
                                        strata_panel_count,
@@ -882,24 +893,32 @@ finalize_anova_plot_result <- function(response_plots,
   }
 
   has_strata <- context$has_strata
-  strata_layout <- context$strata_layout
+  response_candidates <- context$active_responses
+  if (is.null(response_candidates)) {
+    response_candidates <- context$responses
+  }
+  response_count <- length(response_candidates)
 
+  strata_layout <- context$strata_layout
   if (has_strata && strata_panel_count == 0L) {
     strata_panel_count <- context$n_expected_strata
   }
 
   if (has_strata) {
     strata_layout <- adjust_grid_layout(max(1L, strata_panel_count), strata_layout)
+  } else {
+    strata_layout <- list(nrow = 1L, ncol = 1L)
   }
 
-  response_defaults <- compute_default_grid(length(response_plots))
+  response_count <- max(1L, response_count)
+  response_defaults <- compute_default_grid(response_count)
   response_layout <- basic_grid_layout(
     rows = context$layout_input$resp_rows,
     cols = context$layout_input$resp_cols,
     default_rows = response_defaults$rows,
     default_cols = response_defaults$cols
   )
-  response_layout <- adjust_grid_layout(length(response_plots), response_layout)
+  response_layout <- adjust_grid_layout(response_count, response_layout)
 
   strata_validation <- if (has_strata) {
     validate_grid(max(1L, strata_panel_count), strata_layout$nrow, strata_layout$ncol)
@@ -908,10 +927,14 @@ finalize_anova_plot_result <- function(response_plots,
   }
 
   response_validation <- validate_grid(
-    length(response_plots),
+    response_count,
     response_layout$nrow,
     response_layout$ncol
   )
+
+  final_rows <- response_layout$nrow * strata_layout$nrow
+  final_cols <- response_layout$ncol * strata_layout$ncol
+  final_validation <- validate_grid(length(response_plots), final_rows, final_cols)
 
   warnings <- c()
   if (has_strata && !strata_validation$valid && !is.null(strata_validation$message)) {
@@ -920,29 +943,45 @@ finalize_anova_plot_result <- function(response_plots,
   if (!response_validation$valid && !is.null(response_validation$message)) {
     warnings <- c(warnings, response_validation$message)
   }
+  if (!final_validation$valid && !is.null(final_validation$message)) {
+    warnings <- c(warnings, final_validation$message)
+  }
   warning_text <- if (length(warnings) > 0) paste(warnings, collapse = "<br/>") else NULL
 
   final_plot <- NULL
   if (is.null(warning_text)) {
-    if (length(response_plots) == 1) {
-      final_plot <- response_plots[[1]]
-      if (collect_guides && !is.null(legend_position)) {
+    final_plot <- patchwork::wrap_plots(
+      plotlist = response_plots,
+      nrow = final_rows,
+      ncol = final_cols
+    )
+
+    if (collect_guides) {
+      final_plot <- final_plot & patchwork::plot_layout(guides = "collect")
+      if (!is.null(legend_position)) {
         final_plot <- final_plot & theme(legend.position = legend_position)
       }
-    } else {
-      combined <- patchwork::wrap_plots(
-        plotlist = response_plots,
-        nrow = response_layout$nrow,
-        ncol = response_layout$ncol
+    }
+
+    if (!is.null(context$plot_title)) {
+      final_plot <- final_plot + patchwork::plot_annotation(
+        title = context$plot_title,
+        theme = theme(plot.title = element_text(size = 16, face = "bold"))
       )
-      final_plot <- if (collect_guides) {
-        collected <- combined & patchwork::plot_layout(guides = "collect")
-        if (!is.null(legend_position)) {
-          collected <- collected & theme(legend.position = legend_position)
-        }
-        collected
+    }
+
+    scale_info <- context$scale_info
+    if (!is.null(scale_info) && !is.null(scale_info$values)) {
+      scale_args <- list(values = scale_info$values)
+      if (!is.null(scale_info$name)) {
+        scale_args$name <- scale_info$name
+      }
+      final_plot <- if (identical(scale_info$aesthetic, "fill")) {
+        final_plot & do.call(scale_fill_manual, scale_args)
+      } else if (identical(scale_info$aesthetic, "color")) {
+        final_plot & do.call(scale_color_manual, scale_args)
       } else {
-        combined
+        final_plot
       }
     }
   }
@@ -979,7 +1018,9 @@ build_line_plot_panel <- function(stats_df,
                                   show_lines = FALSE,
                                   show_jitter = FALSE,
                                   use_dodge = FALSE) {
-  if (is.null(factor2) || !factor2 %in% names(stats_df)) {
+  has_groups <- !is.null(factor2) && factor2 %in% names(stats_df)
+
+  if (!has_groups) {
     color_value <- if (!is.null(line_colors) && length(line_colors) > 0) {
       unname(line_colors)[1]
     } else {
@@ -1029,11 +1070,11 @@ build_line_plot_panel <- function(stats_df,
       unique(as.character(stats_df[[factor2]]))
     }
     group_levels <- group_levels[!is.na(group_levels)]
-    palette <- resolve_palette_for_levels(group_levels, custom = line_colors)
     stats_df[[factor2]] <- factor(as.character(stats_df[[factor2]]), levels = group_levels)
     dodge_width <- if (isTRUE(use_dodge)) 0.4 else NULL
     dodge <- if (!is.null(dodge_width)) position_dodge(width = dodge_width) else NULL
     jitter_dodge_width <- if (is.null(dodge_width)) 0 else dodge_width
+
     p <- ggplot(stats_df, aes(
       x = !!sym(factor1),
       y = mean,
@@ -1090,24 +1131,18 @@ build_line_plot_panel <- function(stats_df,
       point_layer +
       errorbar_layer +
       theme_minimal(base_size = base_size) +
-      labs(
-        x = factor1,
-        y = "Mean ± SE",
-        color = factor2
-      ) +
+      labs(x = factor1, y = "Mean ± SE") +
       theme(
         panel.grid.minor = element_blank(),
         panel.grid.major.x = element_blank()
-      ) +
-      scale_color_manual(values = palette)
+      )
   }
 
   if (!is.null(y_limits) && all(is.finite(y_limits))) {
-    p <- p + scale_y_continuous(limits = y_limits)
+    p <- p + coord_cartesian(ylim = y_limits)
   }
 
-  p + ggtitle(title_text) +
-    theme(plot.title = element_text(size = 12, face = "bold"))
+  p
 }
 
 prepare_lineplot_raw_data <- function(df, response_var, factor1, factor2 = NULL) {
@@ -1140,13 +1175,31 @@ plot_anova_lineplot_meanse <- function(data,
   data <- context$data
   factor1 <- context$factor1
   factor2 <- context$factor2
+  context$scale_info <- NULL
+  if (!is.null(factor2) && factor2 %in% names(data)) {
+    level_values <- if (is.factor(data[[factor2]])) {
+      levels(data[[factor2]])
+    } else {
+      unique(as.character(stats::na.omit(data[[factor2]])))
+    }
+    level_values <- level_values[!is.na(level_values)]
+    if (length(level_values) > 0) {
+      palette <- resolve_palette_for_levels(level_values, custom = line_colors)
+      context$scale_info <- list(
+        aesthetic = "color",
+        values = palette,
+        name = factor2
+      )
+    }
+  }
 
-  response_plots <- list()
+  panel_store <- list()
+  built_responses <- character()
   strata_panel_count <- context$initial_strata_panels
 
   for (resp in context$responses) {
     if (context$has_strata && !is.null(context$strat_var) && context$strat_var %in% names(data)) {
-      stratum_stats <- list()
+      stratum_plots <- list()
       y_values <- c()
 
       for (stratum in context$strata_levels) {
@@ -1163,13 +1216,23 @@ plot_anova_lineplot_meanse <- function(data,
 
         stats_df <- apply_anova_factor_levels(stats_df, factor1, factor2, context$order1, context$order2)
         y_values <- c(y_values, stats_df$mean - stats_df$se, stats_df$mean + stats_df$se)
-        stratum_stats[[stratum]] <- list(
-          stats = stats_df,
-          raw = prepare_lineplot_raw_data(subset_data, resp, factor1, factor2)
+        stratum_plots[[stratum]] <- build_line_plot_panel(
+          stats_df = stats_df,
+          title_text = stratum,
+          y_limits = NULL,
+          factor1 = factor1,
+          factor2 = factor2,
+          line_colors = line_colors,
+          base_size = base_size,
+          raw_data = prepare_lineplot_raw_data(subset_data, resp, factor1, factor2),
+          response_var = resp,
+          show_lines = show_lines,
+          show_jitter = show_jitter,
+          use_dodge = use_dodge
         )
       }
 
-      if (length(stratum_stats) == 0) {
+      if (length(stratum_plots) == 0) {
         next
       }
 
@@ -1178,43 +1241,18 @@ plot_anova_lineplot_meanse <- function(data,
         y_limits <- NULL
       }
 
-      strata_panel_count <- max(strata_panel_count, length(stratum_stats))
+      strata_panel_count <- max(strata_panel_count, length(stratum_plots))
 
-      strata_plot_list <- lapply(names(stratum_stats), function(stratum_name) {
-        entry <- stratum_stats[[stratum_name]]
-        build_line_plot_panel(
-          stats_df = entry$stats,
-          title_text = stratum_name,
-          y_limits = y_limits,
-          factor1 = factor1,
-          factor2 = factor2,
-          line_colors = line_colors,
-          base_size = base_size,
-          raw_data = entry$raw,
-          response_var = resp,
-          show_lines = show_lines,
-          show_jitter = show_jitter,
-          use_dodge = use_dodge
-        )
+      stratum_plots <- lapply(stratum_plots, function(p) {
+        if (!is.null(y_limits)) {
+          p + coord_cartesian(ylim = y_limits)
+        } else {
+          p
+        }
       })
 
-      current_layout <- adjust_grid_layout(length(stratum_stats), context$strata_layout)
-
-      combined <- patchwork::wrap_plots(
-        plotlist = strata_plot_list,
-        nrow = current_layout$nrow,
-        ncol = current_layout$ncol
-      )
-
-      title_plot <- ggplot() +
-        theme_void() +
-        ggtitle(resp) +
-        theme(
-          plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
-          plot.margin = margin(t = 0, r = 0, b = 6, l = 0)
-        )
-
-      response_plots[[resp]] <- title_plot / combined + plot_layout(heights = c(0.08, 1))
+      panel_store[[resp]] <- stratum_plots
+      built_responses <- c(built_responses, resp)
     } else {
       stats_df <- anova_summarise_stats(data, resp, factor1, factor2)
       if (nrow(stats_df) == 0) {
@@ -1228,7 +1266,7 @@ plot_anova_lineplot_meanse <- function(data,
         y_limits <- NULL
       }
 
-      response_plots[[resp]] <- build_line_plot_panel(
+      panel_store[[resp]] <- list(build_line_plot_panel(
         stats_df = stats_df,
         title_text = resp,
         y_limits = y_limits,
@@ -1241,7 +1279,55 @@ plot_anova_lineplot_meanse <- function(data,
         show_lines = show_lines,
         show_jitter = show_jitter,
         use_dodge = use_dodge
-      )
+      ))
+      built_responses <- c(built_responses, resp)
+    }
+  }
+
+  if (length(panel_store) == 0) {
+    return(NULL)
+  }
+
+  context$plot_title <- compose_anova_plot_title(
+    "Lineplots (mean ± SE)",
+    built_responses,
+    context$has_strata,
+    context$strata_levels
+  )
+  context$active_responses <- built_responses
+
+  placeholder <- ggplot() + theme_void(base_size = base_size)
+  strata_layout_for_padding <- if (context$has_strata) {
+    adjust_grid_layout(max(1L, strata_panel_count), context$strata_layout)
+  } else {
+    list(nrow = 1L, ncol = 1L)
+  }
+  slots_per_response <- strata_layout_for_padding$nrow * strata_layout_for_padding$ncol
+
+  stratum_order <- context$strata_levels
+  if (length(stratum_order) == 0) {
+    stratum_order <- unique(unlist(lapply(panel_store, names)))
+  }
+
+  response_plots <- list()
+  for (resp in built_responses) {
+    resp_panels <- panel_store[[resp]]
+    if (!context$has_strata) {
+      response_plots <- c(response_plots, resp_panels)
+    } else {
+      ordered <- list()
+      for (level in stratum_order) {
+        if (!is.null(resp_panels[[level]])) {
+          ordered <- c(ordered, list(resp_panels[[level]]))
+        } else {
+          ordered <- c(ordered, list(placeholder))
+        }
+        if (length(ordered) == slots_per_response) break
+      }
+      while (length(ordered) < slots_per_response) {
+        ordered <- c(ordered, list(placeholder))
+      }
+      response_plots <- c(response_plots, ordered[seq_len(slots_per_response)])
     }
   }
 
@@ -1278,7 +1364,7 @@ build_bar_plot_panel <- function(stats_df,
       )
     )
   }
-  
+
   build_two_factor_barplot(
     stats_df,
     title_text,
@@ -1303,7 +1389,7 @@ build_single_factor_barplot <- function(stats_df,
                                         base_size,
                                         posthoc_entry) {
   format_numeric_labels <- scales::label_number(accuracy = 0.01, trim = TRUE)
-  
+
   plot_obj <- ggplot(stats_df, aes(x = !!sym(factor1), y = mean)) +
     geom_col(fill = base_fill, width = 0.6, alpha = 0.8) +
     geom_errorbar(
@@ -1313,9 +1399,8 @@ build_single_factor_barplot <- function(stats_df,
       linewidth = 0.5
     ) +
     theme_minimal(base_size = base_size) +
-    labs(x = factor1, y = "Mean ± SE", title = title_text) +
+    labs(x = factor1, y = "Mean ± SE") +
     theme(
-      plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
       axis.title.x = element_text(margin = margin(t = 6)),
       axis.title.y = element_text(margin = margin(r = 6)),
       panel.grid.minor = element_blank(),
@@ -1349,16 +1434,18 @@ build_two_factor_barplot <- function(stats_df,
                                      nested_posthoc = NULL) {
 
   format_numeric_labels <- scales::label_number(accuracy = 0.01, trim = TRUE)
-  
+
   group_levels <- if (is.factor(stats_df[[factor2]])) {
     levels(stats_df[[factor2]])
   } else {
     unique(as.character(stats_df[[factor2]]))
   }
   group_levels <- group_levels[!is.na(group_levels)]
-  palette <- resolve_palette_for_levels(group_levels, custom = line_colors)
+  if (length(group_levels) > 0) {
+    stats_df[[factor2]] <- factor(as.character(stats_df[[factor2]]), levels = group_levels)
+  }
   dodge <- position_dodge(width = 0.7)
-  
+
   plot_obj <- ggplot(stats_df, aes(x = !!sym(factor1), y = mean, fill = !!sym(factor2))) +
     geom_col(position = dodge, width = 0.6, alpha = 0.85) +
     geom_errorbar(
@@ -1369,17 +1456,15 @@ build_two_factor_barplot <- function(stats_df,
       linewidth = 0.5
     ) +
     theme_minimal(base_size = base_size) +
-    labs(x = factor1, y = "Mean ± SE", fill = factor2, title = title_text) +
+    labs(x = factor1, y = "Mean ± SE", fill = factor2) +
     theme(
-      plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
       axis.title.x = element_text(margin = margin(t = 6)),
       axis.title.y = element_text(margin = margin(r = 6)),
       panel.grid.minor = element_blank(),
       panel.grid.major.x = element_blank(),
       panel.grid.major.y = element_line(color = "gray90"),
       axis.text.x = element_text(angle = 30, hjust = 1)
-    ) +
-    scale_fill_manual(values = palette)
+    )
   
   if (isTRUE(show_value_labels)) {
     plot_obj <- add_grouped_bar_value_labels(plot_obj, stats_df, factor1, factor2, format_numeric_labels, dodge, base_size)
@@ -1617,44 +1702,66 @@ plot_anova_barplot_meanse <- function(data,
   data <- context$data
   factor1 <- context$factor1
   factor2 <- context$factor2
-  
+
   if (is.null(factor1) || length(context$responses) == 0) {
     return(NULL)
   }
-  
+
   base_fill <- if (!is.null(line_colors) && length(line_colors) > 0) {
     unname(line_colors)[1]
   } else {
     "#3E8FC4"
   }
-  
-  response_plots <- list()
+
+  context$scale_info <- NULL
+  if (!is.null(factor2) && factor2 %in% names(data)) {
+    level_values <- if (is.factor(data[[factor2]])) {
+      levels(data[[factor2]])
+    } else {
+      unique(as.character(stats::na.omit(data[[factor2]])))
+    }
+    level_values <- level_values[!is.na(level_values)]
+    if (length(level_values) > 0) {
+      palette <- resolve_palette_for_levels(level_values, custom = line_colors)
+      context$scale_info <- list(
+        aesthetic = "fill",
+        values = palette,
+        name = factor2
+      )
+    }
+  }
+
+  panel_store <- list()
+  built_responses <- character()
   strata_panel_count <- context$initial_strata_panels
-  
+
   for (resp in context$responses) {
     posthoc_entry <- NULL
     if (!is.null(posthoc_all) && !is.null(posthoc_all[[resp]])) {
       posthoc_entry <- posthoc_all[[resp]]
     }
-    
+
     if (context$has_strata && !is.null(context$strat_var) && context$strat_var %in% names(data)) {
       stratum_plots <- list()
-      
+
       for (stratum in context$strata_levels) {
         subset_rows <- !is.na(data[[context$strat_var]]) & data[[context$strat_var]] == stratum
         subset_data <- data[subset_rows, , drop = FALSE]
-        if (nrow(subset_data) == 0) next
-        
+        if (nrow(subset_data) == 0) {
+          next
+        }
+
         stats_df <- anova_summarise_stats(subset_data, resp, factor1, factor2)
-        if (nrow(stats_df) == 0) next
-        
+        if (nrow(stats_df) == 0) {
+          next
+        }
+
         stats_df <- apply_anova_factor_levels(stats_df, factor1, factor2, context$order1, context$order2)
-        
         stratum_posthoc <- NULL
         if (!is.null(posthoc_entry) && !is.null(posthoc_entry[[stratum]])) {
           stratum_posthoc <- posthoc_entry[[stratum]]
         }
-        
+
         stratum_plots[[stratum]] <- build_bar_plot_panel(
           stats_df = stats_df,
           title_text = stratum,
@@ -1668,30 +1775,22 @@ plot_anova_barplot_meanse <- function(data,
           nested_posthoc = stratum_posthoc
         )
       }
-      
-      if (length(stratum_plots) > 0) {
-        strata_panel_count <- max(strata_panel_count, length(stratum_plots))
-        current_layout <- adjust_grid_layout(length(stratum_plots), context$strata_layout)
-        combined <- patchwork::wrap_plots(
-          plotlist = stratum_plots,
-          nrow = current_layout$nrow,
-          ncol = current_layout$ncol
-        )
-        
-        title_plot <- ggplot() +
-          theme_void() +
-          ggtitle(resp) +
-          theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5))
-        
-        response_plots[[resp]] <- title_plot / combined + patchwork::plot_layout(heights = c(0.08, 1))
+
+      if (length(stratum_plots) == 0) {
+        next
       }
+
+      strata_panel_count <- max(strata_panel_count, length(stratum_plots))
+      panel_store[[resp]] <- stratum_plots
+      built_responses <- c(built_responses, resp)
     } else {
       stats_df <- anova_summarise_stats(data, resp, factor1, factor2)
-      if (nrow(stats_df) == 0) next
-      
+      if (nrow(stats_df) == 0) {
+        next
+      }
+
       stats_df <- apply_anova_factor_levels(stats_df, factor1, factor2, context$order1, context$order2)
-      
-      response_plots[[resp]] <- build_bar_plot_panel(
+      panel_store[[resp]] <- list(build_bar_plot_panel(
         stats_df = stats_df,
         title_text = resp,
         factor1 = factor1,
@@ -1702,10 +1801,58 @@ plot_anova_barplot_meanse <- function(data,
         base_size = base_size,
         posthoc_entry = posthoc_entry,
         nested_posthoc = posthoc_entry
-      )
+      ))
+      built_responses <- c(built_responses, resp)
     }
   }
-  
+
+  if (length(panel_store) == 0) {
+    return(NULL)
+  }
+
+  context$plot_title <- compose_anova_plot_title(
+    "Barplots (mean ± SE)",
+    built_responses,
+    context$has_strata,
+    context$strata_levels
+  )
+  context$active_responses <- built_responses
+
+  placeholder <- ggplot() + theme_void(base_size = base_size)
+  strata_layout_for_padding <- if (context$has_strata) {
+    adjust_grid_layout(max(1L, strata_panel_count), context$strata_layout)
+  } else {
+    list(nrow = 1L, ncol = 1L)
+  }
+  slots_per_response <- strata_layout_for_padding$nrow * strata_layout_for_padding$ncol
+
+  stratum_order <- context$strata_levels
+  if (length(stratum_order) == 0) {
+    stratum_order <- unique(unlist(lapply(panel_store, names)))
+  }
+
+  response_plots <- list()
+  for (resp in built_responses) {
+    resp_panels <- panel_store[[resp]]
+    if (!context$has_strata) {
+      response_plots <- c(response_plots, resp_panels)
+    } else {
+      ordered <- list()
+      for (level in stratum_order) {
+        if (!is.null(resp_panels[[level]])) {
+          ordered <- c(ordered, list(resp_panels[[level]]))
+        } else {
+          ordered <- c(ordered, list(placeholder))
+        }
+        if (length(ordered) == slots_per_response) break
+      }
+      while (length(ordered) < slots_per_response) {
+        ordered <- c(ordered, list(placeholder))
+      }
+      response_plots <- c(response_plots, ordered[seq_len(slots_per_response)])
+    }
+  }
+
   finalize_anova_plot_result(
     response_plots = response_plots,
     context = context,
