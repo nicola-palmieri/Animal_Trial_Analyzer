@@ -872,6 +872,46 @@ apply_anova_factor_levels <- function(stats_df, factor1, factor2, order1, order2
   stats_df
 }
 
+add_theme_to_plot <- function(plot_obj, theme_obj) {
+  if (inherits(plot_obj, "patchwork")) {
+    plot_obj & theme_obj
+  } else {
+    plot_obj + theme_obj
+  }
+}
+
+collect_guides_safe <- function(plot_obj) {
+  if (is.null(plot_obj) || !inherits(plot_obj, "patchwork")) {
+    return(plot_obj)
+  }
+  if (!requireNamespace("patchwork", quietly = TRUE)) {
+    return(plot_obj)
+  }
+  exports <- tryCatch(getNamespaceExports("patchwork"), error = function(...) character())
+  if ("collect_guides" %in% exports) {
+    patchwork::collect_guides(plot_obj)
+  } else {
+    plot_obj & patchwork::plot_layout(guides = "collect")
+  }
+}
+
+apply_common_legend_layout <- function(plot_obj,
+                                       legend_position = NULL,
+                                       collect_guides = FALSE) {
+  if (is.null(plot_obj)) return(plot_obj)
+
+  updated <- plot_obj
+  if (collect_guides) {
+    updated <- collect_guides_safe(updated)
+  }
+
+  if (!is.null(legend_position)) {
+    updated <- add_theme_to_plot(updated, theme(legend.position = legend_position))
+  }
+
+  updated
+}
+
 finalize_anova_plot_result <- function(response_plots,
                                        context,
                                        strata_panel_count,
@@ -930,18 +970,18 @@ finalize_anova_plot_result <- function(response_plots,
         final_plot <- final_plot & theme(legend.position = legend_position)
       }
     } else {
-      combined <- patchwork::wrap_plots(
+      final_plot <- patchwork::wrap_plots(
         plotlist = response_plots,
         nrow = response_layout$nrow,
         ncol = response_layout$ncol
       )
-      if (collect_guides) {
-        combined <- combined & patchwork::plot_layout(guides = "collect")
-        if (!is.null(legend_position)) {
-          combined <- combined & theme(legend.position = legend_position)
-        }
-      }
-      final_plot <- combined
+    }
+    if (collect_guides || !is.null(legend_position)) {
+      final_plot <- apply_common_legend_layout(
+        final_plot,
+        legend_position = legend_position,
+        collect_guides = collect_guides
+      )
     }
   }
 

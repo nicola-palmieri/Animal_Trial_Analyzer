@@ -147,6 +147,21 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
 
     active <- reactive(TRUE)
 
+    legend_state <- reactiveValues(
+      enabled = FALSE,
+      position = "bottom"
+    )
+
+    observeEvent(input$use_common_legend, {
+      req(!is.null(input$use_common_legend))
+      legend_state$enabled <- isTRUE(input$use_common_legend)
+    }, ignoreNULL = TRUE)
+
+    observeEvent(input$common_legend_position, {
+      req(!is.null(input$common_legend_position))
+      legend_state$position <- input$common_legend_position
+    }, ignoreNULL = TRUE)
+
     common_legend_available <- reactive({
       info <- model_info()
       if (is.null(info)) {
@@ -155,6 +170,12 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
       has_multiple_responses <- length(info$responses %||% character()) > 1
       has_strata <- !is.null(info$strata) && !is.null(info$strata$var)
       has_multiple_responses || has_strata
+    })
+
+    observeEvent(common_legend_available(), {
+      if (!isTRUE(common_legend_available())) {
+        legend_state$enabled <- FALSE
+      }
     })
 
     output$common_legend_controls <- renderUI({
@@ -168,13 +189,13 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
           checkboxInput(
             ns("use_common_legend"),
             "Use common legend",
-            value = FALSE
+            value = isTRUE(legend_state$enabled)
           ),
           "Merge the legends across responses or strata into a single shared legend."
         )
       )
 
-      legend_position <- if (isTRUE(input$use_common_legend)) {
+      legend_position <- if (isTRUE(legend_state$enabled)) {
         div(
           class = "mt-2",
           with_help_tooltip(
@@ -187,7 +208,7 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
                 "Top" = "top",
                 "Left" = "left"
               ),
-              selected = input$common_legend_position %||% "bottom"
+              selected = legend_state$position %||% "bottom"
             ),
             "Choose where the combined legend should be displayed."
           )
@@ -202,8 +223,8 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
     state <- reactive({
       use_common_legend <- isTRUE(common_legend_available()) &&
         input$plot_type == "lineplot_mean_se" &&
-        isTRUE(input$use_common_legend)
-      legend_pos <- input$common_legend_position
+        isTRUE(legend_state$enabled)
+      legend_pos <- legend_state$position
       valid_positions <- c("bottom", "top", "left", "right")
       resolved_position <- if (!is.null(legend_pos) && legend_pos %in% valid_positions) {
         legend_pos
