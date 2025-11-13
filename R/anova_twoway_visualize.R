@@ -179,7 +179,8 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
     })
 
     output$common_legend_controls <- renderUI({
-      if (!isTRUE(common_legend_available()) || input$plot_type != "lineplot_mean_se") {
+      legend_supported <- input$plot_type %in% c("lineplot_mean_se", "barplot_mean_se")
+      if (!isTRUE(common_legend_available()) || !legend_supported) {
         return(NULL)
       }
 
@@ -221,8 +222,9 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
     })
 
     state <- reactive({
+      legend_supported <- input$plot_type %in% c("lineplot_mean_se", "barplot_mean_se")
       use_common_legend <- isTRUE(common_legend_available()) &&
-        input$plot_type == "lineplot_mean_se" &&
+        legend_supported &&
         isTRUE(legend_state$enabled)
       legend_pos <- legend_state$position
       valid_positions <- c("bottom", "top", "left", "right")
@@ -320,7 +322,9 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
           show_value_labels = show_labels,
           base_size = base_size_value,
           posthoc_all = info$posthoc,
-          share_y_axis = share_y_axis
+          share_y_axis = share_y_axis,
+          common_legend = common_legend,
+          legend_position = legend_position
         )
       )
     }

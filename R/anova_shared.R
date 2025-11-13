@@ -1925,11 +1925,20 @@ plot_anova_barplot_meanse <- function(data,
                                       show_value_labels = FALSE,
                                       base_size = 14,
                                       posthoc_all = NULL,
-                                      share_y_axis = FALSE) {
+                                      share_y_axis = FALSE,
+                                      common_legend = FALSE,
+                                      legend_position = NULL) {
   context <- initialize_anova_plot_context(data, info, layout_values)
   data <- context$data
   factor1 <- context$factor1
   factor2 <- context$factor2
+
+  allowed_positions <- c("bottom", "top", "left", "right")
+  legend_position_value <- if (!is.null(legend_position) && legend_position %in% allowed_positions) {
+    legend_position
+  } else {
+    "bottom"
+  }
 
   if (is.null(factor1) || length(context$responses) == 0) {
     return(NULL)
@@ -2031,7 +2040,8 @@ plot_anova_barplot_meanse <- function(data,
     response_plots = response_plots,
     context = context,
     strata_panel_count = strata_panel_count,
-    collect_guides = FALSE
+    collect_guides = isTRUE(common_legend),
+    legend_position = if (isTRUE(common_legend)) legend_position_value else NULL
   )
 }
 
