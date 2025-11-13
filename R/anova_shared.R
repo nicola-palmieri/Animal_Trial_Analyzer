@@ -875,7 +875,8 @@ apply_anova_factor_levels <- function(stats_df, factor1, factor2, order1, order2
 finalize_anova_plot_result <- function(response_plots,
                                        context,
                                        strata_panel_count,
-                                       collect_guides = FALSE) {
+                                       collect_guides = FALSE,
+                                       legend_position = NULL) {
   if (length(response_plots) == 0) {
     return(NULL)
   }
@@ -925,6 +926,9 @@ finalize_anova_plot_result <- function(response_plots,
   if (is.null(warning_text)) {
     if (length(response_plots) == 1) {
       final_plot <- response_plots[[1]]
+      if (collect_guides && !is.null(legend_position)) {
+        final_plot <- final_plot & theme(legend.position = legend_position)
+      }
     } else {
       combined <- patchwork::wrap_plots(
         plotlist = response_plots,
@@ -932,7 +936,11 @@ finalize_anova_plot_result <- function(response_plots,
         ncol = response_layout$ncol
       )
       final_plot <- if (collect_guides) {
-        combined & patchwork::plot_layout(guides = "collect")
+        collected <- combined & patchwork::plot_layout(guides = "collect")
+        if (!is.null(legend_position)) {
+          collected <- collected & theme(legend.position = legend_position)
+        }
+        collected
       } else {
         combined
       }
@@ -1125,7 +1133,9 @@ plot_anova_lineplot_meanse <- function(data,
                                        base_size = 14,
                                        show_lines = FALSE,
                                        show_jitter = FALSE,
-                                       use_dodge = FALSE) {
+                                       use_dodge = FALSE,
+                                       collect_common_legend = TRUE,
+                                       legend_position = NULL) {
   context <- initialize_anova_plot_context(data, info, layout_values)
   data <- context$data
   factor1 <- context$factor1
@@ -1239,7 +1249,8 @@ plot_anova_lineplot_meanse <- function(data,
     response_plots = response_plots,
     context = context,
     strata_panel_count = strata_panel_count,
-    collect_guides = TRUE
+    collect_guides = isTRUE(collect_common_legend),
+    legend_position = legend_position
   )
 }
 
@@ -1599,7 +1610,9 @@ plot_anova_barplot_meanse <- function(data,
                                       line_colors = NULL,
                                       show_value_labels = FALSE,
                                       base_size = 14,
-                                      posthoc_all = NULL) {
+                                      posthoc_all = NULL,
+                                      collect_common_legend = FALSE,
+                                      legend_position = NULL) {
   context <- initialize_anova_plot_context(data, info, layout_values)
   data <- context$data
   factor1 <- context$factor1
@@ -1697,7 +1710,8 @@ plot_anova_barplot_meanse <- function(data,
     response_plots = response_plots,
     context = context,
     strata_panel_count = strata_panel_count,
-    collect_guides = FALSE
+    collect_guides = isTRUE(collect_common_legend),
+    legend_position = legend_position
   )
 }
 
