@@ -72,7 +72,7 @@ two_way_anova_server <- function(id, filtered_data) {
     # -----------------------------------------------------------
     output$level_order_1 <- renderUI({
       req(filtered_data(), input$factor1)
-      levels1 <- unique(as.character(filtered_data()[[input$factor1]]))
+      levels1 <- resolve_order_levels(filtered_data()[[input$factor1]])
       with_help_tooltip(
         selectInput(
           ns("order1"),
@@ -87,7 +87,7 @@ two_way_anova_server <- function(id, filtered_data) {
     
     output$level_order_2 <- renderUI({
       req(filtered_data(), input$factor2)
-      levels2 <- unique(as.character(filtered_data()[[input$factor2]]))
+      levels2 <- resolve_order_levels(filtered_data()[[input$factor2]])
       with_help_tooltip(
         selectInput(
           ns("order2"),

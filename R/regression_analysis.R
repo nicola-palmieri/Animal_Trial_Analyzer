@@ -416,11 +416,7 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
       tagList(
         lapply(fac_vars, function(var) {
           values <- df[[var]]
-          if (is.factor(values)) lvls <- levels(values)
-          else {
-            values <- values[!is.na(values)]
-            lvls <- unique(as.character(values))
-          }
+          lvls <- resolve_order_levels(values)
           with_help_tooltip(
             selectInput(
               ns(paste0("order_", var)),

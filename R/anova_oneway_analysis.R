@@ -62,7 +62,7 @@ one_way_anova_server <- function(id, filtered_data) {
     
     output$level_order <- renderUI({
       req(filtered_data(), input$group)
-      levels <- unique(as.character(filtered_data()[[input$group]]))
+      levels <- resolve_order_levels(filtered_data()[[input$group]])
       with_help_tooltip(
         selectInput(
           ns("order"),
