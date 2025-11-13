@@ -83,10 +83,13 @@ visualize_twoway_ui <- function(id) {
       uiOutput(ns("layout_controls")),
       fluidRow(
         column(6, add_color_customization_ui(ns, multi_group = TRUE)),
-        column(6, base_size_ui(
-          ns,
-          default = 13,
-          help_text = "Adjust the base font size used for the ANOVA plots."
+        column(6, tagList(
+          base_size_ui(
+            ns,
+            default = 13,
+            help_text = "Adjust the base font size used for the ANOVA plots."
+          ),
+          uiOutput(ns("common_legend_controls"))
         ))
       ),
       br(),
@@ -141,10 +144,93 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
     base_size <- base_size_server(input, default = 13)
     strata_grid <- plot_grid_server("strata_grid")
     response_grid <- plot_grid_server("response_grid")
-    
+
     active <- reactive(TRUE)
-    
+
+    legend_state <- reactiveValues(
+      enabled = FALSE,
+      position = "bottom"
+    )
+
+    observeEvent(input$use_common_legend, {
+      req(!is.null(input$use_common_legend))
+      legend_state$enabled <- isTRUE(input$use_common_legend)
+    }, ignoreNULL = TRUE)
+
+    observeEvent(input$common_legend_position, {
+      req(!is.null(input$common_legend_position))
+      legend_state$position <- input$common_legend_position
+    }, ignoreNULL = TRUE)
+
+    common_legend_available <- reactive({
+      info <- model_info()
+      if (is.null(info)) {
+        return(FALSE)
+      }
+      has_multiple_responses <- length(info$responses %||% character()) > 1
+      has_strata <- !is.null(info$strata) && !is.null(info$strata$var)
+      has_multiple_responses || has_strata
+    })
+
+    observeEvent(common_legend_available(), {
+      if (!isTRUE(common_legend_available())) {
+        legend_state$enabled <- FALSE
+      }
+    })
+
+    output$common_legend_controls <- renderUI({
+      if (!isTRUE(common_legend_available()) || input$plot_type != "lineplot_mean_se") {
+        return(NULL)
+      }
+
+      checkbox <- div(
+        class = "mt-3",
+        with_help_tooltip(
+          checkboxInput(
+            ns("use_common_legend"),
+            "Use common legend",
+            value = isTRUE(legend_state$enabled)
+          ),
+          "Merge the legends across responses or strata into a single shared legend."
+        )
+      )
+
+      legend_position <- if (isTRUE(legend_state$enabled)) {
+        div(
+          class = "mt-2",
+          with_help_tooltip(
+            selectInput(
+              ns("common_legend_position"),
+              "Legend position",
+              choices = c(
+                "Bottom" = "bottom",
+                "Right" = "right",
+                "Top" = "top",
+                "Left" = "left"
+              ),
+              selected = legend_state$position %||% "bottom"
+            ),
+            "Choose where the combined legend should be displayed."
+          )
+        )
+      } else {
+        NULL
+      }
+
+      tagList(checkbox, legend_position)
+    })
+
     state <- reactive({
+      use_common_legend <- isTRUE(common_legend_available()) &&
+        input$plot_type == "lineplot_mean_se" &&
+        isTRUE(legend_state$enabled)
+      legend_pos <- legend_state$position
+      valid_positions <- c("bottom", "top", "left", "right")
+      resolved_position <- if (!is.null(legend_pos) && legend_pos %in% valid_positions) {
+        legend_pos
+      } else {
+        "bottom"
+      }
       list(
         data        = df(),
         info        = model_info(),
@@ -159,7 +245,9 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
         use_dodge     = isTRUE(input$lineplot_use_dodge),
         show_jitter   = isTRUE(input$lineplot_show_jitter),
         plot_type     = input$plot_type,
-        share_y_axis  = isTRUE(input$share_y_axis)
+        share_y_axis  = isTRUE(input$share_y_axis),
+        common_legend = use_common_legend,
+        legend_position = if (use_common_legend) resolved_position else NULL
       )
     })
 
@@ -172,7 +260,9 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
                                   show_lines,
                                   show_jitter,
                                   use_dodge,
-                                  share_y_axis) {
+                                  share_y_axis,
+                                  common_legend = FALSE,
+                                  legend_position = NULL) {
       if (is.null(info) || !identical(info$type, "twoway_anova") || is.null(data) || nrow(data) == 0) {
         return(list(
           lineplot_mean_se = list(plot = NULL, warning = "No data or results available.", layout = NULL),
@@ -220,7 +310,9 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
           show_lines = show_lines,
           show_jitter = show_jitter,
           use_dodge = use_dodge,
-          share_y_axis = share_y_axis
+          share_y_axis = share_y_axis,
+          common_legend = common_legend,
+          legend_position = legend_position
         ),
         barplot_mean_se = plot_anova_barplot_meanse(
           data, info, layout_values = layout_inputs,
@@ -249,7 +341,9 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
         s$show_lines,
         s$show_jitter,
         s$use_dodge,
-        s$share_y_axis
+        s$share_y_axis,
+        s$common_legend,
+        s$legend_position
       )
       res[[if (!is.null(s$plot_type) && s$plot_type %in% names(res)) s$plot_type else "lineplot_mean_se"]]
     })
@@ -281,6 +375,8 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
         s$resp_rows,
         s$resp_cols,
         s$share_y_axis,
+        s$common_legend,
+        s$legend_position %||% "none",
         sep = "_"
       )
       if (!identical(key, cached_key())) {

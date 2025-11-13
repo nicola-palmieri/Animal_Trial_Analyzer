@@ -872,10 +872,51 @@ apply_anova_factor_levels <- function(stats_df, factor1, factor2, order1, order2
   stats_df
 }
 
+add_theme_to_plot <- function(plot_obj, theme_obj) {
+  if (inherits(plot_obj, "patchwork")) {
+    plot_obj & theme_obj
+  } else {
+    plot_obj + theme_obj
+  }
+}
+
+collect_guides_safe <- function(plot_obj) {
+  if (is.null(plot_obj) || !inherits(plot_obj, "patchwork")) {
+    return(plot_obj)
+  }
+  if (!requireNamespace("patchwork", quietly = TRUE)) {
+    return(plot_obj)
+  }
+  exports <- tryCatch(getNamespaceExports("patchwork"), error = function(...) character())
+  if ("collect_guides" %in% exports) {
+    patchwork::collect_guides(plot_obj)
+  } else {
+    plot_obj & patchwork::plot_layout(guides = "collect")
+  }
+}
+
+apply_common_legend_layout <- function(plot_obj,
+                                       legend_position = NULL,
+                                       collect_guides = FALSE) {
+  if (is.null(plot_obj)) return(plot_obj)
+
+  updated <- plot_obj
+  if (collect_guides) {
+    updated <- collect_guides_safe(updated)
+  }
+
+  if (!is.null(legend_position)) {
+    updated <- add_theme_to_plot(updated, theme(legend.position = legend_position))
+  }
+
+  updated
+}
+
 finalize_anova_plot_result <- function(response_plots,
                                        context,
                                        strata_panel_count,
-                                       collect_guides = FALSE) {
+                                       collect_guides = FALSE,
+                                       legend_position = NULL) {
   if (length(response_plots) == 0) {
     return(NULL)
   }
@@ -926,16 +967,18 @@ finalize_anova_plot_result <- function(response_plots,
     if (length(response_plots) == 1) {
       final_plot <- response_plots[[1]]
     } else {
-      combined <- patchwork::wrap_plots(
+      final_plot <- patchwork::wrap_plots(
         plotlist = response_plots,
         nrow = response_layout$nrow,
         ncol = response_layout$ncol
       )
-      final_plot <- if (collect_guides) {
-        combined & patchwork::plot_layout(guides = "collect")
-      } else {
-        combined
-      }
+    }
+    if (collect_guides || !is.null(legend_position)) {
+      final_plot <- apply_common_legend_layout(
+        final_plot,
+        legend_position = legend_position,
+        collect_guides = collect_guides
+      )
     }
   }
 
@@ -1195,11 +1238,20 @@ plot_anova_lineplot_meanse <- function(data,
                                        show_lines = FALSE,
                                        show_jitter = FALSE,
                                        use_dodge = FALSE,
-                                       share_y_axis = FALSE) {
+                                       share_y_axis = FALSE,
+                                       common_legend = FALSE,
+                                       legend_position = NULL) {
   context <- initialize_anova_plot_context(data, info, layout_values)
   data <- context$data
   factor1 <- context$factor1
   factor2 <- context$factor2
+
+  allowed_positions <- c("bottom", "top", "left", "right")
+  legend_position_value <- if (!is.null(legend_position) && legend_position %in% allowed_positions) {
+    legend_position
+  } else {
+    "bottom"
+  }
 
   shared_y_limits <- if (isTRUE(share_y_axis)) {
     compute_lineplot_shared_limits(context, data, factor1, factor2)
@@ -1322,7 +1374,8 @@ plot_anova_lineplot_meanse <- function(data,
     response_plots = response_plots,
     context = context,
     strata_panel_count = strata_panel_count,
-    collect_guides = TRUE
+    collect_guides = isTRUE(common_legend),
+    legend_position = if (isTRUE(common_legend)) legend_position_value else NULL
   )
 }
 
