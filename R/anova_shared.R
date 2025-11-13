@@ -1486,10 +1486,7 @@ add_significance_annotations <- function(plot_obj, stats_df, factor1, posthoc_en
   plot_obj <- plot_obj + ggsignif::geom_signif(
     data = signif_df,
     aes(
-      xmin = xmin,
-      xmax = xmax,
       annotations = annotations,
-      y_position = y_position,
       group = .group_id
     ),
     manual = TRUE,
@@ -1590,8 +1587,8 @@ add_nested_significance_annotations <- function(plot_obj, stats_df, factor1, fac
   # One layer total (manual=TRUE expects numeric x’s on the data)
   plot_obj <- plot_obj + ggsignif::geom_signif(
     data        = df,
-    aes(xmin = xmin, xmax = xmax, annotations = annotations,
-        y_position = y_position, group = .group_id),
+    aes(annotations = annotations,
+        group = .group_id),
     manual      = TRUE,
     inherit.aes = FALSE,
     textsize    = 3.5,
