@@ -22,7 +22,6 @@ visualize_oneway_ui <- function(id) {
         ),
         "Pick the chart style you prefer for comparing group means and error bars."
       ),
-      uiOutput(ns("layout_controls")),
       conditionalPanel(
         condition = sprintf("input['%s'] === 'barplot_mean_se'", ns("plot_type")),
         with_help_tooltip(
@@ -65,6 +64,7 @@ visualize_oneway_ui <- function(id) {
           "Adjust how tall each subplot should be in pixels."
         ))
       ),
+      uiOutput(ns("layout_controls")),
       fluidRow(
         column(6, add_color_customization_ui(ns, multi_group = FALSE)),
         column(6, base_size_ui(
