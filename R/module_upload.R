@@ -24,14 +24,7 @@ upload_ui <- function(id) {
         "Decide whether to explore the built-in example data or load your own table."
       ),
       uiOutput(ns("layout_example")),
-      with_help_tooltip(
-        fileInput(
-          ns("file"),
-          "Upload Excel file (.xlsx / .xls / .xlsm)",
-          accept = c(".xlsx", ".xls", ".xlsm")
-        ),
-        "Provide the Excel workbook that stores your study measurements."
-      ),
+      uiOutput(ns("file_input")),
       uiOutput(ns("sheet_selector")),
       uiOutput(ns("type_selectors"))
     ),
@@ -113,6 +106,22 @@ upload_server <- function(id) {
         render_validation("Please upload an Excel file.")
       }
     }, ignoreInit = FALSE)
+
+    output$file_input <- renderUI({
+      req(input$data_source)
+      if (input$data_source == "example") {
+        return(NULL)
+      }
+
+      with_help_tooltip(
+        fileInput(
+          ns("file"),
+          "Upload Excel file (.xlsx / .xls / .xlsm)",
+          accept = c(".xlsx", ".xls", ".xlsm")
+        ),
+        "Provide the Excel workbook that stores your study measurements."
+      )
+    })
     
     # -----------------------------------------------------------
     # 2️⃣ Example layout preview
