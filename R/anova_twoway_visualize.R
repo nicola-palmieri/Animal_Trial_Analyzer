@@ -62,6 +62,14 @@ visualize_twoway_ui <- function(id) {
           ))
         )
       ),
+      with_help_tooltip(
+        checkboxInput(
+          ns("share_y_axis"),
+          "Use common y-axis across plots",
+          value = FALSE
+        ),
+        "Lock the y-axis range so every subplot uses the same scale."
+      ),
       fluidRow(
         column(6, with_help_tooltip(
           numericInput(ns("plot_width"),  "Subplot width (px)",  value = 400, min = 200, max = 1200, step = 50),
@@ -144,13 +152,14 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
         strata_cols = strata_grid$cols(),
         resp_rows   = response_grid$rows(),
         resp_cols   = response_grid$cols(),
-        colors      = custom_colors(),
-        base_size   = base_size(),
-        show_labels = isTRUE(input$show_bar_labels),
-        show_lines  = isTRUE(input$lineplot_show_lines),
-        use_dodge   = isTRUE(input$lineplot_use_dodge),
-        show_jitter = isTRUE(input$lineplot_show_jitter),
-        plot_type   = input$plot_type
+        colors        = custom_colors(),
+        base_size     = base_size(),
+        show_labels   = isTRUE(input$show_bar_labels),
+        show_lines    = isTRUE(input$lineplot_show_lines),
+        use_dodge     = isTRUE(input$lineplot_use_dodge),
+        show_jitter   = isTRUE(input$lineplot_show_jitter),
+        plot_type     = input$plot_type,
+        share_y_axis  = isTRUE(input$share_y_axis)
       )
     })
 
@@ -162,7 +171,8 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
                                   show_labels,
                                   show_lines,
                                   show_jitter,
-                                  use_dodge) {
+                                  use_dodge,
+                                  share_y_axis) {
       if (is.null(info) || !identical(info$type, "twoway_anova") || is.null(data) || nrow(data) == 0) {
         return(list(
           lineplot_mean_se = list(plot = NULL, warning = "No data or results available.", layout = NULL),
@@ -176,14 +186,16 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
           base_size = base_size_value,
           show_lines = show_lines,
           show_jitter = show_jitter,
-          use_dodge = use_dodge
+          use_dodge = use_dodge,
+          share_y_axis = share_y_axis
         ),
         barplot_mean_se = plot_anova_barplot_meanse(
           data, info, layout_values = layout_inputs,
           line_colors = colors,
           show_value_labels = show_labels,
           base_size = base_size_value,
-          posthoc_all = info$posthoc
+          posthoc_all = info$posthoc,
+          share_y_axis = share_y_axis
         )
       )
     }
@@ -203,7 +215,8 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
         s$show_labels,
         s$show_lines,
         s$show_jitter,
-        s$use_dodge
+        s$use_dodge,
+        s$share_y_axis
       )
       res[[if (!is.null(s$plot_type) && s$plot_type %in% names(res)) s$plot_type else "lineplot_mean_se"]]
     })
@@ -234,6 +247,7 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
         s$strata_cols,
         s$resp_rows,
         s$resp_cols,
+        s$share_y_axis,
         sep = "_"
       )
       if (!identical(key, cached_key())) {
