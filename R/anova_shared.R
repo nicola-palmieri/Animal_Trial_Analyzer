@@ -966,6 +966,9 @@ finalize_anova_plot_result <- function(response_plots,
   if (is.null(warning_text)) {
     if (length(response_plots) == 1) {
       final_plot <- response_plots[[1]]
+      if (collect_guides && !is.null(legend_position)) {
+        final_plot <- final_plot & theme(legend.position = legend_position)
+      }
     } else {
       final_plot <- patchwork::wrap_plots(
         plotlist = response_plots,
@@ -1324,6 +1327,10 @@ plot_anova_lineplot_meanse <- function(data,
         nrow = current_layout$nrow,
         ncol = current_layout$ncol
       )
+
+      if (isTRUE(common_legend)) {
+        combined <- combined & patchwork::plot_layout(guides = "collect")
+      }
 
       title_plot <- ggplot() +
         theme_void() +
