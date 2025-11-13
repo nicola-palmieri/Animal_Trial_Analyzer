@@ -489,6 +489,7 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
       df <- data()
       responses <- selected_responses()
       req(length(responses) > 0)
+      validate_numeric_columns(df, responses, "response variable(s)")
 
       rhs <- reg_compose_rhs(
         input$fixed,

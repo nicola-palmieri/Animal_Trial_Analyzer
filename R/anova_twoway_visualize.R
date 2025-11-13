@@ -179,6 +179,39 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
           barplot_mean_se  = list(plot = NULL, warning = "No data or results available.", layout = NULL)
         ))
       }
+
+      responses <- info$responses
+      if (!is.null(responses) && length(responses) > 0 && is.data.frame(data)) {
+        missing_cols <- setdiff(responses, names(data))
+        if (length(missing_cols) > 0) {
+          message <- sprintf(
+            "The following response variable(s) are no longer available in the dataset: %s.",
+            paste(missing_cols, collapse = ", ")
+          )
+        } else {
+          non_numeric <- responses[!vapply(responses, function(col) is.numeric(data[[col]]), logical(1))]
+          message <- if (length(non_numeric) > 0) {
+            sprintf(
+              "The selected response variable(s) must be numeric for visualization. Please update their type in the Upload tab: %s.",
+              paste(non_numeric, collapse = ", ")
+            )
+          } else {
+            NULL
+          }
+        }
+
+        if (!is.null(message)) {
+          placeholder_layout <- list(
+            strata = list(rows = 1L, cols = 1L),
+            responses = list(rows = 1L, cols = 1L)
+          )
+          placeholder <- list(plot = NULL, warning = message, layout = placeholder_layout)
+          return(list(
+            lineplot_mean_se = placeholder,
+            barplot_mean_se  = placeholder
+          ))
+        }
+      }
       list(
         lineplot_mean_se = plot_anova_lineplot_meanse(
           data, info, layout_inputs,
