@@ -149,7 +149,7 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
 
     common_legend_available <- reactive({
       info <- model_info()
-      if (is.null(info)) {
+      if (is.null(info) || !identical(info$type, "twoway_anova")) {
         return(FALSE)
       }
       has_multiple_responses <- length(info$responses %||% character()) > 1
@@ -208,7 +208,7 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
 
     single_subplot <- reactive({
       info <- model_info()
-      if (is.null(info)) {
+      if (is.null(info) || !identical(info$type, "twoway_anova")) {
         return(FALSE)
       }
 
