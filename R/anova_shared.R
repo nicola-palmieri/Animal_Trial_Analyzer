@@ -971,6 +971,9 @@ finalize_anova_plot_result <- function(response_plots,
   if (is.null(warning_text)) {
     if (length(response_plots) == 1) {
       final_plot <- response_plots[[1]]
+      if (collect_guides && !is.null(legend_position)) {
+        final_plot <- final_plot & theme(legend.position = legend_position)
+      }
     } else {
       final_plot <- patchwork::wrap_plots(
         plotlist = response_plots,
