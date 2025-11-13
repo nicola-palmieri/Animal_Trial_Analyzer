@@ -52,9 +52,7 @@ stratification_server <- function(id, data) {
       d <- req(df())
       
       values <- d[[input$stratify_var]]
-      values <- values[!is.na(values)]
-      available_levels <- if (is.factor(values)) levels(values) else unique(as.character(values))
-      available_levels <- available_levels[nzchar(available_levels)]
+      available_levels <- resolve_order_levels(values)
       
       n_levels <- length(available_levels)
       validate(need(n_levels <= MAX_STRATIFICATION_LEVELS,
