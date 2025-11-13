@@ -217,6 +217,10 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
         s$show_jitter,
         s$colors,
         s$base_size,
+        s$strata_rows,
+        s$strata_cols,
+        s$resp_rows,
+        s$resp_cols,
         sep = "_"
       )
       if (!identical(key, cached_key())) {

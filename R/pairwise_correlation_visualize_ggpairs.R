@@ -37,218 +37,249 @@ pairwise_correlation_visualize_ggpairs_ui <- function(id) {
 }
 
 
-pairwise_correlation_visualize_ggpairs_server <- function(id, filtered_data, correlation_info) {
+pairwise_correlation_visualize_ggpairs_server <- function(
+    id, filtered_data, correlation_info
+) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
-    sanitize_numeric <- function(value, default, min_val, max_val) {
-      v <- suppressWarnings(as.numeric(value))
-      if (!length(v) || is.na(v)) return(default)
-      max(min_val, min(max_val, v))
+    # ---- Helpers -------------------------------------------------------------
+    sanitize <- function(x, default) {
+      v <- suppressWarnings(as.numeric(x))
+      if (is.na(v) || length(v) == 0) default else v
     }
     
-    plot_width  <- reactive(sanitize_numeric(input$plot_width,  800, 200, 2000))
-    plot_height <- reactive(sanitize_numeric(input$plot_height, 600, 200, 2000))
+    # ---- Reactives -----------------------------------------------------------
+    df <- reactive(filtered_data())
     
-    color_var_reactive <- reactive({
+    group_var <- reactive({
       info <- correlation_info()
-      if (is.null(info)) return(NULL)
-      group_var <- resolve_reactive(info$group_var)
-      if (is.null(group_var)) return(NULL)
-      group_var <- as.character(group_var)[1]
-      if (identical(group_var, "None") || !nzchar(group_var)) return(NULL)
-      dat <- filtered_data()
-      if (!is.data.frame(dat) || !group_var %in% names(dat)) return(NULL)
-      group_var
+      g <- resolve_reactive(info$group_var)
+      if (is.null(info) || is.null(g) || g == "" || g == "None") return(NULL)
+      dat <- df()
+      if (!is.data.frame(dat) || !g %in% names(dat)) return(NULL)
+      g
     })
     
-    strata_level_order <- reactive({
+    strata_order <- reactive({
       info <- correlation_info()
-      if (is.null(info) || is.null(info$strata_order)) {
-        return(NULL)
-      }
-
-      order_values <- resolve_reactive(info$strata_order)
-      if (is.null(order_values)) {
-        return(NULL)
-      }
-
-      order_values <- as.character(order_values)
-      order_values <- order_values[!is.na(order_values) & nzchar(order_values)]
-      if (!length(order_values)) NULL else order_values
+      so <- resolve_reactive(info$strata_order)
+      if (is.null(so)) return(NULL)
+      so <- as.character(so)
+      so[nzchar(so)]
     })
-
+    
     custom_colors <- add_color_customization_server(
-      ns = ns,
-      input = input,
-      output = output,
-      data = filtered_data,
-      color_var_reactive = color_var_reactive,
+      ns,
+      input, output,
+      data = df,
+      color_var_reactive = group_var,
       multi_group = TRUE,
-      level_order_reactive = strata_level_order
+      level_order_reactive = strata_order
     )
     
+    grid <- plot_grid_server("plot_grid")
     base_size <- base_size_server(input = input, default = 11)
-    grid_inputs <- plot_grid_server("plot_grid")
     
-    build_ggpairs_plot <- function(data, color_value, title = NULL, base_size_value = 11) {
-      validate(need(is.data.frame(data) && nrow(data) > 0, "No data available for plotting."))
+    # ---- Unified state() -----------------------------------------------------
+    state <- reactive({
+      list(
+        data      = df(),
+        info      = correlation_info(),
+        group_var = group_var(),
+        strata_order = strata_order(),
+        colors    = custom_colors(),
+        base_size = base_size(),
+        plot_w    = sanitize(input$plot_width, 800),
+        plot_h    = sanitize(input$plot_height, 600),
+        rows      = grid$rows(),
+        cols      = grid$cols()
+      )
+    })
+    
+    # ---- Build one ggpairs plot ---------------------------------------------
+    build_ggpairs_plot <- function(data, color, title = NULL, base_size) {
       numeric_cols <- data[, vapply(data, is.numeric, logical(1)), drop = FALSE]
       numeric_cols <- numeric_cols[, colSums(!is.na(numeric_cols)) > 0, drop = FALSE]
-      validate(need(ncol(numeric_cols) >= 2, "Need at least two numeric columns for GGPairs plot."))
+      validate(need(ncol(numeric_cols) >= 2, "Need ≥2 numeric columns."))
       
-      plot_obj <- GGally::ggpairs(
+      p <- GGally::ggpairs(
         numeric_cols,
         progress = FALSE,
-        upper = list(continuous = GGally::wrap("cor", size = 4, colour = color_value)),
-        lower = list(continuous = GGally::wrap("points", alpha = 0.6, colour = color_value, size = 1.5)),
-        diag  = list(continuous = GGally::wrap("densityDiag", fill = color_value, alpha = 0.4))
+        upper = list(continuous = GGally::wrap("cor", size = 4, colour = color)),
+        lower = list(continuous = GGally::wrap("points", alpha = 0.6, colour = color, size = 1.5)),
+        diag  = list(continuous = GGally::wrap("densityDiag", fill = color, alpha = 0.4))
       ) +
-        ggplot2::theme_minimal(base_size = base_size_value) +
+        ggplot2::theme_minimal(base_size = base_size) +
         ggplot2::theme(
           strip.text = ggplot2::element_text(face = "bold", size = 9),
-          panel.grid.minor = ggplot2::element_blank(),
-          panel.grid.major = ggplot2::element_blank()
+          panel.grid.major = ggplot2::element_blank(),
+          panel.grid.minor = ggplot2::element_blank()
         )
       
-      if (!is.null(title)) plot_obj <- plot_obj + ggplot2::labs(title = title)
-      plot_obj
-    }
-    
-    convert_ggmatrix_to_plot <- function(plot_obj) {
-      if (!inherits(plot_obj, "ggmatrix")) return(plot_obj)
-      gtable <- GGally::ggmatrix_gtable(plot_obj)
+      if (!is.null(title)) p <- p + ggplot2::labs(title = title)
+      
+      # wrap ggmatrix into a real ggplot object
+      gtable <- GGally::ggmatrix_gtable(p)
       ggplot2::ggplot() +
         ggplot2::theme_void() +
-        ggplot2::annotation_custom(grob = gtable, xmin = -Inf, xmax = Inf, ymin = -Inf, ymax = Inf)
+        ggplot2::annotation_custom(
+          grob = gtable,
+          xmin = -Inf, xmax = Inf,
+          ymin = -Inf, ymax = Inf
+        )
     }
     
+    # ---- Unified compute plot_info() -----------------------------------------
     plot_info <- reactive({
-      info <- correlation_info()
-      validate(need(!is.null(info), "Correlation results are not available."))
-      results_accessor <- info$results
-      results <- resolve_reactive(results_accessor)
-      validate(need(!is.null(results), "Run the correlation analysis to generate plots."))
+      s <- state()
+      dat <- s$data
+      info <- s$info
       
-      if (!is.null(results$message)) validate(need(FALSE, results$message))
+      validate(need(!is.null(dat) && nrow(dat) > 0, "No data available."))
+      validate(need(!is.null(info), "Correlation info missing."))
       
-      data <- filtered_data()
-      validate(need(!is.null(data) && nrow(data) > 0, "No data available."))
+      results <- resolve_reactive(info$results)
+      validate(need(!is.null(results), "Run the correlation analysis."))
       
-      selected_vars <- resolve_reactive(results$selected_vars)
-      if (is.null(selected_vars) || length(selected_vars) < 2)
-        selected_vars <- names(data)[vapply(data, is.numeric, logical(1))]
-      validate(need(length(selected_vars) >= 2, "Need at least two numeric columns for GGPairs plot."))
+      selected <- resolve_reactive(results$selected_vars)
+      if (is.null(selected) || length(selected) < 2)
+        selected <- names(dat)[vapply(dat, is.numeric, logical(1))]
       
-      group_var <- resolve_reactive(info$group_var)
-      if (!is.null(group_var)) group_var <- as.character(group_var)[1]
-      if (is.null(group_var) || identical(group_var, "None") || !nzchar(group_var)) group_var <- NULL
+      validate(need(length(selected) >= 2, "Need ≥2 numeric variables."))
       
-      strata_order <- resolve_reactive(info$strata_order)
+      gvar <- s$group_var
       
-      if (is.null(group_var)) {
-        plot_data <- data[, selected_vars, drop = FALSE]
-        color_choice <- resolve_single_color(custom_colors())
-        plot_obj <- build_ggpairs_plot(plot_data, color_choice, base_size_value = base_size())
+      # --- No strata → single big plot ---------------------------------------
+      if (is.null(gvar)) {
+        pd <- dat[, selected, drop = FALSE]
+        col <- resolve_single_color(s$colors)
+        plot <- build_ggpairs_plot(pd, col, title = NULL, base_size = s$base_size)
         defaults <- compute_default_grid(1L)
-        layout <- list(nrow = defaults$rows, ncol = defaults$cols)
-        list(plot = plot_obj, layout = layout, panels = 1L, warning = NULL, defaults = defaults)
-      } else {
-        available_levels <- names(results$matrices)
-        if (!length(available_levels)) available_levels <- unique(as.character(data[[group_var]]))
-        if (length(strata_order)) available_levels <- strata_order[strata_order %in% available_levels]
-        available_levels <- available_levels[nzchar(available_levels)]
-        validate(need(length(available_levels) > 0, "No strata available for plotting."))
-        
-        colors <- resolve_palette_for_levels(available_levels, custom = custom_colors())
-        plots <- lapply(stats::setNames(available_levels, available_levels), function(level) {
-          subset_rows <- !is.na(data[[group_var]]) & as.character(data[[group_var]]) == level
-          subset_data <- data[subset_rows, selected_vars, drop = FALSE]
-          if (!nrow(subset_data)) return(NULL)
-          convert_ggmatrix_to_plot(
-            build_ggpairs_plot(subset_data, colors[[level]], title = level, base_size_value = base_size())
-          )
-        })
-        plots <- Filter(Negate(is.null), plots)
-        validate(need(length(plots) > 0, "No data available for the selected strata."))
-        
-        panel_count <- length(plots)
-        defaults <- compute_default_grid(panel_count)
-        layout <- basic_grid_layout(
-          rows = grid_inputs$rows(),
-          cols = grid_inputs$cols(),
-          default_rows = defaults$rows,
-          default_cols = defaults$cols
-        )
-        layout <- adjust_grid_layout(panel_count, layout)
-        validation <- validate_grid(panel_count, layout$nrow, layout$ncol)
-        
-        combined <- NULL
-        if (isTRUE(validation$valid))
-          combined <- patchwork::wrap_plots(plotlist = plots, nrow = layout$nrow, ncol = layout$ncol)
-        
-        list(
-          plot = combined,
-          layout = layout,
-          panels = panel_count,
-          warning = validation$message,
-          defaults = defaults
-        )
-      }
-    })
-    
-    # ---- New unified sizing logic ----
-    size_val <- reactiveVal(list(w = 800, h = 600))
-    
-    observe({
-      info <- plot_info()
-      req(info)
-
-      layout <- info$layout
-      base_w <- plot_width()
-      base_h <- plot_height()
-
-      plot_w <- if (is.null(base_w) || is.na(base_w) || base_w <= 0) 800 else base_w
-      plot_h <- if (is.null(base_h) || is.na(base_h) || base_h <= 0) 600 else base_h
-
-      if (is.null(layout)) {
-        size_val(list(w = plot_w, h = plot_h))
-      } else {
-        nrow_l <- ifelse(is.null(layout$nrow), 1L, as.integer(layout$nrow))
-        ncol_l <- ifelse(is.null(layout$ncol), 1L, as.integer(layout$ncol))
-        size_val(list(
-          w = plot_w * ncol_l,
-          h = plot_h * nrow_l
+        return(list(
+          plot = plot,
+          layout = list(rows = defaults$rows, cols = defaults$cols),
+          warning = NULL
         ))
       }
+      
+      # --- Strata case --------------------------------------------------------
+      lvls <- names(results$matrices)
+      if (!length(lvls)) lvls <- unique(as.character(dat[[gvar]]))
+      if (length(s$strata_order)) lvls <- s$strata_order[s$strata_order %in% lvls]
+      lvls <- lvls[nzchar(lvls)]
+      validate(need(length(lvls) > 0, "No valid strata levels."))
+      
+      palette <- resolve_palette_for_levels(lvls, custom = s$colors)
+      
+      plot_list <- lapply(lvls, function(lvl) {
+        rows <- as.character(dat[[gvar]]) == lvl
+        sub <- dat[rows, selected, drop = FALSE]
+        if (!nrow(sub)) return(NULL)
+        build_ggpairs_plot(sub, palette[[lvl]], title = lvl, base_size = s$base_size)
+      })
+      
+      plot_list <- Filter(Negate(is.null), plot_list)
+      validate(need(length(plot_list) > 0, "No data for strata."))
+      
+      n_panels <- length(plot_list)
+      defaults <- compute_default_grid(n_panels)
+      
+      layout <- basic_grid_layout(
+        rows = s$rows,
+        cols = s$cols,
+        default_rows = defaults$rows,
+        default_cols = defaults$cols
+      )
+      layout <- adjust_grid_layout(n_panels, layout)
+      val <- validate_grid(n_panels, layout$nrow, layout$ncol)
+      
+      combined <- NULL
+      if (isTRUE(val$valid)) {
+        combined <- patchwork::wrap_plots(plot_list,
+                                          nrow = layout$nrow,
+                                          ncol = layout$ncol
+        )
+      }
+      
+      list(
+        plot = combined,
+        layout = list(rows = layout$nrow, cols = layout$ncol),
+        warning = val$message
+      )
     })
+    
+    # ---- Unified caching ------------------------------------------------------
+    if (!requireNamespace("digest", quietly = TRUE))
+      stop("Install 'digest'.")
+    
+    cached_plot   <- reactiveVal(NULL)
+    cached_layout <- reactiveVal(NULL)
+    cached_key    <- reactiveVal(NULL)
+    
+    observe({
+      s <- state()
+      key <- paste(
+        digest::digest(s$data, algo = "xxhash64"),
+        s$group_var,
+        s$strata_order,
+        s$rows, s$cols,
+        s$colors,
+        s$base_size,
+        s$plot_w, s$plot_h,
+        sep = "_"
+      )
+      
+      if (!identical(key, cached_key())) {
+        info <- plot_info()
+        if (!is.null(info$plot)) {
+          cached_plot(info$plot)
+          cached_layout(info$layout)
+          cached_key(key)
+        }
+      }
+    })
+    
+    # ---- Unified sizing -------------------------------------------------------
+    plot_dimensions <- reactive({
+      lay <- cached_layout()
+      if (is.null(lay)) return(list(width = 800, height = 600))
+      
+      list(
+        width  = max(200, state()$plot_w * lay$cols),
+        height = max(200, state()$plot_h * lay$rows)
+      )
+    })
+    
+    # ---- Outputs --------------------------------------------------------------
+    output$plot <- renderPlot({
+      p <- cached_plot()
+      validate(need(!is.null(p), "Plot not ready"))
+      print(p)
+    },
+    width  = function() plot_dimensions()$width,
+    height = function() plot_dimensions()$height,
+    res = 96)
     
     output$download_plot <- downloadHandler(
       filename = function() paste0("pairwise_correlation_ggpairs_", Sys.Date(), ".png"),
       content = function(file) {
-        info <- plot_info()
-        req(is.null(info$warning))
-        req(info$plot)
-        s <- size_val()
+        p <- cached_plot()
+        lay <- cached_layout()
+        validate(need(!is.null(p), "No plot"))
+        validate(need(!is.null(lay), "No layout"))
+        dims <- plot_dimensions()
         ggplot2::ggsave(
-          filename = file,
-          plot = info$plot,
-          device = "png",
-          dpi = 300,
-          width  = s$w / 96,
-          height = s$h / 96,
+          file, p, dpi = 300,
+          width = dims$width / 96,
+          height = dims$height / 96,
           units = "in",
           limitsize = FALSE
         )
       }
     )
     
-    list(
-      plot = reactive(plot_info()$plot),
-      width = reactive(size_val()$w),
-      height = reactive(size_val()$h),
-      warning = reactive(plot_info()$warning)
-    )
+    outputOptions(output, "plot", suspendWhenHidden = TRUE)
   })
 }
 

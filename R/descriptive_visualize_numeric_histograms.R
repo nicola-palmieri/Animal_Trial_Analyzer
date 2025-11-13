@@ -163,8 +163,11 @@ visualize_numeric_histograms_server <- function(id, filtered_data, summary_info,
         s$use_density,
         s$colors,
         s$base_size,
+        s$rows,     
+        s$cols,     
         sep = "_"
       )
+      
       if (!identical(key, cached_key())) {
         info <- isolate(plot_info())
         if (!is.null(info$plot)) {

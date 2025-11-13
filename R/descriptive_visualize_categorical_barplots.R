@@ -160,7 +160,7 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
       s <- state()
       dat <- s$dat
       cols <- resolve_reactive(s$info$selected_vars)
-      key <- paste(
+      ey <- paste(
         hash_key(dat, cols),
         resolve_reactive(s$info$group_var),
         resolve_reactive(s$info$strata_levels),
@@ -168,6 +168,8 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
         s$labels,
         s$colors,
         s$base_size,
+        s$rows,          
+        s$cols,          
         sep = "_"
       )
       if (!identical(key, cached_key())) {

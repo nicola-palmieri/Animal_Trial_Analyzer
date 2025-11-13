@@ -1,424 +1,4 @@
 # ===============================================================
-# 🧩 Visualization Coordinator (Lazy + Reactive)
-# ===============================================================
-
-visualize_ui <- function(id) {
-  ns <- NS(id)
-  uiOutput(ns("dynamic_ui"))
-}
-
-visualize_server <- function(id, filtered_data, model_fit) {
-  moduleServer(id, function(input, output, session) {
-    ns <- session$ns
-
-    empty_state <- function(icon, title, message) {
-      div(
-        class = "empty-state card bg-light border-0 shadow-sm text-center my-5",
-        div(
-          class = "card-body py-5 px-4",
-          div(class = "empty-state-icon text-primary mb-3", HTML(icon)),
-          h4(class = "mb-2", title),
-          p(class = "text-muted mb-0", message)
-        )
-      )
-    }
-
-    model_info_or_null <- reactive({
-      tryCatch(
-        model_fit(),
-        shiny.silent.stop = function(e) NULL
-      )
-    })
-
-    model_info <- reactive({
-      info <- model_info_or_null()
-      req(info)
-      info
-    })
-
-    analysis_type <- reactive({
-      info <- model_info()
-      type <- info$type %||% "oneway_anova"
-      tolower(type)
-    })
-
-    vis_cache <- reactiveValues()
-
-    ensure_vis_server <- function(key, create_fn) {
-      if (is.null(vis_cache[[key]])) {
-        vis_cache[[key]] <- create_fn()
-      }
-      vis_cache[[key]]
-    }
-
-    visualization_specs <- list(
-      oneway_anova = list(
-        id = "oneway",
-        ui = function(ns) visualize_oneway_ui(ns("oneway")),
-        server = function() visualize_oneway_server("oneway", filtered_data, model_info)
-      ),
-      twoway_anova = list(
-        id = "twoway",
-        ui = function(ns) visualize_twoway_ui(ns("twoway")),
-        server = function() visualize_twoway_server("twoway", filtered_data, model_info)
-      ),
-      pairs = list(
-        id = "ggpairs",
-        ui = function(ns) visualize_ggpairs_ui(ns("ggpairs")),
-        server = function() visualize_ggpairs_server("ggpairs", filtered_data, model_info)
-      ),
-      pca = list(
-        id = "pca",
-        ui = function(ns) visualize_pca_ui(ns("pca"), filtered_data()),
-        server = function() visualize_pca_server("pca", filtered_data, model_info)
-      ),
-      descriptive = list(
-        id = "descriptive",
-        ui = function(ns) visualize_descriptive_ui(ns("descriptive")),
-        server = function() visualize_descriptive_server("descriptive", filtered_data, model_info)
-      )
-    )
-
-    output$dynamic_ui <- renderUI({
-      info <- model_info_or_null()
-      if (is.null(info)) {
-        return(empty_state(
-          "&#128221;",
-          "No analysis selected yet",
-          "Run an analysis in the Analyze tab to unlock tailored visualizations for your results."
-        ))
-      }
-
-      type <- analysis_type()
-      spec <- visualization_specs[[type]]
-      if (!is.null(spec)) {
-        return(spec$ui(ns))
-      }
-
-      empty_state(
-        "&#128065;",
-        "Visualization coming soon",
-        "We're still crafting charts for this analysis type. In the meantime, explore the other visualizations available!"
-      )
-    })
-
-    observeEvent(analysis_type(), {
-      type <- analysis_type()
-      spec <- visualization_specs[[type]]
-      if (!is.null(spec)) {
-        ensure_vis_server(spec$id, spec$server)
-      }
-    }, ignoreInit = FALSE)
-  })
-}
-# ===============================================================
-# 🧾 Table Analyzer — Descriptive Statistics Modules
-# ===============================================================
-
-descriptive_ui <- function(id) {
-  ns <- NS(id)
-  list(
-    config = tagList(
-      uiOutput(ns("inputs")),
-      tags$details(
-        tags$summary(strong("Advanced options")),
-        stratification_ui("strat", ns)
-      ),
-      br(),
-      fluidRow(
-        column(6, with_help_tooltip(
-          actionButton(ns("run"), "Show summary", width = "100%"),
-          "Calculate the descriptive statistics for the selected variables."
-        )),
-        column(6, with_help_tooltip(
-          downloadButton(ns("download_summary"), "Download summary", style = "width: 100%;"),
-          "Save the displayed summary as a text file for later reference."
-        ))
-      ),
-      hr()
-    ),
-    results = tagList(verbatimTextOutput(ns("summary_text")))
-  )
-}
-
-descriptive_server <- function(id, filtered_data) {
-  moduleServer(id, function(input, output, session) {
-    ns <- session$ns
-    df <- filtered_data
-
-    # ------------------------------------------------------------
-    # Dynamic inputs
-    # ------------------------------------------------------------
-    output$inputs <- renderUI({
-      req(df())
-      data <- df()
-      cat_cols <- names(data)[vapply(data, function(x) is.character(x) || is.factor(x) || is.logical(x), logical(1))]
-      num_cols <- names(data)[vapply(data, is.numeric, logical(1))]
-      
-      tagList(
-        with_help_tooltip(
-          selectInput(ns("cat_vars"), label = "Categorical variables", choices = cat_cols, selected = cat_cols, multiple = TRUE),
-          "Choose the group variables whose counts and proportions you want to inspect."
-        ),
-        with_help_tooltip(
-          selectInput(ns("num_vars"), label = "Numeric variables", choices = num_cols, selected = num_cols, multiple = TRUE),
-          "Choose the numeric measurements you want to summarise (mean, SD, etc.)."
-        )
-      )
-    })
-    
-    strat_info <- stratification_server("strat", df)
-    
-    # ------------------------------------------------------------
-    # Summary computation
-    # ------------------------------------------------------------
-    summary_data <- eventReactive(input$run, {
-      req(df())
-
-      local_data <- df()
-      selected_vars <- unique(c(input$cat_vars, input$num_vars))
-      validate(need(length(selected_vars) > 0, "Please select at least one variable."))
-
-      strat_details <- strat_info()
-      group_var <- strat_details$var
-      data_columns <- selected_vars
-
-      if (!is.null(group_var)) {
-        sel <- strat_details$levels
-        if (!is.null(sel) && length(sel) > 0) {
-          local_data <- dplyr::filter(local_data, .data[[group_var]] %in% sel)
-          local_data[[group_var]] <- factor(as.character(local_data[[group_var]]), levels = sel)
-        } else {
-          local_data[[group_var]] <- factor(as.character(local_data[[group_var]]))
-        }
-        local_data <- droplevels(local_data)
-        data_columns <- unique(c(data_columns, group_var))
-      }
-
-      data_columns <- data_columns[!is.na(data_columns) & nzchar(data_columns)]
-      data_columns <- intersect(data_columns, names(local_data))
-      local_data <- local_data[, data_columns, drop = FALSE]
-
-      selected_vars <- selected_vars[!is.na(selected_vars) & nzchar(selected_vars)]
-      selected_vars <- intersect(selected_vars, names(local_data))
-
-      list(
-        summary = compute_descriptive_summary(local_data, group_var),
-        selected_vars = selected_vars,
-        group_var = group_var,
-        processed_data = local_data,
-        strata_levels = if (!is.null(group_var) && group_var %in% names(local_data)) levels(local_data[[group_var]]) else NULL
-      )
-    })
-    
-    
-    
-    
-    # ------------------------------------------------------------
-    # Print summary
-    # ------------------------------------------------------------
-    output$summary_text <- renderPrint({
-      req(summary_data())
-      print_summary_sections(summary_data()$summary)
-    })
-    
-    # ------------------------------------------------------------
-    # Download
-    # ------------------------------------------------------------
-    output$download_summary <- downloadHandler(
-      filename = function() paste0("Descriptive_Statistics_", Sys.Date(), ".txt"),
-      content = function(file) {
-        results <- summary_data()
-        req(results)
-        sink(file)
-        on.exit(sink(), add = TRUE)
-        print_summary_sections(results$summary)
-      }
-    )
-    
-    # ------------------------------------------------------------
-    # Return full model info
-    # ------------------------------------------------------------
-    extract_detail <- function(field) reactive({
-      details <- summary_data()
-      req(details)
-      details[[field]]
-    })
-
-    df_final <- extract_detail("processed_data")
-    summary_table <- extract_detail("summary")
-    selected_vars_reactive <- extract_detail("selected_vars")
-    group_var_reactive <- extract_detail("group_var")
-    strata_levels_reactive <- extract_detail("strata_levels")
-
-    reactive({
-      details <- summary_data()
-      req(details)
-
-      data_used <- df_final()
-
-      list(
-        analysis_type = "DESCRIPTIVE",
-        data_used = data_used,
-        model = NULL,
-        summary = summary_table(),
-        posthoc = NULL,
-        effects = NULL,
-        stats = if (!is.null(data_used)) list(n = nrow(data_used), vars = names(data_used)) else NULL,
-        metadata = list(
-          selected_vars = details$selected_vars,
-          group_var = details$group_var,
-          strata_levels = details$strata_levels
-        ),
-        type = "descriptive",
-        data = df,
-        processed_data = df_final,
-        selected_vars = selected_vars_reactive,
-        group_var = group_var_reactive,
-        strata_levels = strata_levels_reactive
-      )
-    })
-
-  })
-}
-
-compute_descriptive_summary <- function(data, group_var = NULL) {
-  numeric_vars <- names(data)[sapply(data, is.numeric)]
-  group_data <- if (!is.null(group_var)) dplyr::group_by(data, .data[[group_var]], .drop = TRUE) else data
-
-  summarise_numeric <- function(.data, vars, suffix, fn) {
-    if (length(vars) == 0) {
-      return(NULL)
-    }
-    .data %>%
-      dplyr::summarise(
-        dplyr::across(
-          dplyr::all_of(vars),
-          fn,
-          .names = paste0(suffix, "_{.col}")
-        ),
-        .groups = "drop"
-      )
-  }
-
-  # Define a custom skim function with full factor labels
-  top_counts_full <- function(x) skimr::top_counts(x, max_char = 200, max_levels = 10)
-  skim_full <- skimr::skim_with(
-    factor = skimr::sfl(
-      ordered    = is.ordered,
-      n_unique   = skimr::n_unique,
-      top_counts = top_counts_full
-    ),
-    append = FALSE
-  )
-  
-  list(
-    skim = if (!is.null(group_var)) skim_full(group_data) else skim_full(data),
-    cv = summarise_numeric(
-      group_data,
-      numeric_vars,
-      "cv",
-      ~ 100 * stats::sd(.x, na.rm = TRUE) / mean(.x, na.rm = TRUE)
-    ),
-    outliers = summarise_numeric(
-      group_data,
-      numeric_vars,
-      "outliers",
-      ~ {
-        q <- stats::quantile(.x, probs = c(0.25, 0.75), na.rm = TRUE)
-        iqr <- q[2] - q[1]
-        sum(.x < q[1] - 1.5 * iqr | .x > q[2] + 1.5 * iqr, na.rm = TRUE)
-      }
-    ),
-    missing = summarise_numeric(
-      group_data,
-      numeric_vars,
-      "missing",
-      ~ 100 * mean(is.na(.x))
-    ),
-    shapiro = summarise_numeric(
-      group_data,
-      numeric_vars,
-      "shapiro",
-      ~ tryCatch(stats::shapiro.test(.x)$p.value, error = function(e) NA_real_)
-    )
-  )
-}
-
-# ---- Shared printing ----
-print_summary_sections <- function(results) {
-  # 1) Print skim AS-IS (unchanged)
-  cat(paste(capture.output(print(results$skim)), collapse = "\n"), "\n\n", sep = "")
-  
-  # 2) Helper to detect if a grouping column exists and what it's called
-  metric_prefix <- "^(cv_|outliers_|missing_|shapiro_)"
-  first_col <- if (!is.null(results$cv) && ncol(results$cv) > 0) names(results$cv)[1] else NULL
-  group_col <- if (!is.null(first_col) && !grepl(metric_prefix, first_col)) first_col else NULL
-  
-  # 3) Robust long conversion that preserves the real group column name (if any)
-  to_long <- function(df, value_name) {
-    if (is.null(df) || ncol(df) == 0) {
-      empty_cols <- list(variable = character())
-      if (!is.null(group_col)) {
-        empty_cols[[group_col]] <- character()
-      }
-      empty_cols[[value_name]] <- numeric()
-      return(tibble::as_tibble(empty_cols))
-    }
-    id_cols <- intersect(names(df), group_col)
-    df |>
-      tidyr::pivot_longer(
-        cols = -tidyselect::any_of(id_cols),
-        names_to = "variable",
-        values_to = value_name
-      ) |>
-      dplyr::mutate(variable = sub(metric_prefix, "", .data$variable))
-  }
-
-  # 4) Build pieces (no "missing" here)
-  cv_long   <- to_long(results$cv, "cv")
-  out_long  <- to_long(results$outliers, "outliers")
-  shap_long <- to_long(results$shapiro, "shapiro_p")
-
-  # 5) Join by the right keys
-  join_keys <- c(if (!is.null(group_col)) group_col, "variable")
-  merged <- dplyr::full_join(cv_long, out_long, by = join_keys) |>
-    dplyr::full_join(shap_long, by = join_keys) |>
-    dplyr::mutate(
-      cv = round(cv, 2),
-      shapiro_p = signif(shapiro_p, 3)
-    )
-
-  numeric_order <- NULL
-  if (is.data.frame(results$skim) && all(c("skim_type", "skim_variable") %in% names(results$skim))) {
-    numeric_order <- results$skim |>
-      dplyr::filter(.data$skim_type == "numeric") |>
-      dplyr::pull(.data$skim_variable) |>
-      unique()
-  }
-
-  arrange_cols <- c(if (!is.null(group_col)) group_col, "variable")
-  if (!is.null(numeric_order) && length(numeric_order) > 0) {
-    merged$variable <- factor(merged$variable, levels = numeric_order)
-    merged <- dplyr::arrange(merged, !!!rlang::syms(arrange_cols))
-    merged$variable <- as.character(merged$variable)
-  } else {
-    merged <- dplyr::arrange(merged, !!!rlang::syms(arrange_cols))
-  }
-
-  # 7) Print with/without group column
-  cat("── Numeric variables summary ──\n")
-  final_cols <- c("variable", arrange_cols[-length(arrange_cols)], "cv", "outliers", "shapiro_p")
-  final_df <- merged[, final_cols, drop = FALSE]
-  print(as.data.frame(final_df), row.names = FALSE)
-  
-  cat("\nInterpretation:\n")
-  cat("  • outliers = # beyond 1.5×IQR\n")
-  cat("  • shapiro_p < 0.05 → non-normal distribution\n")
-  
-  invisible(NULL)
-}
-# ===============================================================
 # Visualization Module — Descriptive Statistics (Dispatcher)
 # ===============================================================
 
@@ -436,108 +16,110 @@ visualize_descriptive_ui <- function(id) {
           label = "Select visualization type",
           choices = c(
             "Categorical barplots" = "categorical",
-            "Numeric boxplots"          = "boxplots",
-            "Numeric histograms"        = "histograms",
-            "CV (%)"                    = "cv",
-            "Outlier counts"            = "outliers",
-            "Missingness (%)"           = "missing"
+            "Numeric boxplots"     = "boxplots",
+            "Numeric histograms"   = "histograms",
+            "CV (%)"               = "cv",
+            "Outlier counts"       = "outliers",
+            "Missingness (%)"      = "missing"
           ),
           selected = "categorical"
         ),
         "Choose the descriptive chart that best answers your question."
       ),
-      uiOutput(ns("sub_controls"))  # controls from active submodule
+      uiOutput(ns("sub_controls"))
     ),
     mainPanel(
       width = 8,
       h4("Plots"),
-      uiOutput(ns("plot_ui"))  # plot output provided by the active submodule
+      uiOutput(ns("plot_ui"))
     )
   )
 }
 
 
+
 visualize_descriptive_server <- function(id, filtered_data, descriptive_summary) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
+    
+    # Active plot type
     active_type <- reactive({
-      type <- input$plot_type
-      if (is.null(type) || !nzchar(type[1])) "categorical" else type[1]
+      req(input$plot_type)
+      input$plot_type
     })
     
-
-    # ==========================================================
-    # 🔹 Inject the correct UI for each submodule
-    # ==========================================================
+    # Always mount all submodules once (outputs suspended when hidden)
+    visualize_categorical_barplots_server("categorical", filtered_data, descriptive_summary,
+                                          is_active = reactive(active_type() == "categorical"))
+    visualize_numeric_boxplots_server("boxplots", filtered_data, descriptive_summary,
+                                      is_active = reactive(active_type() == "boxplots"))
+    visualize_numeric_histograms_server("histograms", filtered_data, descriptive_summary,
+                                        is_active = reactive(active_type() == "histograms"))
+    visualize_cv_server("cv", filtered_data, descriptive_summary,
+                        is_active = reactive(active_type() == "cv"))
+    visualize_outliers_server("outliers", filtered_data, descriptive_summary,
+                              is_active = reactive(active_type() == "outliers"))
+    visualize_missing_server("missing", filtered_data, descriptive_summary,
+                             is_active = reactive(active_type() == "missing"))
+    
+    # Render once; use conditionalPanel to show the correct one
     output$sub_controls <- renderUI({
-      type <- active_type()
-      switch(type,
-             "categorical" = visualize_categorical_barplots_ui(ns("categorical")),
-             "boxplots"    = visualize_numeric_boxplots_ui(ns("boxplots")),
-             "histograms"  = visualize_numeric_histograms_ui(ns("histograms")),
-             "cv"          = visualize_cv_ui(ns("cv")),
-             "outliers"    = visualize_outliers_ui(ns("outliers")),
-             "missing"     = visualize_missing_ui(ns("missing")),
-             div("No controls available for this plot type.")
+      tagList(
+        conditionalPanel(
+          condition = sprintf("input['%s'] == 'categorical'", ns("plot_type")),
+          visualize_categorical_barplots_ui(ns("categorical"))
+        ),
+        conditionalPanel(
+          condition = sprintf("input['%s'] == 'boxplots'", ns("plot_type")),
+          visualize_numeric_boxplots_ui(ns("boxplots"))
+        ),
+        conditionalPanel(
+          condition = sprintf("input['%s'] == 'histograms'", ns("plot_type")),
+          visualize_numeric_histograms_ui(ns("histograms"))
+        ),
+        conditionalPanel(
+          condition = sprintf("input['%s'] == 'cv'", ns("plot_type")),
+          visualize_cv_ui(ns("cv"))
+        ),
+        conditionalPanel(
+          condition = sprintf("input['%s'] == 'outliers'", ns("plot_type")),
+          visualize_outliers_ui(ns("outliers"))
+        ),
+        conditionalPanel(
+          condition = sprintf("input['%s'] == 'missing'", ns("plot_type")),
+          visualize_missing_ui(ns("missing"))
+        )
       )
     })
-
+    
     output$plot_ui <- renderUI({
-      type <- active_type()
-      switch(type,
-             "categorical" = visualize_categorical_barplots_plot_ui(ns("categorical")),
-             "boxplots"    = visualize_numeric_boxplots_plot_ui(ns("boxplots")),
-             "histograms"  = visualize_numeric_histograms_plot_ui(ns("histograms")),
-             "cv"          = visualize_cv_plot_ui(ns("cv")),
-             "outliers"    = visualize_outliers_plot_ui(ns("outliers")),
-             "missing"     = visualize_missing_plot_ui(ns("missing")),
-             div("Plot not available for this selection.")
+      tagList(
+        conditionalPanel(
+          condition = sprintf("input['%s'] == 'categorical'", ns("plot_type")),
+          visualize_categorical_barplots_plot_ui(ns("categorical"))
+        ),
+        conditionalPanel(
+          condition = sprintf("input['%s'] == 'boxplots'", ns("plot_type")),
+          visualize_numeric_boxplots_plot_ui(ns("boxplots"))
+        ),
+        conditionalPanel(
+          condition = sprintf("input['%s'] == 'histograms'", ns("plot_type")),
+          visualize_numeric_histograms_plot_ui(ns("histograms"))
+        ),
+        conditionalPanel(
+          condition = sprintf("input['%s'] == 'cv'", ns("plot_type")),
+          visualize_cv_plot_ui(ns("cv"))
+        ),
+        conditionalPanel(
+          condition = sprintf("input['%s'] == 'outliers'", ns("plot_type")),
+          visualize_outliers_plot_ui(ns("outliers"))
+        ),
+        conditionalPanel(
+          condition = sprintf("input['%s'] == 'missing'", ns("plot_type")),
+          visualize_missing_plot_ui(ns("missing"))
+        )
       )
     })
-
-    categorical_active <- reactive(active_type() == "categorical")
-    boxplots_active    <- reactive(active_type() == "boxplots")
-    histograms_active  <- reactive(active_type() == "histograms")
-    cv_active          <- reactive(active_type() == "cv")
-    outliers_active    <- reactive(active_type() == "outliers")
-    missing_active     <- reactive(active_type() == "missing")
-
-    visualize_categorical_barplots_server(
-      "categorical",
-      filtered_data,
-      descriptive_summary,
-      is_active = categorical_active
-    )
-    visualize_numeric_boxplots_server(
-      "boxplots",
-      filtered_data,
-      descriptive_summary,
-      is_active = boxplots_active
-    )
-    visualize_numeric_histograms_server(
-      "histograms",
-      filtered_data,
-      descriptive_summary,
-      is_active = histograms_active
-    )
-    visualize_cv_server(
-      "cv",
-      filtered_data,
-      descriptive_summary,
-      is_active = cv_active
-    )
-    visualize_outliers_server(
-      "outliers",
-      filtered_data,
-      descriptive_summary,
-      is_active = outliers_active
-    )
-    visualize_missing_server(
-      "missing",
-      filtered_data,
-      descriptive_summary,
-      is_active = missing_active
-    )
   })
 }
 # ===============================================================
