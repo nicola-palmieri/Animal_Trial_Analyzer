@@ -969,7 +969,8 @@ build_line_plot_panel <- function(stats_df,
                                   raw_data = NULL,
                                   response_var = NULL,
                                   show_lines = FALSE,
-                                  show_jitter = FALSE) {
+                                  show_jitter = FALSE,
+                                  use_dodge = FALSE) {
   if (is.null(factor2) || !factor2 %in% names(stats_df)) {
     color_value <- if (!is.null(line_colors) && length(line_colors) > 0) {
       unname(line_colors)[1]
@@ -1022,6 +1023,9 @@ build_line_plot_panel <- function(stats_df,
     group_levels <- group_levels[!is.na(group_levels)]
     palette <- resolve_palette_for_levels(group_levels, custom = line_colors)
     stats_df[[factor2]] <- factor(as.character(stats_df[[factor2]]), levels = group_levels)
+    dodge_width <- if (isTRUE(use_dodge)) 0.4 else NULL
+    dodge <- if (!is.null(dodge_width)) position_dodge(width = dodge_width) else NULL
+    jitter_dodge_width <- if (is.null(dodge_width)) 0 else dodge_width
     p <- ggplot(stats_df, aes(
       x = !!sym(factor1),
       y = mean,
@@ -1038,7 +1042,7 @@ build_line_plot_panel <- function(stats_df,
         p <- p + geom_jitter(
           data = jitter_df,
           aes(x = !!sym(factor1), y = !!sym(response_var), color = !!sym(factor2)),
-          position = position_jitterdodge(jitter.width = 0.15, dodge.width = 0.4),
+          position = position_jitterdodge(jitter.width = 0.15, dodge.width = jitter_dodge_width),
           size = 1.6,
           alpha = 0.4,
           inherit.aes = FALSE,
@@ -1048,15 +1052,35 @@ build_line_plot_panel <- function(stats_df,
     }
 
     if (isTRUE(show_lines)) {
-      p <- p + geom_line(linewidth = 1)
+      if (is.null(dodge)) {
+        p <- p + geom_line(linewidth = 1)
+      } else {
+        p <- p + geom_line(linewidth = 1, position = dodge)
+      }
     }
 
-    p <- p +
-      geom_point(size = 3) +
+    point_layer <- if (is.null(dodge)) {
+      geom_point(size = 3)
+    } else {
+      geom_point(size = 3, position = dodge)
+    }
+
+    errorbar_layer <- if (is.null(dodge)) {
       geom_errorbar(
         aes(ymin = mean - se, ymax = mean + se),
         width = 0.15
-      ) +
+      )
+    } else {
+      geom_errorbar(
+        aes(ymin = mean - se, ymax = mean + se),
+        width = 0.15,
+        position = dodge
+      )
+    }
+
+    p <- p +
+      point_layer +
+      errorbar_layer +
       theme_minimal(base_size = base_size) +
       labs(
         x = factor1,
@@ -1100,7 +1124,8 @@ plot_anova_lineplot_meanse <- function(data,
                                        line_colors = NULL,
                                        base_size = 14,
                                        show_lines = FALSE,
-                                       show_jitter = FALSE) {
+                                       show_jitter = FALSE,
+                                       use_dodge = FALSE) {
   context <- initialize_anova_plot_context(data, info, layout_values)
   data <- context$data
   factor1 <- context$factor1
@@ -1158,7 +1183,8 @@ plot_anova_lineplot_meanse <- function(data,
           raw_data = entry$raw,
           response_var = resp,
           show_lines = show_lines,
-          show_jitter = show_jitter
+          show_jitter = show_jitter,
+          use_dodge = use_dodge
         )
       })
 
@@ -1203,7 +1229,8 @@ plot_anova_lineplot_meanse <- function(data,
         raw_data = prepare_lineplot_raw_data(data, resp, factor1, factor2),
         response_var = resp,
         show_lines = show_lines,
-        show_jitter = show_jitter
+        show_jitter = show_jitter,
+        use_dodge = use_dodge
       )
     }
   }

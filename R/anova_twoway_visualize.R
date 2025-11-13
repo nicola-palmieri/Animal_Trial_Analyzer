@@ -37,7 +37,7 @@ visualize_twoway_ui <- function(id) {
       conditionalPanel(
         condition = sprintf("input['%s'] === 'lineplot_mean_se'", ns("plot_type")),
         fluidRow(
-          column(6, with_help_tooltip(
+          column(4, with_help_tooltip(
             checkboxInput(
               ns("lineplot_show_lines"),
               "Connect means with lines",
@@ -45,7 +45,15 @@ visualize_twoway_ui <- function(id) {
             ),
             "Draw connecting lines between group means."
           )),
-          column(6, with_help_tooltip(
+          column(4, with_help_tooltip(
+            checkboxInput(
+              ns("lineplot_use_dodge"),
+              "Dodge grouped means",
+              value = TRUE
+            ),
+            "Offset the level means of the second factor along the x-axis to prevent overlap."
+          )),
+          column(4, with_help_tooltip(
             checkboxInput(
               ns("lineplot_show_jitter"),
               "Overlay jittered data",
@@ -140,6 +148,7 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
         base_size   = base_size(),
         show_labels = isTRUE(input$show_bar_labels),
         show_lines  = isTRUE(input$lineplot_show_lines),
+        use_dodge   = isTRUE(input$lineplot_use_dodge),
         show_jitter = isTRUE(input$lineplot_show_jitter),
         plot_type   = input$plot_type
       )
@@ -152,7 +161,8 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
                                   base_size_value,
                                   show_labels,
                                   show_lines,
-                                  show_jitter) {
+                                  show_jitter,
+                                  use_dodge) {
       if (is.null(info) || !identical(info$type, "twoway_anova") || is.null(data) || nrow(data) == 0) {
         return(list(
           lineplot_mean_se = list(plot = NULL, warning = "No data or results available.", layout = NULL),
@@ -165,7 +175,8 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
           line_colors = colors,
           base_size = base_size_value,
           show_lines = show_lines,
-          show_jitter = show_jitter
+          show_jitter = show_jitter,
+          use_dodge = use_dodge
         ),
         barplot_mean_se = plot_anova_barplot_meanse(
           data, info, layout_values = layout_inputs,
@@ -191,7 +202,8 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
         s$colors, s$base_size,
         s$show_labels,
         s$show_lines,
-        s$show_jitter
+        s$show_jitter,
+        s$use_dodge
       )
       res[[if (!is.null(s$plot_type) && s$plot_type %in% names(res)) s$plot_type else "lineplot_mean_se"]]
     })
@@ -215,6 +227,7 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
         s$show_labels,
         s$show_lines,
         s$show_jitter,
+        s$use_dodge,
         s$colors,
         s$base_size,
         s$strata_rows,
