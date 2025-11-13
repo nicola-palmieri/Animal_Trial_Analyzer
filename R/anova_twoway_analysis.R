@@ -104,17 +104,15 @@ two_way_anova_server <- function(id, filtered_data) {
     # Model fitting (via shared helper)
     # -----------------------------------------------------------
     models <- eventReactive(input$run, {
-      df <- filtered_data()
-      req(df, input$factor1, input$order1, input$factor2, input$order2)
+      req(filtered_data(), input$factor1, input$order1, input$factor2, input$order2)
       resp_vals <- responses()
       validate(
         need(length(resp_vals) > 0, "Please select at least one response variable."),
-        need(all(input$order1 %in% unique(df[[input$factor1]])), "Invalid level order for first factor."),
-        need(all(input$order2 %in% unique(df[[input$factor2]])), "Invalid level order for second factor.")
+        need(all(input$order1 %in% unique(filtered_data()[[input$factor1]])), "Invalid level order for first factor."),
+        need(all(input$order2 %in% unique(filtered_data()[[input$factor2]])), "Invalid level order for second factor.")
       )
-      validate_numeric_columns(df, resp_vals, "response variables")
       prepare_stratified_anova(
-        df = df,
+        df = filtered_data(),
         responses = resp_vals,
         model = "twoway_anova",
         factor1_var = input$factor1,

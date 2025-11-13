@@ -76,14 +76,11 @@ one_way_anova_server <- function(id, filtered_data) {
     })
     
     models <- eventReactive(input$run, {
-      df <- filtered_data()
-      req(df, input$group, input$order)
-      resp_vals <- responses()
-      validate(need(length(resp_vals) > 0, "Select at least one response variable."))
-      validate_numeric_columns(df, resp_vals, "response variables")
+      req(filtered_data(), input$group, input$order)
+      validate(need(length(responses()) > 0, "Select at least one response variable."))
       prepare_stratified_anova(
-        df = df,
-        responses = resp_vals,
+        df = filtered_data(),
+        responses = responses(),
         model = "oneway_anova",
         factor1_var = input$group,
         factor1_order = input$order,
