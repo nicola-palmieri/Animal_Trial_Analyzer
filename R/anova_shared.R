@@ -1397,7 +1397,7 @@ build_single_factor_barplot <- function(stats_df,
       panel.grid.minor = element_blank(),
       panel.grid.major.x = element_blank(),
       panel.grid.major.y = element_line(color = "gray90"),
-      axis.text.x = element_text(angle = 30, hjust = 1)
+      axis.text.x = element_text(angle = 0, hjust = 0.5)
     )
 
   expand_scale <- is.null(y_limits)
@@ -1466,7 +1466,7 @@ build_two_factor_barplot <- function(stats_df,
       panel.grid.minor = element_blank(),
       panel.grid.major.x = element_blank(),
       panel.grid.major.y = element_line(color = "gray90"),
-      axis.text.x = element_text(angle = 30, hjust = 1)
+      axis.text.x = element_text(angle = 0, hjust = 0.5)
     ) +
     scale_fill_manual(values = palette)
 
@@ -1712,7 +1712,7 @@ prepare_nested_significance_annotations_data <- function(stats_df,
   # Stack multiple brackets within the same treatment a bit
   step <- diff(range(stats_df$mean + stats_df$se, na.rm = TRUE))
   if (!is.finite(step) || step == 0) step <- max(stats_df$mean + stats_df$se, na.rm = TRUE) * 0.05
-  step <- step * 0.08
+  step <- step * 0.12
   base_offset <- step * 0.6
   df <- dplyr::group_by(df, .data[[factor1]])
   df <- dplyr::mutate(

@@ -76,11 +76,14 @@ one_way_anova_server <- function(id, filtered_data) {
     })
     
     models <- eventReactive(input$run, {
-      req(filtered_data(), input$group, input$order)
-      validate(need(length(responses()) > 0, "Select at least one response variable."))
+      df <- filtered_data()
+      req(df, input$group, input$order)
+      resp_vals <- responses()
+      validate(need(length(resp_vals) > 0, "Select at least one response variable."))
+      validate_numeric_columns(df, resp_vals, "response variables")
       prepare_stratified_anova(
-        df = filtered_data(),
-        responses = responses(),
+        df = df,
+        responses = resp_vals,
         model = "oneway_anova",
         factor1_var = input$group,
         factor1_order = input$order,
@@ -196,6 +199,14 @@ visualize_oneway_ui <- function(id) {
           ))
         )
       ),
+      with_help_tooltip(
+        checkboxInput(
+          ns("share_y_axis"),
+          "Use common y-axis across plots",
+          value = FALSE
+        ),
+        "Lock the y-axis range so all subplots share the same scale."
+      ),
       fluidRow(
         column(6, with_help_tooltip(
           numericInput(ns("plot_width"), "Subplot width (px)", value = 400, min = 200, max = 1200, step = 50),
@@ -266,12 +277,13 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
         strata_cols = strata_grid$cols(),
         resp_rows   = response_grid$rows(),
         resp_cols   = response_grid$cols(),
-        colors      = custom_colors(),
-        base_size   = base_size(),
-        show_labels = isTRUE(input$show_bar_labels),
-        show_lines  = isTRUE(input$lineplot_show_lines),
-        show_jitter = isTRUE(input$lineplot_show_jitter),
-        plot_type   = input$plot_type
+        colors        = custom_colors(),
+        base_size     = base_size(),
+        show_labels   = isTRUE(input$show_bar_labels),
+        show_lines    = isTRUE(input$lineplot_show_lines),
+        show_jitter   = isTRUE(input$lineplot_show_jitter),
+        plot_type     = input$plot_type,
+        share_y_axis  = isTRUE(input$share_y_axis)
       )
     })
 
@@ -282,12 +294,46 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
                                   base_size_value,
                                   show_labels,
                                   show_lines,
-                                  show_jitter) {
+                                  show_jitter,
+                                  share_y_axis) {
       if (is.null(info) || !identical(info$type, "oneway_anova") || is.null(data) || nrow(data) == 0) {
         return(list(
           lineplot_mean_se = list(plot = NULL, warning = "No data or results available.", layout = NULL),
           barplot_mean_se  = list(plot = NULL, warning = "No data or results available.", layout = NULL)
         ))
+      }
+
+      responses <- info$responses
+      if (!is.null(responses) && length(responses) > 0 && is.data.frame(data)) {
+        missing_cols <- setdiff(responses, names(data))
+        if (length(missing_cols) > 0) {
+          message <- sprintf(
+            "The following response variable(s) are no longer available in the dataset: %s.",
+            paste(missing_cols, collapse = ", ")
+          )
+        } else {
+          non_numeric <- responses[!vapply(responses, function(col) is.numeric(data[[col]]), logical(1))]
+          message <- if (length(non_numeric) > 0) {
+            sprintf(
+              "The selected response variable(s) must be numeric for visualization. Please update their type in the Upload tab: %s.",
+              paste(non_numeric, collapse = ", ")
+            )
+          } else {
+            NULL
+          }
+        }
+
+        if (!is.null(message)) {
+          placeholder_layout <- list(
+            strata = list(rows = 1L, cols = 1L),
+            responses = list(rows = 1L, cols = 1L)
+          )
+          placeholder <- list(plot = NULL, warning = message, layout = placeholder_layout)
+          return(list(
+            lineplot_mean_se = placeholder,
+            barplot_mean_se  = placeholder
+          ))
+        }
       }
 
       list(
@@ -296,7 +342,8 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
           line_colors = colors,
           base_size = base_size_value,
           show_lines = show_lines,
-          show_jitter = show_jitter
+          show_jitter = show_jitter,
+          share_y_axis = share_y_axis
         ),
         barplot_mean_se = plot_anova_barplot_meanse(
           data, info,
@@ -304,7 +351,8 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
           line_colors = colors,
           show_value_labels = show_labels,
           base_size = base_size_value,
-          posthoc_all = info$posthoc
+          posthoc_all = info$posthoc,
+          share_y_axis = share_y_axis
         )
       )
     }
@@ -323,7 +371,8 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
         s$colors, s$base_size,
         s$show_labels,
         s$show_lines,
-        s$show_jitter
+        s$show_jitter,
+        s$share_y_axis
       )
       res[[if (!is.null(s$plot_type) && s$plot_type %in% names(res)) s$plot_type else "lineplot_mean_se"]]
     })
@@ -352,9 +401,10 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
         s$strata_cols,
         s$resp_rows,
         s$resp_cols,
+        s$share_y_axis,
         sep = "_"
       )
-      
+
       if (!identical(key, cached_key())) {
         info <- plot_info()
         if (!is.null(info$plot)) {
@@ -1331,8 +1381,7 @@ apply_anova_factor_levels <- function(stats_df, factor1, factor2, order1, order2
 finalize_anova_plot_result <- function(response_plots,
                                        context,
                                        strata_panel_count,
-                                       collect_guides = FALSE,
-                                       legend_position = NULL) {
+                                       collect_guides = FALSE) {
   if (length(response_plots) == 0) {
     return(NULL)
   }
@@ -1382,9 +1431,6 @@ finalize_anova_plot_result <- function(response_plots,
   if (is.null(warning_text)) {
     if (length(response_plots) == 1) {
       final_plot <- response_plots[[1]]
-      if (collect_guides && !is.null(legend_position)) {
-        final_plot <- final_plot & theme(legend.position = legend_position)
-      }
     } else {
       combined <- patchwork::wrap_plots(
         plotlist = response_plots,
@@ -1392,11 +1438,7 @@ finalize_anova_plot_result <- function(response_plots,
         ncol = response_layout$ncol
       )
       final_plot <- if (collect_guides) {
-        collected <- combined & patchwork::plot_layout(guides = "collect")
-        if (!is.null(legend_position)) {
-          collected <- collected & theme(legend.position = legend_position)
-        }
-        collected
+        combined & patchwork::plot_layout(guides = "collect")
       } else {
         combined
       }
@@ -1563,7 +1605,13 @@ build_line_plot_panel <- function(stats_df,
   }
 
   p + ggtitle(title_text) +
-    theme(plot.title = element_text(size = 12, face = "bold"))
+    theme(
+      plot.title = element_text(
+        size = base_size,
+        face = "bold",
+        hjust = 0.5
+      )
+    )
 }
 
 prepare_lineplot_raw_data <- function(df, response_var, factor1, factor2 = NULL) {
@@ -1582,6 +1630,69 @@ prepare_lineplot_raw_data <- function(df, response_var, factor1, factor2 = NULL)
   raw_subset
 }
 
+update_numeric_range <- function(current_range, values) {
+  values <- values[is.finite(values)]
+  if (length(values) == 0) return(current_range)
+  new_range <- range(values)
+  if (any(!is.finite(new_range))) return(current_range)
+  if (is.null(current_range)) {
+    new_range
+  } else {
+    c(min(current_range[1], new_range[1]), max(current_range[2], new_range[2]))
+  }
+}
+
+expand_axis_limits <- function(range_vals, lower_mult = 0.05, upper_mult = 0.12) {
+  if (is.null(range_vals) || length(range_vals) != 2 || any(!is.finite(range_vals))) return(range_vals)
+  span <- diff(range_vals)
+  if (!is.finite(span) || span == 0) {
+    span <- max(1, abs(range_vals[2]))
+  }
+  c(range_vals[1] - span * lower_mult, range_vals[2] + span * upper_mult)
+}
+
+ensure_barplot_zero_baseline <- function(range_vals) {
+  if (is.null(range_vals) || length(range_vals) != 2 || any(!is.finite(range_vals))) {
+    return(range_vals)
+  }
+
+  lower <- range_vals[1]
+  if (is.na(lower)) return(range_vals)
+
+  range_vals[1] <- min(0, lower)
+  range_vals
+}
+
+compute_lineplot_shared_limits <- function(context, data, factor1, factor2) {
+  combined <- NULL
+
+  for (resp in context$responses) {
+    if (context$has_strata && !is.null(context$strat_var) && context$strat_var %in% names(data)) {
+      for (stratum in context$strata_levels) {
+        subset_rows <- !is.na(data[[context$strat_var]]) & data[[context$strat_var]] == stratum
+        subset_data <- data[subset_rows, , drop = FALSE]
+        if (nrow(subset_data) == 0) next
+
+        stats_df <- anova_summarise_stats(subset_data, resp, factor1, factor2)
+        if (nrow(stats_df) == 0) next
+
+        stats_df <- apply_anova_factor_levels(stats_df, factor1, factor2, context$order1, context$order2)
+        y_values <- c(stats_df$mean - stats_df$se, stats_df$mean + stats_df$se)
+        combined <- update_numeric_range(combined, y_values)
+      }
+    } else {
+      stats_df <- anova_summarise_stats(data, resp, factor1, factor2)
+      if (nrow(stats_df) == 0) next
+      stats_df <- apply_anova_factor_levels(stats_df, factor1, factor2, context$order1, context$order2)
+      y_values <- c(stats_df$mean - stats_df$se, stats_df$mean + stats_df$se)
+      combined <- update_numeric_range(combined, y_values)
+    }
+  }
+
+  if (is.null(combined) || any(!is.finite(combined))) return(NULL)
+  combined
+}
+
 plot_anova_lineplot_meanse <- function(data,
                                        info,
                                        layout_values,
@@ -1590,12 +1701,17 @@ plot_anova_lineplot_meanse <- function(data,
                                        show_lines = FALSE,
                                        show_jitter = FALSE,
                                        use_dodge = FALSE,
-                                       collect_common_legend = TRUE,
-                                       legend_position = NULL) {
+                                       share_y_axis = FALSE) {
   context <- initialize_anova_plot_context(data, info, layout_values)
   data <- context$data
   factor1 <- context$factor1
   factor2 <- context$factor2
+
+  shared_y_limits <- if (isTRUE(share_y_axis)) {
+    compute_lineplot_shared_limits(context, data, factor1, factor2)
+  } else {
+    NULL
+  }
 
   response_plots <- list()
   strata_panel_count <- context$initial_strata_panels
@@ -1633,6 +1749,7 @@ plot_anova_lineplot_meanse <- function(data,
       if (!all(is.finite(y_limits))) {
         y_limits <- NULL
       }
+      y_limits_to_use <- if (!is.null(shared_y_limits)) shared_y_limits else y_limits
 
       strata_panel_count <- max(strata_panel_count, length(stratum_stats))
 
@@ -1641,7 +1758,7 @@ plot_anova_lineplot_meanse <- function(data,
         build_line_plot_panel(
           stats_df = entry$stats,
           title_text = stratum_name,
-          y_limits = y_limits,
+          y_limits = y_limits_to_use,
           factor1 = factor1,
           factor2 = factor2,
           line_colors = line_colors,
@@ -1666,7 +1783,11 @@ plot_anova_lineplot_meanse <- function(data,
         theme_void() +
         ggtitle(resp) +
         theme(
-          plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+          plot.title = element_text(
+            size = base_size,
+            face = "bold",
+            hjust = 0.5
+          ),
           plot.margin = margin(t = 0, r = 0, b = 6, l = 0)
         )
 
@@ -1684,10 +1805,12 @@ plot_anova_lineplot_meanse <- function(data,
         y_limits <- NULL
       }
 
+      y_limits_to_use <- if (!is.null(shared_y_limits)) shared_y_limits else y_limits
+
       response_plots[[resp]] <- build_line_plot_panel(
         stats_df = stats_df,
         title_text = resp,
-        y_limits = y_limits,
+        y_limits = y_limits_to_use,
         factor1 = factor1,
         factor2 = factor2,
         line_colors = line_colors,
@@ -1705,8 +1828,7 @@ plot_anova_lineplot_meanse <- function(data,
     response_plots = response_plots,
     context = context,
     strata_panel_count = strata_panel_count,
-    collect_guides = isTRUE(collect_common_legend),
-    legend_position = legend_position
+    collect_guides = TRUE
   )
 }
 
@@ -1719,7 +1841,8 @@ build_bar_plot_panel <- function(stats_df,
                                  show_value_labels = FALSE,
                                  base_size = 14,
                                  posthoc_entry = NULL,
-                                 nested_posthoc = NULL) {
+                                 nested_posthoc = NULL,
+                                 y_limits = NULL) {
 
   if (is.null(factor2) || !factor2 %in% names(stats_df)) {
     return(
@@ -1730,11 +1853,12 @@ build_bar_plot_panel <- function(stats_df,
         base_fill,
         show_value_labels,
         base_size,
-        posthoc_entry
+        posthoc_entry,
+        y_limits = y_limits
       )
     )
   }
-  
+
   build_two_factor_barplot(
     stats_df,
     title_text,
@@ -1744,7 +1868,8 @@ build_bar_plot_panel <- function(stats_df,
     base_fill,
     show_value_labels,
     base_size,
-    nested_posthoc
+    nested_posthoc,
+    y_limits = y_limits
   )
 }
 
@@ -1757,9 +1882,10 @@ build_single_factor_barplot <- function(stats_df,
                                         base_fill,
                                         show_value_labels,
                                         base_size,
-                                        posthoc_entry) {
+                                        posthoc_entry,
+                                        y_limits = NULL) {
   format_numeric_labels <- scales::label_number(accuracy = 0.01, trim = TRUE)
-  
+
   plot_obj <- ggplot(stats_df, aes(x = !!sym(factor1), y = mean)) +
     geom_col(fill = base_fill, width = 0.6, alpha = 0.8) +
     geom_errorbar(
@@ -1779,15 +1905,27 @@ build_single_factor_barplot <- function(stats_df,
       panel.grid.major.y = element_line(color = "gray90"),
       axis.text.x = element_text(angle = 30, hjust = 1)
     )
-  
+
+  expand_scale <- is.null(y_limits)
+
   if (isTRUE(show_value_labels)) {
-    plot_obj <- add_bar_value_labels(plot_obj, stats_df, factor1, format_numeric_labels, base_size)
+    plot_obj <- add_bar_value_labels(
+      plot_obj, stats_df, factor1, format_numeric_labels, base_size,
+      expand_scale = expand_scale
+    )
   }
-  
+
   if (!is.null(posthoc_entry)) {
-    plot_obj <- add_significance_annotations(plot_obj, stats_df, factor1, posthoc_entry)
+    plot_obj <- add_significance_annotations(
+      plot_obj, stats_df, factor1, posthoc_entry,
+      allow_scale_expansion = expand_scale
+    )
   }
-  
+
+  if (!is.null(y_limits) && all(is.finite(y_limits))) {
+    plot_obj <- plot_obj + scale_y_continuous(limits = y_limits, expand = expansion(mult = c(0, 0)))
+  }
+
   plot_obj
 }
 
@@ -1802,7 +1940,8 @@ build_two_factor_barplot <- function(stats_df,
                                      base_fill,
                                      show_value_labels,
                                      base_size,
-                                     nested_posthoc = NULL) {
+                                     nested_posthoc = NULL,
+                                     y_limits = NULL) {
 
   format_numeric_labels <- scales::label_number(accuracy = 0.01, trim = TRUE)
   
@@ -1836,22 +1975,40 @@ build_two_factor_barplot <- function(stats_df,
       axis.text.x = element_text(angle = 30, hjust = 1)
     ) +
     scale_fill_manual(values = palette)
-  
+
+  expand_scale <- is.null(y_limits)
+
   if (isTRUE(show_value_labels)) {
-    plot_obj <- add_grouped_bar_value_labels(plot_obj, stats_df, factor1, factor2, format_numeric_labels, dodge, base_size)
+    plot_obj <- add_grouped_bar_value_labels(
+      plot_obj, stats_df, factor1, factor2,
+      format_numeric_labels, dodge, base_size,
+      expand_scale = expand_scale
+    )
   }
-  
+
   if (!is.null(nested_posthoc)) {
-    plot_obj <- add_nested_significance_annotations(plot_obj, stats_df, factor1, factor2, nested_posthoc)
+    plot_obj <- add_nested_significance_annotations(
+      plot_obj, stats_df, factor1, factor2, nested_posthoc,
+      allow_scale_expansion = expand_scale
+    )
   }
-  
+
+  if (!is.null(y_limits) && all(is.finite(y_limits))) {
+    plot_obj <- plot_obj + scale_y_continuous(limits = y_limits, expand = expansion(mult = c(0, 0)))
+  }
+
   plot_obj
 }
 
 # ===============================================================
 # 🔹 Helper: Add value labels to single-factor barplots
 # ===============================================================
-add_bar_value_labels <- function(plot_obj, stats_df, factor1, format_numeric_labels, base_size) {
+add_bar_value_labels <- function(plot_obj,
+                                stats_df,
+                                factor1,
+                                format_numeric_labels,
+                                base_size,
+                                expand_scale = TRUE) {
   label_df <- stats_df |>
     dplyr::mutate(
       .se = dplyr::coalesce(se, 0),
@@ -1860,7 +2017,7 @@ add_bar_value_labels <- function(plot_obj, stats_df, factor1, format_numeric_lab
       label_vjust = ifelse(mean >= 0, -0.4, 1.2)
     )
 
-  plot_obj +
+  plot_obj <- plot_obj +
     geom_text(
       data = label_df,
       aes(x = !!sym(factor1), y = label_y, label = label_text, vjust = label_vjust),
@@ -1868,14 +2025,26 @@ add_bar_value_labels <- function(plot_obj, stats_df, factor1, format_numeric_lab
       size = compute_label_text_size(base_size),
       fontface = "bold",
       inherit.aes = FALSE
-    ) +
-    scale_y_continuous(expand = expansion(mult = c(0.05, 0.12)))
+    )
+
+  if (isTRUE(expand_scale)) {
+    plot_obj <- plot_obj + scale_y_continuous(expand = expansion(mult = c(0.05, 0.12)))
+  }
+
+  plot_obj
 }
 
 # ===============================================================
 # 🔹 Helper: Add value labels to grouped (two-factor) barplots
 # ===============================================================
-add_grouped_bar_value_labels <- function(plot_obj, stats_df, factor1, factor2, format_numeric_labels, dodge, base_size) {
+add_grouped_bar_value_labels <- function(plot_obj,
+                                         stats_df,
+                                         factor1,
+                                         factor2,
+                                         format_numeric_labels,
+                                         dodge,
+                                         base_size,
+                                         expand_scale = TRUE) {
   label_df <- stats_df |>
     dplyr::mutate(
       .se = dplyr::coalesce(se, 0),
@@ -1883,8 +2052,8 @@ add_grouped_bar_value_labels <- function(plot_obj, stats_df, factor1, factor2, f
       label_y = ifelse(mean >= 0, mean + .se, mean - .se),
       label_vjust = ifelse(mean >= 0, -0.4, 1.2)
     )
-  
-  plot_obj +
+
+  plot_obj <- plot_obj +
     geom_text(
       data = label_df,
       aes(
@@ -1900,29 +2069,31 @@ add_grouped_bar_value_labels <- function(plot_obj, stats_df, factor1, factor2, f
       size = compute_label_text_size(base_size),
       fontface = "bold",
       inherit.aes = FALSE
-    ) +
-    scale_y_continuous(expand = expansion(mult = c(0.05, 0.12)))
+    )
+
+  if (isTRUE(expand_scale)) {
+    plot_obj <- plot_obj + scale_y_continuous(expand = expansion(mult = c(0.05, 0.12)))
+  }
+
+  plot_obj
 }
 
 # ===============================================================
-# 🔹 Helper: Add significance annotations (for one-way)
+# 🔹 Helper: Significance annotation preparation & drawing
 # ===============================================================
-add_significance_annotations <- function(plot_obj, stats_df, factor1, posthoc_entry) {
-  if (is.null(posthoc_entry) || !is.data.frame(posthoc_entry)) return(plot_obj)
-  
+prepare_significance_annotations_data <- function(stats_df, factor1, posthoc_entry) {
+  if (is.null(posthoc_entry) || !is.data.frame(posthoc_entry)) return(NULL)
+
   signif_df <- posthoc_entry
-  
-  # --- Clean and standardize p-values ---
+
   signif_df$p.value <- as.character(signif_df$p.value)
   signif_df$p.value <- gsub("[[:space:]]", "", signif_df$p.value)
-  signif_df$p.value <- gsub("^<\\.?0*", "0.", signif_df$p.value)   # handle <.0001 or <0.001
+  signif_df$p.value <- gsub("^<\\.?0*", "0.", signif_df$p.value)
   signif_df$p.value <- suppressWarnings(as.numeric(signif_df$p.value))
-  
-  # --- Keep only significant ---
+
   signif_df <- signif_df |> dplyr::filter(!is.na(p.value) & p.value < 0.05)
-  if (nrow(signif_df) == 0) return(plot_obj)
-  
-  # --- Convert to stars ---
+  if (nrow(signif_df) == 0) return(NULL)
+
   signif_df <- signif_df |> dplyr::mutate(
     xmin = gsub(" - .*", "", contrast),
     xmax = gsub(".*- ", "", contrast),
@@ -1933,14 +2104,28 @@ add_significance_annotations <- function(plot_obj, stats_df, factor1, posthoc_en
       TRUE ~ ""
     )
   )
-  
+
   max_y <- max(stats_df$mean + stats_df$se, na.rm = TRUE)
   step <- abs(max_y) * 0.15
   signif_df$y_position <- seq(from = max_y + step, by = step, length.out = nrow(signif_df))
   signif_df$.group_id <- seq_len(nrow(signif_df))
-  
-  plot_obj <- plot_obj + ggsignif::geom_signif(
+
+  list(
     data = signif_df,
+    max_y = max(signif_df$y_position, na.rm = TRUE) * 1.1
+  )
+}
+
+add_significance_annotations <- function(plot_obj,
+                                         stats_df,
+                                         factor1,
+                                         posthoc_entry,
+                                         allow_scale_expansion = TRUE) {
+  prep <- prepare_significance_annotations_data(stats_df, factor1, posthoc_entry)
+  if (is.null(prep)) return(plot_obj)
+
+  plot_obj <- plot_obj + ggsignif::geom_signif(
+    data = prep$data,
     aes(
       xmin = xmin,
       xmax = xmax,
@@ -1954,28 +2139,37 @@ add_significance_annotations <- function(plot_obj, stats_df, factor1, posthoc_en
     tip_length = 0.01,
     color = "gray30"
   )
-  
-  max_y_total <- max(signif_df$y_position, na.rm = TRUE)
-  plot_obj + scale_y_continuous(expand = expansion(mult = c(0, 0.10)),
-                                limits = c(NA, max_y_total * 1.1))
+
+  if (isTRUE(allow_scale_expansion)) {
+    plot_obj <- plot_obj + scale_y_continuous(
+      expand = expansion(mult = c(0, 0.10)),
+      limits = c(NA, prep$max_y)
+    )
+  }
+
+  plot_obj
 }
 
 
-add_nested_significance_annotations <- function(plot_obj, stats_df, factor1, factor2, nested_posthoc, dodge_width = 0.7) {
+prepare_nested_significance_annotations_data <- function(stats_df,
+                                                         factor1,
+                                                         factor2,
+                                                         nested_posthoc,
+                                                         dodge_width = 0.7) {
   nested_name <- paste0(factor2, "_within_", factor1)
-  
+
   # Accept both a flat data.frame or a list entry
   df <- NULL
   if (is.data.frame(nested_posthoc)) {
-    if (!"Factor" %in% names(nested_posthoc)) return(plot_obj)
+    if (!"Factor" %in% names(nested_posthoc)) return(NULL)
     df <- dplyr::filter(nested_posthoc, .data$Factor == nested_name)
   } else if (is.list(nested_posthoc) && nested_name %in% names(nested_posthoc)) {
     df <- nested_posthoc[[nested_name]]
   } else {
-    return(plot_obj)
+    return(NULL)
   }
-  if (is.null(df) || nrow(df) == 0) return(plot_obj)
-  if (!all(c("contrast","p.value", factor1) %in% names(df))) return(plot_obj)
+  if (is.null(df) || nrow(df) == 0) return(NULL)
+  if (!all(c("contrast","p.value", factor1) %in% names(df))) return(NULL)
   
   # Clean p-values, keep only significant
   df$p.value <- as.character(df$p.value)
@@ -1983,7 +2177,7 @@ add_nested_significance_annotations <- function(plot_obj, stats_df, factor1, fac
   df$p.value <- gsub("^<\\.?0*", "0.", df$p.value)  # <.0001, <0.001 -> numeric-ish
   df$p.value <- suppressWarnings(as.numeric(df$p.value))
   df <- dplyr::filter(df, !is.na(.data$p.value) & .data$p.value < 0.05)
-  if (nrow(df) == 0) return(plot_obj)
+  if (nrow(df) == 0) return(NULL)
   
   # Parse pair labels from "A - B"
   df$g1 <- sub(" - .*", "", df$contrast)
@@ -2044,20 +2238,125 @@ add_nested_significance_annotations <- function(plot_obj, stats_df, factor1, fac
   df$.group_id <- seq_len(nrow(df))
   
   # One layer total (manual=TRUE expects numeric x’s on the data)
+  list(
+    data = df,
+    max_y = max(df$y_position, na.rm = TRUE) * 1.1
+  )
+}
+
+add_nested_significance_annotations <- function(plot_obj,
+                                                 stats_df,
+                                                 factor1,
+                                                 factor2,
+                                                 nested_posthoc,
+                                                 dodge_width = 0.7,
+                                                 allow_scale_expansion = TRUE) {
+  prep <- prepare_nested_significance_annotations_data(
+    stats_df, factor1, factor2, nested_posthoc, dodge_width
+  )
+  if (is.null(prep)) return(plot_obj)
+
   plot_obj <- plot_obj + ggsignif::geom_signif(
-    data        = df,
-    aes(xmin = xmin, xmax = xmax, annotations = annotations,
-        y_position = y_position, group = .group_id),
+    data        = prep$data,
+    aes(xmin = xmin,
+        xmax = xmax,
+        annotations = annotations,
+        y_position = y_position,
+        group = .group_id),
     manual      = TRUE,
     inherit.aes = FALSE,
     textsize    = 3.5,
     tip_length  = 0.01,
     color       = "gray30"
   )
-  
-  max_y_total <- max(df$y_position, na.rm = TRUE)
-  plot_obj + scale_y_continuous(expand = expansion(mult = c(0, 0.10)),
-                                limits = c(NA, max_y_total * 1.1))
+
+  if (isTRUE(allow_scale_expansion)) {
+    plot_obj <- plot_obj + scale_y_continuous(
+      expand = expansion(mult = c(0, 0.10)),
+      limits = c(NA, prep$max_y)
+    )
+  }
+
+  plot_obj
+}
+
+compute_barplot_panel_range <- function(stats_df,
+                                        factor1,
+                                        factor2,
+                                        posthoc_entry = NULL,
+                                        nested_posthoc = NULL) {
+  if (is.null(stats_df) || nrow(stats_df) == 0) return(NULL)
+  values <- c(stats_df$mean - stats_df$se, stats_df$mean + stats_df$se)
+  values <- values[is.finite(values)]
+  if (length(values) == 0) return(NULL)
+  rng <- range(values)
+  max_val <- rng[2]
+
+  if (is.null(factor2) || !factor2 %in% names(stats_df)) {
+    prep <- prepare_significance_annotations_data(stats_df, factor1, posthoc_entry)
+  } else {
+    prep <- prepare_nested_significance_annotations_data(stats_df, factor1, factor2, nested_posthoc)
+  }
+
+  if (!is.null(prep) && !is.null(prep$max_y) && is.finite(prep$max_y)) {
+    max_val <- max(max_val, prep$max_y)
+  }
+
+  c(rng[1], max_val)
+}
+
+compute_barplot_shared_limits <- function(context,
+                                          data,
+                                          factor1,
+                                          factor2,
+                                          posthoc_all = NULL) {
+  combined <- NULL
+
+  for (resp in context$responses) {
+    posthoc_entry <- NULL
+    if (!is.null(posthoc_all) && !is.null(posthoc_all[[resp]])) {
+      posthoc_entry <- posthoc_all[[resp]]
+    }
+
+    if (context$has_strata && !is.null(context$strat_var) && context$strat_var %in% names(data)) {
+      for (stratum in context$strata_levels) {
+        subset_rows <- !is.na(data[[context$strat_var]]) & data[[context$strat_var]] == stratum
+        subset_data <- data[subset_rows, , drop = FALSE]
+        if (nrow(subset_data) == 0) next
+
+        stats_df <- anova_summarise_stats(subset_data, resp, factor1, factor2)
+        if (nrow(stats_df) == 0) next
+        stats_df <- apply_anova_factor_levels(stats_df, factor1, factor2, context$order1, context$order2)
+
+        stratum_posthoc <- NULL
+        if (!is.null(posthoc_entry) && !is.null(posthoc_entry[[stratum]])) {
+          stratum_posthoc <- posthoc_entry[[stratum]]
+        }
+
+        rng <- compute_barplot_panel_range(
+          stats_df, factor1, factor2,
+          posthoc_entry = stratum_posthoc,
+          nested_posthoc = stratum_posthoc
+        )
+        combined <- update_numeric_range(combined, rng)
+      }
+    } else {
+      stats_df <- anova_summarise_stats(data, resp, factor1, factor2)
+      if (nrow(stats_df) == 0) next
+      stats_df <- apply_anova_factor_levels(stats_df, factor1, factor2, context$order1, context$order2)
+
+      rng <- compute_barplot_panel_range(
+        stats_df, factor1, factor2,
+        posthoc_entry = posthoc_entry,
+        nested_posthoc = posthoc_entry
+      )
+      combined <- update_numeric_range(combined, rng)
+    }
+  }
+
+  if (is.null(combined)) return(NULL)
+  limits <- expand_axis_limits(combined, lower_mult = 0.05, upper_mult = 0.12)
+  ensure_barplot_zero_baseline(limits)
 }
 
 plot_anova_barplot_meanse <- function(data,
@@ -2067,17 +2366,22 @@ plot_anova_barplot_meanse <- function(data,
                                       show_value_labels = FALSE,
                                       base_size = 14,
                                       posthoc_all = NULL,
-                                      collect_common_legend = FALSE,
-                                      legend_position = NULL) {
+                                      share_y_axis = FALSE) {
   context <- initialize_anova_plot_context(data, info, layout_values)
   data <- context$data
   factor1 <- context$factor1
   factor2 <- context$factor2
-  
+
   if (is.null(factor1) || length(context$responses) == 0) {
     return(NULL)
   }
-  
+
+  shared_y_limits <- if (isTRUE(share_y_axis)) {
+    compute_barplot_shared_limits(context, data, factor1, factor2, posthoc_all)
+  } else {
+    NULL
+  }
+
   base_fill <- if (!is.null(line_colors) && length(line_colors) > 0) {
     unname(line_colors)[1]
   } else {
@@ -2121,7 +2425,8 @@ plot_anova_barplot_meanse <- function(data,
           show_value_labels = show_value_labels,
           base_size = base_size,
           posthoc_entry = stratum_posthoc,
-          nested_posthoc = stratum_posthoc
+          nested_posthoc = stratum_posthoc,
+          y_limits = shared_y_limits
         )
       }
       
@@ -2157,7 +2462,8 @@ plot_anova_barplot_meanse <- function(data,
         show_value_labels = show_value_labels,
         base_size = base_size,
         posthoc_entry = posthoc_entry,
-        nested_posthoc = posthoc_entry
+        nested_posthoc = posthoc_entry,
+        y_limits = shared_y_limits
       )
     }
   }
@@ -2166,8 +2472,7 @@ plot_anova_barplot_meanse <- function(data,
     response_plots = response_plots,
     context = context,
     strata_panel_count = strata_panel_count,
-    collect_guides = isTRUE(collect_common_legend),
-    legend_position = legend_position
+    collect_guides = FALSE
   )
 }
 
@@ -2289,15 +2594,17 @@ two_way_anova_server <- function(id, filtered_data) {
     # Model fitting (via shared helper)
     # -----------------------------------------------------------
     models <- eventReactive(input$run, {
-      req(filtered_data(), input$factor1, input$order1, input$factor2, input$order2)
+      df <- filtered_data()
+      req(df, input$factor1, input$order1, input$factor2, input$order2)
       resp_vals <- responses()
       validate(
         need(length(resp_vals) > 0, "Please select at least one response variable."),
-        need(all(input$order1 %in% unique(filtered_data()[[input$factor1]])), "Invalid level order for first factor."),
-        need(all(input$order2 %in% unique(filtered_data()[[input$factor2]])), "Invalid level order for second factor.")
+        need(all(input$order1 %in% unique(df[[input$factor1]])), "Invalid level order for first factor."),
+        need(all(input$order2 %in% unique(df[[input$factor2]])), "Invalid level order for second factor.")
       )
+      validate_numeric_columns(df, resp_vals, "response variables")
       prepare_stratified_anova(
-        df = filtered_data(),
+        df = df,
         responses = resp_vals,
         model = "twoway_anova",
         factor1_var = input$factor1,
@@ -2439,6 +2746,14 @@ visualize_twoway_ui <- function(id) {
           ))
         )
       ),
+      with_help_tooltip(
+        checkboxInput(
+          ns("share_y_axis"),
+          "Use common y-axis across plots",
+          value = FALSE
+        ),
+        "Lock the y-axis range so every subplot uses the same scale."
+      ),
       fluidRow(
         column(6, with_help_tooltip(
           numericInput(ns("plot_width"),  "Subplot width (px)",  value = 400, min = 200, max = 1200, step = 50),
@@ -2452,14 +2767,11 @@ visualize_twoway_ui <- function(id) {
       uiOutput(ns("layout_controls")),
       fluidRow(
         column(6, add_color_customization_ui(ns, multi_group = TRUE)),
-        column(6,
-          base_size_ui(
-            ns,
-            default = 13,
-            help_text = "Adjust the base font size used for the ANOVA plots."
-          ),
-          uiOutput(ns("legend_controls"))
-        )
+        column(6, base_size_ui(
+          ns,
+          default = 13,
+          help_text = "Adjust the base font size used for the ANOVA plots."
+        ))
       ),
       br(),
       with_help_tooltip(
@@ -2516,40 +2828,6 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
     
     active <- reactive(TRUE)
     
-    has_multi_panel_layout <- reactive({
-      info <- model_info()
-      if (is.null(info)) return(FALSE)
-      has_strata <- !is.null(info$strata) && !is.null(info$strata$var)
-      multi_responses <- length(info$responses %||% character()) > 1
-      isTRUE(has_strata || multi_responses)
-    })
-
-    output$legend_controls <- renderUI({
-      if (!isTRUE(has_multi_panel_layout())) return(NULL)
-      ns <- session$ns
-      tagList(
-        checkboxInput(
-          ns("use_common_legend"),
-          "Use common legend",
-          value = TRUE
-        ),
-        conditionalPanel(
-          condition = sprintf("input['%s']", ns("use_common_legend")),
-          selectInput(
-            ns("common_legend_position"),
-            "Legend position",
-            choices = c(
-              "Bottom" = "bottom",
-              "Right"  = "right",
-              "Left"   = "left",
-              "Top"    = "top"
-            ),
-            selected = "bottom"
-          )
-        )
-      )
-    })
-
     state <- reactive({
       list(
         data        = df(),
@@ -2558,15 +2836,14 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
         strata_cols = strata_grid$cols(),
         resp_rows   = response_grid$rows(),
         resp_cols   = response_grid$cols(),
-        colors      = custom_colors(),
-        base_size   = base_size(),
-        show_labels = isTRUE(input$show_bar_labels),
-        show_lines  = isTRUE(input$lineplot_show_lines),
-        use_dodge   = isTRUE(input$lineplot_use_dodge),
-        show_jitter = isTRUE(input$lineplot_show_jitter),
-        plot_type   = input$plot_type,
-        use_common_legend = isTRUE(input$use_common_legend) && isTRUE(has_multi_panel_layout()),
-        legend_position  = input$common_legend_position %||% "bottom"
+        colors        = custom_colors(),
+        base_size     = base_size(),
+        show_labels   = isTRUE(input$show_bar_labels),
+        show_lines    = isTRUE(input$lineplot_show_lines),
+        use_dodge     = isTRUE(input$lineplot_use_dodge),
+        show_jitter   = isTRUE(input$lineplot_show_jitter),
+        plot_type     = input$plot_type,
+        share_y_axis  = isTRUE(input$share_y_axis)
       )
     })
 
@@ -2579,13 +2856,45 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
                                   show_lines,
                                   show_jitter,
                                   use_dodge,
-                                  use_common_legend,
-                                  legend_position) {
+                                  share_y_axis) {
       if (is.null(info) || !identical(info$type, "twoway_anova") || is.null(data) || nrow(data) == 0) {
         return(list(
           lineplot_mean_se = list(plot = NULL, warning = "No data or results available.", layout = NULL),
           barplot_mean_se  = list(plot = NULL, warning = "No data or results available.", layout = NULL)
         ))
+      }
+
+      responses <- info$responses
+      if (!is.null(responses) && length(responses) > 0 && is.data.frame(data)) {
+        missing_cols <- setdiff(responses, names(data))
+        if (length(missing_cols) > 0) {
+          message <- sprintf(
+            "The following response variable(s) are no longer available in the dataset: %s.",
+            paste(missing_cols, collapse = ", ")
+          )
+        } else {
+          non_numeric <- responses[!vapply(responses, function(col) is.numeric(data[[col]]), logical(1))]
+          message <- if (length(non_numeric) > 0) {
+            sprintf(
+              "The selected response variable(s) must be numeric for visualization. Please update their type in the Upload tab: %s.",
+              paste(non_numeric, collapse = ", ")
+            )
+          } else {
+            NULL
+          }
+        }
+
+        if (!is.null(message)) {
+          placeholder_layout <- list(
+            strata = list(rows = 1L, cols = 1L),
+            responses = list(rows = 1L, cols = 1L)
+          )
+          placeholder <- list(plot = NULL, warning = message, layout = placeholder_layout)
+          return(list(
+            lineplot_mean_se = placeholder,
+            barplot_mean_se  = placeholder
+          ))
+        }
       }
       list(
         lineplot_mean_se = plot_anova_lineplot_meanse(
@@ -2595,8 +2904,7 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
           show_lines = show_lines,
           show_jitter = show_jitter,
           use_dodge = use_dodge,
-          collect_common_legend = use_common_legend,
-          legend_position = if (isTRUE(use_common_legend)) legend_position else NULL
+          share_y_axis = share_y_axis
         ),
         barplot_mean_se = plot_anova_barplot_meanse(
           data, info, layout_values = layout_inputs,
@@ -2604,8 +2912,7 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
           show_value_labels = show_labels,
           base_size = base_size_value,
           posthoc_all = info$posthoc,
-          collect_common_legend = use_common_legend,
-          legend_position = if (isTRUE(use_common_legend)) legend_position else NULL
+          share_y_axis = share_y_axis
         )
       )
     }
@@ -2626,8 +2933,7 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
         s$show_lines,
         s$show_jitter,
         s$use_dodge,
-        s$use_common_legend,
-        s$legend_position
+        s$share_y_axis
       )
       res[[if (!is.null(s$plot_type) && s$plot_type %in% names(res)) s$plot_type else "lineplot_mean_se"]]
     })
@@ -2658,8 +2964,7 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
         s$strata_cols,
         s$resp_rows,
         s$resp_cols,
-        s$use_common_legend,
-        s$legend_position,
+        s$share_y_axis,
         sep = "_"
       )
       if (!identical(key, cached_key())) {
