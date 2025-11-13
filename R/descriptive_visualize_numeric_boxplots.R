@@ -35,10 +35,13 @@ visualize_numeric_boxplots_ui <- function(id) {
     ),
     fluidRow(
       column(6, add_color_customization_ui(ns, multi_group = TRUE)),
-      column(6, base_size_ui(
-        ns,
-        default = 13,
-        help_text = "Adjust the base font size used for boxplot text elements."
+      column(6, tagList(
+        base_size_ui(
+          ns,
+          default = 13,
+          help_text = "Adjust the base font size used for boxplot text elements."
+        ),
+        uiOutput(ns("common_legend_controls"))
       ))
     ),
     hr(),
@@ -110,7 +113,30 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
       )
     })
     
+    legend_state <- reactiveValues(
+      enabled = FALSE,
+      position = "bottom"
+    )
+
+    observeEvent(input$use_common_legend, {
+      req(!is.null(input$use_common_legend))
+      legend_state$enabled <- isTRUE(input$use_common_legend)
+    }, ignoreNULL = TRUE)
+
+    observeEvent(input$common_legend_position, {
+      req(!is.null(input$common_legend_position))
+      legend_state$position <- input$common_legend_position
+    }, ignoreNULL = TRUE)
+
     state <- reactive({
+      legend_allowed <- !is.null(color_var())
+      valid_positions <- c("bottom", "top", "left", "right")
+      resolved_position <- if (!is.null(legend_state$position) && legend_state$position %in% valid_positions) {
+        legend_state$position
+      } else {
+        "bottom"
+      }
+      use_common_legend <- legend_allowed && isTRUE(legend_state$enabled)
       list(
         info = summary_info(),
         dat = filtered_data(),
@@ -120,7 +146,9 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
         colors = custom_colors(),
         base_size = base_size(),
         rows = grid$rows(),
-        cols = grid$cols()
+        cols = grid$cols(),
+        common_legend = use_common_legend,
+        legend_position = if (use_common_legend) resolved_position else NULL
       )
     })
     
@@ -142,8 +170,66 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
         nrow_input = s$rows,
         ncol_input = s$cols,
         custom_colors = s$colors,
-        base_size = s$base_size
+        base_size = s$base_size,
+        common_legend = s$common_legend,
+        legend_position = s$legend_position
       )
+    })
+
+    common_legend_available <- reactive({
+      req(active())
+      info <- plot_info()
+      has_group <- !is.null(color_var())
+      n_panels <- info$panels %||% 0L
+      has_group && n_panels > 1L
+    })
+
+    observeEvent(common_legend_available(), {
+      if (!isTRUE(common_legend_available())) {
+        legend_state$enabled <- FALSE
+      }
+    })
+
+    output$common_legend_controls <- renderUI({
+      if (!isTRUE(common_legend_available())) {
+        return(NULL)
+      }
+
+      checkbox <- div(
+        class = "mt-3",
+        with_help_tooltip(
+          checkboxInput(
+            ns("use_common_legend"),
+            "Use common legend",
+            value = isTRUE(legend_state$enabled)
+          ),
+          "Merge legends across the boxplots into a single shared legend."
+        )
+      )
+
+      legend_position <- if (isTRUE(legend_state$enabled)) {
+        div(
+          class = "mt-2",
+          with_help_tooltip(
+            selectInput(
+              ns("common_legend_position"),
+              "Legend position",
+              choices = c(
+                "Bottom" = "bottom",
+                "Right" = "right",
+                "Top" = "top",
+                "Left" = "left"
+              ),
+              selected = legend_state$position %||% "bottom"
+            ),
+            "Choose where the combined legend should be displayed."
+          )
+        )
+      } else {
+        NULL
+      }
+
+      tagList(checkbox, legend_position)
     })
     
     plot_dimensions <- reactive({
@@ -194,8 +280,10 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
         s$label_var,
         s$colors,
         s$base_size,
-        s$rows,  
-        s$cols,  
+        s$rows,
+        s$cols,
+        s$common_legend,
+        s$legend_position %||% "",
         sep = "_"
       )
       
@@ -236,7 +324,9 @@ build_descriptive_numeric_boxplot <- function(df,
                                               nrow_input = NULL,
                                               ncol_input = NULL,
                                               custom_colors = NULL,
-                                              base_size = 13) {
+                                              base_size = 13,
+                                              common_legend = FALSE,
+                                              legend_position = NULL) {
   if (is.null(df) || !is.data.frame(df) || nrow(df) == 0) return(NULL)
 
   num_vars <- names(df)[vapply(df, is.numeric, logical(1))]
@@ -392,6 +482,12 @@ build_descriptive_numeric_boxplot <- function(df,
       patchwork::plot_annotation(
         theme = theme(plot.title = element_text(size = 16, face = "bold"))
       )
+
+    combined <- apply_common_legend_layout(
+      combined,
+      legend_position = legend_position,
+      collect_guides = isTRUE(common_legend)
+    )
   }
 
   list(
