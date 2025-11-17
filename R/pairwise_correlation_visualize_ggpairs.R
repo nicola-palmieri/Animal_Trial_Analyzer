@@ -278,8 +278,18 @@ pairwise_correlation_visualize_ggpairs_server <- function(
         )
       }
     )
-    
+
     outputOptions(output, "plot", suspendWhenHidden = TRUE)
+
+    list(
+      warning = reactive({
+        info <- plot_info()
+        if (is.null(info)) NULL else info$warning
+      }),
+      plot = reactive(cached_plot()),
+      width = reactive(plot_dimensions()$width),
+      height = reactive(plot_dimensions()$height)
+    )
   })
 }
 
