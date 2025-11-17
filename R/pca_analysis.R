@@ -6,10 +6,7 @@ pca_ui <- function(id) {
   ns <- NS(id)
   list(
     config = tagList(
-      with_help_tooltip(
-        selectInput(ns("vars"), "Numeric variables", choices = NULL, multiple = TRUE),
-        "Pick the numeric variables whose combined patterns you want PCA to capture."
-      ),
+      uiOutput(ns("vars_ui")),
       tags$details(
         tags$summary(strong("Advanced options")),
         helpText(paste(
@@ -42,10 +39,15 @@ pca_server <- function(id, filtered_data) {
     ns <- session$ns
     df <- reactive(filtered_data())
 
-    # Dynamically populate numeric variable list
-    observe({
-      num_vars <- names(df())[sapply(df(), is.numeric)]
-      updateSelectInput(session, "vars", choices = num_vars, selected = num_vars)
+    # Dynamically populate numeric variable list (re-rendered with UI)
+    output$vars_ui <- renderUI({
+      data <- req(df())
+      num_vars <- names(data)[vapply(data, is.numeric, logical(1))]
+
+      with_help_tooltip(
+        selectInput(ns("vars"), "Numeric variables", choices = num_vars, selected = num_vars, multiple = TRUE),
+        "Pick the numeric variables whose combined patterns you want PCA to capture."
+      )
     })
 
     `%||%` <- function(x, y) if (is.null(x)) y else x
