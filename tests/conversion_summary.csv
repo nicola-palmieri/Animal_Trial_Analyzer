@@ -1,21 +1,21 @@
 "file","success","error","rows","cols"
-"01_simple_clean.xlsx",TRUE,NA,1,2
-"02_no_second_header.xlsx",TRUE,NA,1,2
-"03_irregular_merged.xlsx",TRUE,NA,1,2
+"01_simple_clean.xlsx",FALSE,"Duplicate measurements detected for variable 'ID' and replicate 'Group'. Ensure header labels are unique before uploading.",NA,NA
+"02_no_second_header.xlsx",FALSE,"Duplicate measurements detected for variable 'ID' and replicate 'Group'. Ensure header labels are unique before uploading.",NA,NA
+"03_irregular_merged.xlsx",FALSE,"Duplicate measurements detected for variable 'ID' and replicate 'Group'. Ensure header labels are unique before uploading.",NA,NA
 "04_blank_first_row.xlsx",FALSE,"Selections can't have missing values.",NA,NA
-"05_duplicate_subheaders.xlsx",TRUE,NA,1,2
-"06_trailing_empty.xlsx",TRUE,NA,1,2
-"07_numeric_headers.xlsx",TRUE,NA,1,2
-"08_mixed_headers.xlsx",TRUE,NA,1,2
-"09_spaces_specialchars.xlsx",TRUE,NA,1,2
-"10_empty_rows_na.xlsx",TRUE,NA,1,2
-"11_merged_across_three.xlsx",TRUE,NA,1,2
-"12_all_numeric_header.xlsx",TRUE,NA,1,2
-"13_underscores_mixed.xlsx",TRUE,NA,1,2
-"14_text_numeric_combo.xlsx",TRUE,NA,1,2
-"15_multi_blank_zones.xlsx",TRUE,NA,1,2
-"16_missing_measure_values.xlsx",TRUE,NA,1,2
-"17_special_symbols.xlsx",TRUE,NA,1,2
-"18_wide_gap_headers.xlsx",TRUE,NA,1,2
-"19_duplicate_block_headers.xlsx",TRUE,NA,1,2
-"20_weird_chars_and_spaces.xlsx",TRUE,NA,1,2
+"05_duplicate_subheaders.xlsx",FALSE,"Duplicate measurements detected for variable 'ID' and replicate 'Group'. Ensure header labels are unique before uploading.",NA,NA
+"06_trailing_empty.xlsx",FALSE,"Duplicate measurements detected for variable 'ID' and replicate 'Group'. Ensure header labels are unique before uploading.",NA,NA
+"07_numeric_headers.xlsx",FALSE,"Duplicate measurements detected for variable 'ID' and replicate 'Group'. Ensure header labels are unique before uploading.",NA,NA
+"08_mixed_headers.xlsx",FALSE,"Duplicate measurements detected for variable 'ID' and replicate 'Diet'. Ensure header labels are unique before uploading.",NA,NA
+"09_spaces_specialchars.xlsx",FALSE,"Duplicate measurements detected for variable 'ID' and replicate 'Group'. Ensure header labels are unique before uploading.",NA,NA
+"10_empty_rows_na.xlsx",FALSE,"Duplicate measurements detected for variable 'ID' and replicate 'Group'. Ensure header labels are unique before uploading.",NA,NA
+"11_merged_across_three.xlsx",FALSE,"Duplicate measurements detected for variable 'ID' and replicate 'Treatment'. Ensure header labels are unique before uploading.",NA,NA
+"12_all_numeric_header.xlsx",FALSE,"Duplicate measurements detected for variable '1' and replicate '2'. Ensure header labels are unique before uploading.",NA,NA
+"13_underscores_mixed.xlsx",FALSE,"Duplicate measurements detected for variable 'ID' and replicate 'Batch'. Ensure header labels are unique before uploading.",NA,NA
+"14_text_numeric_combo.xlsx",FALSE,"Duplicate measurements detected for variable 'ID' and replicate 'Stage'. Ensure header labels are unique before uploading.",NA,NA
+"15_multi_blank_zones.xlsx",FALSE,"Duplicate measurements detected for variable '<unknown>' and replicate '<blank>'. Ensure header labels are unique before uploading.",NA,NA
+"16_missing_measure_values.xlsx",FALSE,"Duplicate measurements detected for variable 'ID' and replicate 'Group'. Ensure header labels are unique before uploading.",NA,NA
+"17_special_symbols.xlsx",FALSE,"Duplicate measurements detected for variable 'Sample#' and replicate 'Type$'. Ensure header labels are unique before uploading.",NA,NA
+"18_wide_gap_headers.xlsx",FALSE,"Duplicate measurements detected for variable 'ID' and replicate 'Group'. Ensure header labels are unique before uploading.",NA,NA
+"19_duplicate_block_headers.xlsx",FALSE,"Duplicate measurements detected for variable 'ID' and replicate 'Group'. Ensure header labels are unique before uploading.",NA,NA
+"20_weird_chars_and_spaces.xlsx",FALSE,"Duplicate measurements detected for variable 'ID' and replicate 'T reat'. Ensure header labels are unique before uploading.",NA,NA
