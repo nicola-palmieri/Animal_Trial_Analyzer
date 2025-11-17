@@ -101,7 +101,7 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
       cat_cols <- names(dat)[vapply(dat, \(x) is.character(x) || is.factor(x) || is.logical(x), logical(1))]
       cat_cols <- sort(unique(cat_cols))
       current <- isolate(input$outlier_label)
-      current <- if (!nzchar(current) || !current %in% cat_cols) "" else current
+      current <- if (is.null(current) || !nzchar(current) || !current %in% cat_cols) "" else current
       with_help_tooltip(
         selectInput(
           ns("outlier_label"),
