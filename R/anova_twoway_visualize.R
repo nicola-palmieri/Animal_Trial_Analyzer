@@ -407,7 +407,6 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
     })
     
     # ---- Cached ggplot object to avoid flicker ----
-    if (!requireNamespace("digest", quietly = TRUE)) stop("Please install the 'digest' package.")
     hash_key <- function(data) {
       if (is.null(data) || !is.data.frame(data)) return("no-data")
       digest::digest(data, algo = "xxhash64")

@@ -210,9 +210,6 @@ pairwise_correlation_visualize_ggpairs_server <- function(
     })
     
     # ---- Unified caching ------------------------------------------------------
-    if (!requireNamespace("digest", quietly = TRUE))
-      stop("Install 'digest'.")
-    
     cached_plot   <- reactiveVal(NULL)
     cached_layout <- reactiveVal(NULL)
     cached_key    <- reactiveVal(NULL)
