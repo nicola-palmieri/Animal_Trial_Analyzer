@@ -109,11 +109,11 @@ analysis_server <- function(id, filtered_data) {
         analysis_type = normalize_analysis_type(mod$type),
         type = mod$type,
         data_used = NULL,
+        model = NULL,
         summary = NULL,
         posthoc = NULL,
         effects = NULL,
-        stats = NULL,
-        metadata = list()
+        stats = NULL
       )
 
       fill_defaults <- function(val) {
