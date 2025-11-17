@@ -112,7 +112,7 @@ one_way_anova_server <- function(id, filtered_data) {
       mod <- models()
       req(mod)
       res <- compile_anova_results(mod)
-      
+
       list(
         analysis_type = "ANOVA",
         type = "oneway_anova",
@@ -125,13 +125,7 @@ one_way_anova_server <- function(id, filtered_data) {
           n = nrow(mod$data_used),
           vars = names(mod$data_used)
         ),
-        metadata = list(
-          responses = mod$responses,
-          strata = mod$strata,
-          factors = mod$factors,
-          orders = mod$orders,
-          errors = res$errors
-        ),
+        errors = res$errors,
         responses = mod$responses,
         strata = mod$strata,
         factors = mod$factors,

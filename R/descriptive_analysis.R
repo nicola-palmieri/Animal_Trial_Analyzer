@@ -144,25 +144,22 @@ descriptive_server <- function(id, filtered_data) {
 
       data_used <- df_final()
 
-      list(
-        analysis_type = "DESCRIPTIVE",
-        data_used = data_used,
-        model = NULL,
-        summary = summary_table(),
-        posthoc = NULL,
-        effects = NULL,
-        stats = if (!is.null(data_used)) list(n = nrow(data_used), vars = names(data_used)) else NULL,
-        metadata = list(
+        list(
+          analysis_type = "DESCRIPTIVE",
+          type = "descriptive",
+          data_used = data_used,
+          model = NULL,
+          summary = summary_table(),
+          posthoc = NULL,
+          effects = NULL,
+          stats = if (!is.null(data_used)) list(n = nrow(data_used), vars = names(data_used)) else NULL,
           selected_vars = details$selected_vars,
           group_var = details$group_var,
-          strata_levels = details$strata_levels
-        ),
-        type = "descriptive",
-        data = df,
-        processed_data = df_final,
-        selected_vars = selected_vars_reactive,
-        group_var = group_var_reactive,
-        strata_levels = strata_levels_reactive
+          strata_levels = details$strata_levels,
+          processed_data = df_final,
+          selected_vars_reactive = selected_vars_reactive,
+          group_var_reactive = group_var_reactive,
+          strata_levels_reactive = strata_levels_reactive
       )
     })
 

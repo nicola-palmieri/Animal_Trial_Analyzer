@@ -174,14 +174,7 @@ two_way_anova_server <- function(id, filtered_data) {
         posthoc = res$posthoc,
         effects = res$effects,
         stats = if (!is.null(data_used)) list(n = nrow(data_used), vars = names(data_used)) else NULL,
-        metadata = list(
-          responses = mod$responses,
-          strata = mod$strata,
-          factors = mod$factors,
-          orders = mod$orders,
-          errors = res$errors
-        ),
-        models = mod$models,
+        errors = res$errors,
         responses = mod$responses,
         strata = mod$strata,
         factors = mod$factors,
