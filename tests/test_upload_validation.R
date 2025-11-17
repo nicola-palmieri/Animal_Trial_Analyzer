@@ -1,6 +1,6 @@
 library(testthat)
 library(openxlsx)
-source("R/module_upload_helpers.R")
+source(testthat::test_path("..", "R", "module_upload_helpers.R"))
 
 make_workbook <- function(matrix_rows) {
   path <- tempfile(fileext = ".xlsx")

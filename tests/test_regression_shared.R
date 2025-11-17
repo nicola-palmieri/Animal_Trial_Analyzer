@@ -1,5 +1,5 @@
 library(testthat)
-source("R/regression_analysis_shared.R")
+source(testthat::test_path("..", "R", "regression_analysis_shared.R"))
 
 test_that("reg_detect_types identifies numeric and categorical variables across ranges", {
   df <- data.frame(

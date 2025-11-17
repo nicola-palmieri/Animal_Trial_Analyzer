@@ -64,15 +64,6 @@ write_test_excel <- function(data, name, index) {
   path
 }
 
-paths <- purrr::map2(
-  seq_along(tests),
-  tests,
-  function(i, x) write_test_excel(x[[2]], x[[1]], i)
-)
-safe_convert <- safely(function(path) {
-  convert_wide_to_long(path)
-})
-
 
 # ==========================================================
 # Generate 20 Excel scenarios
@@ -183,7 +174,15 @@ tests <- list(
   ))
 )
 
-paths <- sapply(tests, function(x) write_test_excel(x[[2]], x[[1]]))
+paths <- purrr::map2(
+  seq_along(tests),
+  tests,
+  function(i, x) write_test_excel(x[[2]], x[[1]], i)
+)
+
+safe_convert <- safely(function(path) {
+  convert_wide_to_long(path)
+})
 
 # ==========================================================
 # Run safely on all files
