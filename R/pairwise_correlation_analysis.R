@@ -6,10 +6,7 @@ ggpairs_ui <- function(id) {
   ns <- NS(id)
   list(
     config = tagList(
-      with_help_tooltip(
-        selectInput(ns("vars"), "Numeric variables", choices = NULL, multiple = TRUE),
-        "Choose which numeric columns to include in the correlation matrix."
-      ),
+      uiOutput(ns("vars_ui")),
       tags$details(
         tags$summary(strong("Advanced options")),
         stratification_ui("strat", ns)
@@ -39,11 +36,15 @@ ggpairs_server <- function(id, data_reactive) {
 
     strat_info <- stratification_server("strat", df)
 
-    # ---- Update variable selector ----
-    observe({
+    # ---- Build variable selector (handles re-rendering) ----
+    output$vars_ui <- renderUI({
       data <- req(df())
       num_vars <- names(data)[vapply(data, is.numeric, logical(1))]
-      updateSelectInput(session, "vars", choices = num_vars, selected = num_vars)
+
+      with_help_tooltip(
+        selectInput(ns("vars"), "Numeric variables", choices = num_vars, selected = num_vars, multiple = TRUE),
+        "Choose which numeric columns to include in the correlation matrix."
+      )
     })
 
     build_ggpairs_object <- function(data) {
