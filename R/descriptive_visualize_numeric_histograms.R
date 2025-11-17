@@ -161,7 +161,8 @@ visualize_numeric_histograms_server <- function(id, filtered_data, summary_info,
     })
 
     output$common_legend_controls <- renderUI({
-      if (!isTRUE(common_legend_available())) {
+      legend_supported <- TRUE
+      if (!isTRUE(common_legend_available()) || !legend_supported) {
         return(NULL)
       }
 
@@ -173,7 +174,7 @@ visualize_numeric_histograms_server <- function(id, filtered_data, summary_info,
             "Use common legend",
             value = isTRUE(legend_state$enabled)
           ),
-          "Merge legends across the histograms into a single shared legend."
+          "Merge the legends across panels into a single shared legend."
         )
       )
 
