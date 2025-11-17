@@ -9,15 +9,15 @@ Table Analyzer is a modular R/Shiny application that walks researchers from raw 
 - **Excel-native uploads**
   - Accepts long-format workbooks or wide-format plates with two header rows (response × replicate). Wide sheets are reshaped automatically and validated for duplicate measurements.
   - Bundled demo datasets illustrate both layouts and can be loaded instantly from the UI.
-  - Ambiguous numeric columns (≤10 distinct values) can be re-typed as categorical factors directly in the upload panel, and all character columns are ordered automatically with `janitor::clean_names()` preprocessing.
+  - Ambiguous numeric columns (≤10 distinct values) can be re-typed as categorical factors directly in the upload panel, and column names are cleaned automatically with `janitor::clean_names()` preprocessing.
 - **Interactive filtering**
   - Choose any subset of columns, then refine rows with auto-generated range sliders (numeric), checkboxes (logical), or multi-select pickers (categorical).
   - The filtered preview updates live and feeds downstream modules.
 - **Analysis hub**
   - Modules: Descriptive statistics, One-way ANOVA, Two-way ANOVA, Linear Model (LM), Linear Mixed Model (LMM), Pairwise Correlation, and Principal Component Analysis (PCA).
-  - ANOVA, LM, and LMM modules accept multiple responses but fit them as independent models (no multivariate ANOVA); each run reports formulas, tidy summaries, Type-III ANOVA tables, downloadable `.docx` reports (LM/LMM) with formatted coefficients, random-effects variance, and ICC, plus optional per-analysis stratification.
+  - ANOVA, LM, and LMM modules accept multiple responses and fit them as independent models; each run reports formulas, tidy summaries, Type-III ANOVA tables, downloadable `.docx` reports (LM/LMM) with formatted coefficients, random-effects variance, and ICC, plus optional per-analysis stratification.
 - **Visualization gallery**
-  - Dedicated panels mirror the active analysis: descriptive dashboards, PCA biplots with optional loadings, correlation pair grids (`GGally::ggpairs`), and ANOVA effect plots.
+  - Dedicated panels mirror the active analysis: descriptive dashboards, PCA biplots with optional loadings, correlation pair grids (`GGally::ggpairs`), and ANOVA interaction plots.
   - Built-in color palettes can be customized per grouping level.
 - **Reproducibility first**
   - Model formulas and factor level orders are always explicit.
