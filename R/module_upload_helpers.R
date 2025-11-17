@@ -23,28 +23,26 @@ convert_wide_to_long <- function(path, sheet = 1, replicate_col = "Replicate") {
   headers <- readxl::read_excel(path, sheet = sheet, n_max = 2, col_names = FALSE)
   header1 <- as.character(unlist(headers[1, , drop = TRUE]))
   header2 <- as.character(unlist(headers[2, , drop = TRUE]))
-
-  # ---- Normalize headers ----
+  
+  # ---- Fill blanks forward in first header ----
   header1[header1 == ""] <- NA
   header1 <- zoo::na.locf(header1, na.rm = FALSE)
   header2[is.na(header2) | header2 == ""] <- ""
-
-  # If the first header is empty but the second has values (e.g., blank first row),
-  # fall back to the second header for the base name.
-  base_names <- ifelse(is.na(header1) | header1 == "", header2, header1)
-
-  # ---- Build clean column names ----
-  clean_names <- ifelse(header2 == "", base_names, paste0(base_names, "_", header2))
+  
+  # ---- Combine headers safely ----
+  clean_names <- ifelse(header2 == "", header1, paste0(header1, "_", header2))
   clean_names <- make.unique(clean_names, sep = "_")
-
-  # ---- Identify measure vs. fixed columns ----
-  replicate_in_row2 <- header2 != "" & !is.na(header1)
-  replicate_in_name <- grepl("_[^_]+$", base_names)
-  is_measure <- replicate_in_row2 | replicate_in_name
-
-  fixed_cols <- clean_names[!is_measure]
-  measure_cols <- clean_names[is_measure]
-
+  
+  # ---- Detect number of fixed columns ----
+  first_empty <- which(is.na(headers[1, ]) | headers[1, ] == "")[1]
+  if (is.na(first_empty)) {
+    n_fixed <- 0
+  } else {
+    n_fixed <- max(0, first_empty - 2)
+  }
+  fixed_cols <- clean_names[seq_len(n_fixed)]
+  measure_cols <- setdiff(clean_names, fixed_cols)
+  
   # ---- Read data with computed names ----
   data <- readxl::read_excel(path, sheet = sheet, skip = 2, col_names = clean_names)
   
