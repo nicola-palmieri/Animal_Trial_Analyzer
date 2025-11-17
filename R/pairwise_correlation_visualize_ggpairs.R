@@ -51,7 +51,7 @@ pairwise_correlation_visualize_ggpairs_server <- function(
     
     # ---- Reactives -----------------------------------------------------------
     df <- reactive(filtered_data())
-    
+
     group_var <- reactive({
       info <- correlation_info()
       g <- resolve_reactive(info$group_var)
@@ -60,10 +60,10 @@ pairwise_correlation_visualize_ggpairs_server <- function(
       if (!is.data.frame(dat) || !g %in% names(dat)) return(NULL)
       g
     })
-    
+
     strata_order <- reactive({
       info <- correlation_info()
-      so <- resolve_reactive(info$strata_order)
+      so <- resolve_reactive(info$strata_levels)
       if (is.null(so)) return(NULL)
       so <- as.character(so)
       so[nzchar(so)]
@@ -135,10 +135,10 @@ pairwise_correlation_visualize_ggpairs_server <- function(
       s <- state()
       dat <- s$data
       info <- s$info
-      
+
       validate(need(!is.null(dat) && nrow(dat) > 0, "No data available."))
       validate(need(!is.null(info), "Correlation info missing."))
-      
+
       results <- resolve_reactive(info$results)
       validate(need(!is.null(results), "Run the correlation analysis."))
       
