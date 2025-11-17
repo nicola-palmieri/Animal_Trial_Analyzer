@@ -165,7 +165,8 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
     })
 
     output$common_legend_controls <- renderUI({
-      if (!isTRUE(common_legend_available())) {
+      legend_supported <- TRUE
+      if (!isTRUE(common_legend_available()) || !legend_supported) {
         return(NULL)
       }
 
@@ -177,7 +178,7 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
             "Use common legend",
             value = isTRUE(legend_state$enabled)
           ),
-          "Merge legends across the categorical barplots into a single shared legend."
+          "Merge the legends across panels into a single shared legend."
         )
       )
 
