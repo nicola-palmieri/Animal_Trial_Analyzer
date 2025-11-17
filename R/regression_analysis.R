@@ -594,23 +594,30 @@ regression_server <- function(id, data, engine = c("lm", "lmm"), allow_multi_res
 
       list(
         analysis_type = if (engine == "lm") "LM" else "LMM",
-        type = if (engine == "lm") "lm" else "lmm",
         data_used = data_used,
         model = model_fit(),
         summary = summary_table(),
         posthoc = NULL,
         effects = effect_table(),
         stats = if (!is.null(data_used)) list(n = nrow(data_used), vars = names(data_used)) else NULL,
-        responses = mod$responses,
-        success_responses = mod$success_responses,
-        error_responses = mod$error_responses,
-        errors = mod$errors,
-        stratification = mod$stratification,
-        rhs = mod$rhs,
-        allow_multi = mod$allow_multi,
-        compiled_errors = error_table(),
+        metadata = list(
+          responses = mod$responses,
+          success_responses = mod$success_responses,
+          error_responses = mod$error_responses,
+          errors = mod$errors,
+          stratification = mod$stratification,
+          rhs = mod$rhs,
+          allow_multi = mod$allow_multi,
+          compiled_errors = error_table(),
+          flat_models = mod$flat_models,
+          engine = engine
+        ),
+        type = if (engine == "lm") "lm" else "lmm",
+        fits = mod$fits,
         flat_models = mod$flat_models,
-        engine = engine
+        stratification = mod$stratification,
+        responses = mod$responses,
+        errors = mod$errors
       )
     })
   })

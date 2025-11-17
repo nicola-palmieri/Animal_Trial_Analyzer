@@ -112,7 +112,7 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
       if (is.null(info) || is.null(info$factors)) return(NULL)
       info$factors$factor2
     })
-
+    
     factor2_levels <- reactive({
       info <- model_info()
       if (is.null(info) || is.null(info$orders)) return(NULL)

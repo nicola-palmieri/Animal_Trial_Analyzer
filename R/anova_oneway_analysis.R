@@ -115,6 +115,7 @@ one_way_anova_server <- function(id, filtered_data) {
       
       list(
         analysis_type = "ANOVA",
+        type = "oneway_anova",
         data_used = mod$data_used,
         model = mod$models,
         summary = res$summary,
@@ -124,12 +125,17 @@ one_way_anova_server <- function(id, filtered_data) {
           n = nrow(mod$data_used),
           vars = names(mod$data_used)
         ),
+        metadata = list(
+          responses = mod$responses,
+          strata = mod$strata,
+          factors = mod$factors,
+          orders = mod$orders,
+          errors = res$errors
+        ),
         responses = mod$responses,
         strata = mod$strata,
         factors = mod$factors,
-        orders = mod$orders,
-        errors = res$errors,
-        type = "oneway_anova"
+        orders = mod$orders
       )
     })
     

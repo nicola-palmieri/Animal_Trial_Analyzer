@@ -112,7 +112,8 @@ analysis_server <- function(id, filtered_data) {
         summary = NULL,
         posthoc = NULL,
         effects = NULL,
-        stats = NULL
+        stats = NULL,
+        metadata = list()
       )
 
       fill_defaults <- function(val) {

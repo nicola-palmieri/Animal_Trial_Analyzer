@@ -167,18 +167,25 @@ two_way_anova_server <- function(id, filtered_data) {
 
       list(
         analysis_type = "ANOVA",
+        type = "twoway_anova",
         data_used = data_used,
         model = mod$models,
         summary = res$summary,
         posthoc = res$posthoc,
         effects = res$effects,
         stats = if (!is.null(data_used)) list(n = nrow(data_used), vars = names(data_used)) else NULL,
+        metadata = list(
+          responses = mod$responses,
+          strata = mod$strata,
+          factors = mod$factors,
+          orders = mod$orders,
+          errors = res$errors
+        ),
+        models = mod$models,
         responses = mod$responses,
         strata = mod$strata,
         factors = mod$factors,
-        orders = mod$orders,
-        errors = res$errors,
-        type = "twoway_anova"
+        orders = mod$orders
       )
     })
 
