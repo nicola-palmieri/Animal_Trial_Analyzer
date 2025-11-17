@@ -70,109 +70,129 @@ write_test_excel <- function(data, name, index) {
 # ==========================================================
 
 tests <- list(
-  list("simple_clean", rbind(
+  list("simple_clean", list(
     c("ID", "Group", "A", "B"),
     c("", "", "Rep1", "Rep2"),
-    c("1", "Ctrl", "5", "6"),
-    c("2", "Treat", "7", "8")
+    list(1, "Ctrl", 5, 6),
+    list(2, "Treat", 7, 8)
   )),
-  list("no_second_header", rbind(
+  
+  list("no_second_header", list(
     c("ID", "Group", "A_Rep1", "A_Rep2"),
     c("", "", "", ""),
-    c("1", "Ctrl", "10", "12")
+    list(1, "Ctrl", 10, 12)
   )),
-  list("irregular_merged", rbind(
+  
+  list("irregular_merged", list(
     c("ID", "Group", "A", "", "B", ""),
     c("", "", "Rep1", "Rep2", "Rep1", "Rep2"),
-    c("1", "Ctrl", "1.2", "1.3", "5.1", "5.2")
+    list(1, "Ctrl", 1.2, 1.3, 5.1, 5.2)
   )),
-  list("blank_first_row", rbind(
+  
+  list("blank_first_row", list(
     c("", "", "", ""),
     c("ID", "Group", "A_Rep1", "A_Rep2"),
-    c("1", "Ctrl", "5", "7")
+    list(1, "Ctrl", 5, 7)
   )),
-  list("duplicate_subheaders", rbind(
+  
+  list("duplicate_subheaders", list(
     c("ID", "Group", "A", "A"),
     c("", "", "Rep1", "Rep1"),
-    c("1", "Ctrl", "1", "2")
+    list(1, "Ctrl", 1, 2)
   )),
-  list("trailing_empty", rbind(
+  
+  list("trailing_empty", list(
     c("ID", "Group", "A", "B", ""),
     c("", "", "Rep1", "Rep2", ""),
-    c("1", "Ctrl", "1", "2", "")
+    list(1, "Ctrl", 1, 2, NA)
   )),
-  list("numeric_headers", rbind(
+  
+  list("numeric_headers", list(
     c("ID", "Group", "1", "2", "3"),
     c("", "", "Rep1", "Rep2", "Rep3"),
-    c("1", "Ctrl", "4", "5", "6")
+    list(1, "Ctrl", 4, 5, 6)
   )),
-  list("mixed_headers", rbind(
+  
+  list("mixed_headers", list(
     c("ID", "Diet", "Day1", "Day2", "3"),
     c("", "", "R1", "R2", "R3"),
-    c("1", "Low", "1.1", "1.2", "1.3")
+    list(1, "Low", 1.1, 1.2, 1.3)
   )),
-  list("spaces_specialchars", rbind(
+  
+  list("spaces_specialchars", list(
     c(" ID ", "Group ", "A (mg)", "B (mg)"),
     c("", "", "Rep 1", "Rep 2"),
-    c("1", "Ctrl", "7.1", "7.2")
+    list(1, "Ctrl", 7.1, 7.2)
   )),
-  list("empty_rows_na", rbind(
+  
+  list("empty_rows_na", list(
     c("ID", "Group", "A", "B"),
     c("", "", "Rep1", "Rep2"),
-    c("1", "Ctrl", "10", NA),
+    list(1, "Ctrl", 10, NA),
     c("", "", "", "")
   )),
-  list("merged_across_three", rbind(
+  
+  list("merged_across_three", list(
     c("ID", "Treatment", "A", "", "", "B", "", ""),
     c("", "", "R1", "R2", "R3", "R1", "R2", "R3"),
-    c("1", "Low", "1", "2", "3", "4", "5", "6")
+    list(1, "Low", 1, 2, 3, 4, 5, 6)
   )),
-  list("all_numeric_header", rbind(
+  
+  list("all_numeric_header", list(
     c("1", "2", "3", "4"),
     c("Rep1", "Rep2", "Rep3", "Rep4"),
-    c("5", "6", "7", "8")
+    list(5, 6, 7, 8)
   )),
-  list("underscores_mixed", rbind(
+  
+  list("underscores_mixed", list(
     c("ID", "Batch", "A_Rep1", "A.Rep2", "A-Rep3"),
     c("", "", "", "", ""),
-    c("1", "B1", "1", "2", "3")
+    list(1, "B1", 1, 2, 3)
   )),
-  list("text_numeric_combo", rbind(
+  
+  list("text_numeric_combo", list(
     c("ID", "Stage", "Day 1", "Day 2", "Day 10"),
     c("", "", "RepA", "RepB", "RepC"),
-    c("1", "Init", "0.1", "0.2", "0.9")
+    list(1, "Init", 0.1, 0.2, 0.9)
   )),
-  list("multi_blank_zones", rbind(
+  
+  list("multi_blank_zones", list(
     c("ID", "", "", "B", "", ""),
     c("", "", "", "R1", "R2", ""),
-    c("1", "Ctrl", "5", "6", "7", "8")
+    list(1, "Ctrl", 5, 6, 7, 8)
   )),
-  list("missing_measure_values", rbind(
+  
+  list("missing_measure_values", list(
     c("ID", "Group", "A", "B"),
     c("", "", "Rep1", "Rep2"),
-    c("1", "Ctrl", NA, "5")
+    list(1, "Ctrl", NA, 5)
   )),
-  list("special_symbols", rbind(
+  
+  list("special_symbols", list(
     c("Sample#", "Type$", "A%", "B%"),
     c("", "", "R1", "R2"),
-    c("1", "Ctrl", "2.2", "2.5")
+    list(1, "Ctrl", 2.2, 2.5)
   )),
-  list("wide_gap_headers", rbind(
+  
+  list("wide_gap_headers", list(
     c("ID", "Group", rep("", 10)),
     c("", "", paste0("V", 1:10)),
-    c("1", "Ctrl", as.character(1:10))
+    c(1, "Ctrl", as.numeric(1:10))
   )),
-  list("duplicate_block_headers", rbind(
+  
+  list("duplicate_block_headers", list(
     c("ID", "Group", "A", "A", "B", "B"),
     c("", "", "R1", "R2", "R1", "R2"),
-    c("1", "Ctrl", "1", "2", "3", "4")
+    list(1, "Ctrl", 1, 2, 3, 4)
   )),
-  list("weird_chars_and_spaces", rbind(
+  
+  list("weird_chars_and_spaces", list(
     c(" ID ", " T reat ", "A! ", "B? "),
     c("", "", "R-1", "R-2"),
-    c("1", "Low", "10", "12")
+    list(1, "Low", 10, 12)
   ))
 )
+
 
 paths <- purrr::map2(
   seq_along(tests),

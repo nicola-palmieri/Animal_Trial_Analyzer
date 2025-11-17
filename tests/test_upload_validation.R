@@ -9,12 +9,13 @@ make_workbook <- function(matrix_rows) {
 }
 
 test_that("convert_wide_to_long reshapes wide data and preserves NA", {
-  path <- make_workbook(rbind(
+  path <- make_workbook(list(
     c("Sample", "Group", "Measurement", ""),
     c("", "", "R1", "R2"),
-    c("1", "A", "1.5", "2.5"),
-    c("2", "B", "3.0", NA)
+    list(1, "A", 1.5, 2.5),
+    list(2, "B", 3.0, NA)
   ))
+  
 
   result <- convert_wide_to_long(path)
 
@@ -26,23 +27,26 @@ test_that("convert_wide_to_long reshapes wide data and preserves NA", {
 })
 
 test_that("convert_wide_to_long detects duplicate measurements per replicate", {
-  path <- make_workbook(rbind(
+  path <- make_workbook(list(
     c("Sample", "Group", "Measurement", ""),
     c("", "", "R1", "R2"),
-    c("1", "A", "3", "4"),
-    c("1", "A", "5", "6")
+    list(1, "A", 3, 4),
+    list(1, "A", 5, 6)
   ))
+  
 
   expect_error(convert_wide_to_long(path), "Duplicate measurements detected")
 })
 
 test_that("convert_wide_to_long tolerates extra header rows and empty cells", {
-  path <- make_workbook(rbind(
+  path <- make_workbook(list(
     c("Sample", "Group", "Measurement", ""),
     c("", "", "R1", "R2"),
-    c("Notes", "Ignore", "", ""),
-    c("3", "C", "7.5", "8.5")
+    c("Notes", "Ignore", "", ""),      # keep as character header-like row
+    list(3, "C", 7.5, 8.5)
   ))
+  
+  
 
   result <- convert_wide_to_long(path)
 

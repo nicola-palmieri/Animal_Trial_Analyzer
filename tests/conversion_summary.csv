@@ -1,0 +1,21 @@
+"file","success","error","rows","cols"
+"01_simple_clean.xlsx",TRUE,NA,1,2
+"02_no_second_header.xlsx",TRUE,NA,1,2
+"03_irregular_merged.xlsx",TRUE,NA,1,2
+"04_blank_first_row.xlsx",FALSE,"Selections can't have missing values.",NA,NA
+"05_duplicate_subheaders.xlsx",TRUE,NA,1,2
+"06_trailing_empty.xlsx",TRUE,NA,1,2
+"07_numeric_headers.xlsx",TRUE,NA,1,2
+"08_mixed_headers.xlsx",TRUE,NA,1,2
+"09_spaces_specialchars.xlsx",TRUE,NA,1,2
+"10_empty_rows_na.xlsx",TRUE,NA,1,2
+"11_merged_across_three.xlsx",TRUE,NA,1,2
+"12_all_numeric_header.xlsx",TRUE,NA,1,2
+"13_underscores_mixed.xlsx",TRUE,NA,1,2
+"14_text_numeric_combo.xlsx",TRUE,NA,1,2
+"15_multi_blank_zones.xlsx",TRUE,NA,1,2
+"16_missing_measure_values.xlsx",TRUE,NA,1,2
+"17_special_symbols.xlsx",TRUE,NA,1,2
+"18_wide_gap_headers.xlsx",TRUE,NA,1,2
+"19_duplicate_block_headers.xlsx",TRUE,NA,1,2
+"20_weird_chars_and_spaces.xlsx",TRUE,NA,1,2
