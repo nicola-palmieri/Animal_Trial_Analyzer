@@ -32,6 +32,7 @@ ggpairs_ui <- function(id) {
 
 ggpairs_server <- function(id, data_reactive) {
   moduleServer(id, function(input, output, session) {
+    ns <- session$ns
     df <- reactive(data_reactive())
 
     strat_info <- stratification_server("strat", df)
