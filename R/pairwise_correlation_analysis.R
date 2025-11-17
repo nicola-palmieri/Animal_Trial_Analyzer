@@ -250,31 +250,26 @@ ggpairs_server <- function(id, data_reactive) {
 
       list(
         analysis_type = "CORR",
+        type = "pairs",
         data_used = data_used,
         model = model_fit(),
         summary = summary_table(),
         posthoc = posthoc_results(),
         effects = effect_table(),
         stats = if (!is.null(data_used)) list(n = nrow(data_used), vars = names(data_used)) else NULL,
-        metadata = list(
-          selected_vars = res$selected_vars,
-          group_var = res$group_var,
-          strata_levels = res$strata_levels,
-          plots = res$plots,
-          message = res$message
-        ),
-        type = "pairs",
-        data = df,
+        selected_vars = res$selected_vars,
         group_var = reactive({
           res <- correlation_store()
           req(res)
           res$group_var
         }),
-        strata_order = reactive({
+        strata_levels = reactive({
           res <- correlation_store()
           req(res)
           res$strata_levels
         }),
+        plots = res$plots,
+        message = res$message,
         results = reactive(correlation_store())
       )
     })

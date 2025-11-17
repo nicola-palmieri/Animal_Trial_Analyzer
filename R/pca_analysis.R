@@ -44,7 +44,9 @@ pca_server <- function(id, filtered_data) {
 
     # Dynamically populate numeric variable list
     observe({
-      num_vars <- names(df())[sapply(df(), is.numeric)]
+      data <- df()
+      req(data)
+      num_vars <- names(data)[sapply(data, is.numeric)]
       updateSelectInput(session, "vars", choices = num_vars, selected = num_vars)
     })
 
@@ -230,22 +232,17 @@ pca_server <- function(id, filtered_data) {
           posthoc = NULL,
           effects = NULL,
           stats = if (!is.null(df())) list(n = nrow(df()), vars = names(df())) else NULL,
-          metadata = list(
-            selected_vars = input$vars,
-            group_var = NULL,
-            strata_levels = NULL,
-            messages = NULL,
-            complete_cases = NULL,
-            excluded_rows = NULL,
-            excluded_n = NULL,
-            original_n = NULL
-          ),
           type = "pca",
           data = df,
           vars = input$vars,
           selected_vars = input$vars,
           group_var = NULL,
-          strata_levels = NULL
+          strata_levels = NULL,
+          messages = NULL,
+          complete_cases = NULL,
+          excluded_rows = NULL,
+          excluded_n = NULL,
+          original_n = NULL
         ))
       }
 
@@ -279,28 +276,21 @@ pca_server <- function(id, filtered_data) {
 
       list(
         analysis_type = "PCA",
+        type = "pca",
         data_used = data_used,
         model = entry,
         summary = if (!is.null(compiled)) compiled$summary else NULL,
         posthoc = NULL,
         effects = if (!is.null(compiled)) compiled$effects else NULL,
         stats = if (!is.null(data_used)) list(n = nrow(data_used), vars = names(data_used)) else NULL,
-        metadata = list(
-          selected_vars = details$selected_vars,
-          group_var = NULL,
-          strata_levels = NULL,
-          complete_cases = if (!is.null(entry)) entry$data else NULL,
-          excluded_rows = if (!is.null(entry)) entry$excluded_rows else NULL,
-          excluded_n = if (!is.null(entry)) entry$excluded_n else NULL,
-          original_n = if (!is.null(entry)) entry$original_n else NULL,
-          messages = messages
-        ),
-        type = "pca",
-        data = df,
-        vars = details$selected_vars,
         selected_vars = details$selected_vars,
         group_var = NULL,
-        strata_levels = NULL
+        strata_levels = NULL,
+        complete_cases = if (!is.null(entry)) entry$data else NULL,
+        excluded_rows = if (!is.null(entry)) entry$excluded_rows else NULL,
+        excluded_n = if (!is.null(entry)) entry$excluded_n else NULL,
+        original_n = if (!is.null(entry)) entry$original_n else NULL,
+        messages = messages
       )
     })
 
