@@ -6,6 +6,7 @@ filter_ui <- function(id) {
   ns <- NS(id)
   sidebarLayout(
     sidebarPanel(
+      class = "ta-panel",
       width = 4,
       h4("Step 2 — Filter records"),
       p("Select the columns to focus on and adjust the filters to refine the dataset for analysis."),
@@ -14,6 +15,7 @@ filter_ui <- function(id) {
       uiOutput(ns("filter_widgets"))
     ),
     mainPanel(
+      class = "ta-panel",
       width = 8,
       h4("Filtered data preview"),
       DTOutput(ns("filtered_preview"))

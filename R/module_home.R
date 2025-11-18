@@ -10,6 +10,7 @@ home_ui <- function(id) {
       class = "home-wrapper px-3",
       div(
         class = "hero text-center mx-auto",
+        div(class = "mb-3 d-flex justify-content-center", span(class = "ta-badge", icon("sparkles"), "Refreshed experience")),
         h1("Welcome to Table Analyzer"),
         p(
           class = "lead text-muted",
