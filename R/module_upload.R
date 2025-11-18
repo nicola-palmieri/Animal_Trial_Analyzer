@@ -26,6 +26,7 @@ upload_ui <- function(id) {
       uiOutput(ns("layout_example")),
       uiOutput(ns("file_input")),
       uiOutput(ns("sheet_selector")),
+      uiOutput(ns("replicate_col_input")),
       uiOutput(ns("type_selectors"))
     ),
     mainPanel(
@@ -122,6 +123,26 @@ upload_server <- function(id) {
         "Provide the Excel workbook that stores your study measurements."
       )
     })
+
+    output$replicate_col_input <- renderUI({
+      req(input$data_source)
+      if (input$data_source != "wide") {
+        return(NULL)
+      }
+
+      with_help_tooltip(
+        tagList(
+          textInput(
+            ns("replicate_col"),
+            label = "Replicate column name",
+            value = "Replicate",
+            placeholder = "Replicate"
+          ),
+          helpText("Changes here instantly reprocess the uploaded wide sheet with the new column name.")
+        ),
+        "Choose the column name that will store the second header row when wide data is reshaped."
+      )
+    })
     
     # -----------------------------------------------------------
     # 2️⃣ Example layout preview
@@ -191,24 +212,35 @@ upload_server <- function(id) {
     # -----------------------------------------------------------
     # 4️⃣ Load selected sheet (handles both long & wide)
     # -----------------------------------------------------------
+    reprocess_wide_upload <- function() {
+      req(input$file, input$sheet)
+
+      replicate_col <- input$replicate_col
+      if (is.null(replicate_col) || !nzchar(trimws(replicate_col))) {
+        replicate_col <- "Replicate"
+      } else {
+        replicate_col <- trimws(replicate_col)
+      }
+
+      safe_result <- safe_convert_wide_to_long(
+        input$file$datapath,
+        sheet = input$sheet,
+        replicate_col = replicate_col
+      )
+
+      handle_safe_result(
+        safe_result,
+        "Error converting wide format",
+        "✅ Wide format reshaped successfully."
+      )
+    }
+
     observeEvent(list(input$sheet, input$data_source), {
       req(input$file, input$sheet, input$data_source != "example")
       path <- input$file$datapath
 
       if (input$data_source == "wide") {
-        safe_result <- safe_convert_wide_to_long(
-          path,
-          sheet = input$sheet,
-          replicate_col = "Replicate"
-        )
-
-        if (!handle_safe_result(
-          safe_result,
-          "Error converting wide format",
-          "✅ Wide format reshaped successfully."
-        )) {
-          return()
-        }
+        reprocess_wide_upload()
         return()
       }
 
@@ -221,6 +253,11 @@ upload_server <- function(id) {
         return()
       }
     })
+
+    observeEvent(input$replicate_col, {
+      req(input$file, input$sheet, input$data_source == "wide")
+      reprocess_wide_upload()
+    }, ignoreInit = TRUE)
     
     # -----------------------------------------------------------
     # 5️⃣ Create type selectors
