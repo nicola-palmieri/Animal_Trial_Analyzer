@@ -1068,8 +1068,10 @@ build_line_plot_panel <- function(stats_df,
       theme_minimal(base_size = base_size) +
       labs(x = factor1, y = "Mean ± SE") +
       theme(
-        panel.grid.minor = element_blank(),
-        panel.grid.major.x = element_blank()
+        axis.line = element_line(color = "black"),
+        axis.ticks = element_line(color = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()
       )
   } else {
     group_levels <- if (is.factor(stats_df[[factor2]])) {
@@ -1145,8 +1147,10 @@ build_line_plot_panel <- function(stats_df,
         color = factor2
       ) +
       theme(
-        panel.grid.minor = element_blank(),
-        panel.grid.major.x = element_blank()
+        axis.line = element_line(color = "black"),
+        axis.ticks = element_line(color = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()
       ) +
       scale_color_manual(values = palette)
   }
@@ -1465,9 +1469,10 @@ build_single_factor_barplot <- function(stats_df,
       plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
       axis.title.x = element_text(margin = margin(t = 6)),
       axis.title.y = element_text(margin = margin(r = 6)),
+      axis.line = element_line(color = "black"),
+      axis.ticks = element_line(color = "black"),
+      panel.grid.major = element_blank(),
       panel.grid.minor = element_blank(),
-      panel.grid.major.x = element_blank(),
-      panel.grid.major.y = element_line(color = "gray90"),
       axis.text.x = element_text(angle = 0, hjust = 0.5)
     )
 
@@ -1534,9 +1539,10 @@ build_two_factor_barplot <- function(stats_df,
       plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
       axis.title.x = element_text(margin = margin(t = 6)),
       axis.title.y = element_text(margin = margin(r = 6)),
+      axis.line = element_line(color = "black"),
+      axis.ticks = element_line(color = "black"),
+      panel.grid.major = element_blank(),
       panel.grid.minor = element_blank(),
-      panel.grid.major.x = element_blank(),
-      panel.grid.major.y = element_line(color = "gray90"),
       axis.text.x = element_text(angle = 0, hjust = 0.5)
     ) +
     scale_fill_manual(values = palette)

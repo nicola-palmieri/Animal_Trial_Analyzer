@@ -190,6 +190,9 @@ build_metric_plot <- function(metric_info,
     labs(x = NULL, y = y_label, title = title) +
     theme(
       axis.text.x = element_text(angle = 45, hjust = 1),
+      axis.line = element_line(color = "black"),
+      axis.ticks = element_line(color = "black"),
+      panel.grid.major = element_blank(),
       panel.grid.minor = element_blank()
     )
 }

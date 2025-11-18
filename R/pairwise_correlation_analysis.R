@@ -65,6 +65,8 @@ ggpairs_server <- function(id, data_reactive) {
         ggplot2::theme_minimal(base_size = 11) +
         ggplot2::theme(
           strip.text = ggplot2::element_text(face = "bold", size = 9),
+          axis.line = ggplot2::element_line(color = "black"),
+          axis.ticks = ggplot2::element_line(color = "black"),
           panel.grid.minor = ggplot2::element_blank(),
           panel.grid.major.x = ggplot2::element_blank(),
           panel.grid.major.y = ggplot2::element_blank(),

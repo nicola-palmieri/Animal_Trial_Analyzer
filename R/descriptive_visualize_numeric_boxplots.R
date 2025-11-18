@@ -365,7 +365,13 @@ build_descriptive_numeric_boxplot <- function(df,
         scale_fill_manual(values = palette) +
         theme_minimal(base_size = base_size) +
         labs(title = var, x = NULL, y = var) +
-        theme(axis.text.x = element_text(angle = 45, hjust = 1))
+        theme(
+          axis.text.x = element_text(angle = 45, hjust = 1),
+          axis.line = element_line(color = "black"),
+          axis.ticks = element_line(color = "black"),
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank()
+        )
 
       needs_color_scale <- FALSE
       if (isTRUE(show_points)) {
@@ -421,7 +427,14 @@ build_descriptive_numeric_boxplot <- function(df,
         geom_boxplot(fill = single_color, width = 0.3) +
         theme_minimal(base_size = base_size) +
         labs(title = var, x = NULL, y = var) +
-        theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+        theme(
+          axis.text.x = element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.line = element_line(color = "black"),
+          axis.ticks = element_line(color = "black"),
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank()
+        )
 
       if (isTRUE(show_points)) {
         p <- p + geom_jitter(color = single_color, width = 0.05, alpha = 0.5, size = 1)

@@ -150,7 +150,13 @@ render_residual_plot <- function(model_obj) {
       x = "Fitted values",
       y = "Residuals"
     ) +
-    ggplot2::theme_minimal(base_size = 13)
+    ggplot2::theme_minimal(base_size = 13) +
+    ggplot2::theme(
+      axis.line = ggplot2::element_line(color = "black"),
+      axis.ticks = ggplot2::element_line(color = "black"),
+      panel.grid.major = ggplot2::element_blank(),
+      panel.grid.minor = ggplot2::element_blank()
+    )
 }
 
 render_qq_plot <- function(model_obj) {
@@ -169,7 +175,13 @@ render_qq_plot <- function(model_obj) {
       x = "Theoretical quantiles",
       y = "Sample quantiles"
     ) +
-    ggplot2::theme_minimal(base_size = 13)
+    ggplot2::theme_minimal(base_size = 13) +
+    ggplot2::theme(
+      axis.line = ggplot2::element_line(color = "black"),
+      axis.ticks = ggplot2::element_line(color = "black"),
+      panel.grid.major = ggplot2::element_blank(),
+      panel.grid.minor = ggplot2::element_blank()
+    )
 }
 
 assign_download_handler <- function(output, id, engine, response, stratum_display, model_obj) {
