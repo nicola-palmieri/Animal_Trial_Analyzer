@@ -13,15 +13,10 @@ visualize_categorical_barplots_ui <- function(id) {
       checkboxInput(ns("show_value_labels"), "Show value labels on bars", FALSE),
       "Display the numeric value on top of each bar."
     ),
-    fluidRow(
-      column(6, with_help_tooltip(
-        numericInput(ns("plot_width"),  "Subplot width (px)",  value = 400, min = 200, max = 2000, step = 50),
-        "Set the width of each categorical plot in pixels."
-      )),
-      column(6, with_help_tooltip(
-        numericInput(ns("plot_height"), "Subplot height (px)", value = 300, min = 200, max = 2000, step = 50),
-        "Set the height of each categorical plot in pixels."
-      ))
+    subplot_size_ui(
+      ns,
+      width_help = "Set the width of each categorical plot in pixels.",
+      height_help = "Set the height of each categorical plot in pixels."
     ),
     plot_grid_ui(
       id = ns("plot_grid"),

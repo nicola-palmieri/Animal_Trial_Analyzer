@@ -5,15 +5,12 @@
 pairwise_correlation_visualize_ggpairs_ui <- function(id) {
   ns <- NS(id)
   tagList(
-    fluidRow(
-      column(6, with_help_tooltip(
-        numericInput(ns("plot_width"),  "Subplot width (px)",  value = 800, min = 200, max = 2000, step = 50),
-        "Set the width in pixels for each panel of the correlation matrix."
-      )),
-      column(6, with_help_tooltip(
-        numericInput(ns("plot_height"), "Subplot height (px)", value = 600, min = 200, max = 2000, step = 50),
-        "Set the height in pixels for each panel of the correlation matrix."
-      ))
+    subplot_size_ui(
+      ns,
+      width_value = 800,
+      height_value = 600,
+      width_help = "Set the width in pixels for each panel of the correlation matrix.",
+      height_help = "Set the height in pixels for each panel of the correlation matrix."
     ),
     plot_grid_ui(
       id = ns("plot_grid"),
