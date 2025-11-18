@@ -153,7 +153,9 @@ render_residual_plot <- function(model_obj) {
     ggplot2::theme_minimal(base_size = 13) +
     ggplot2::theme(
       panel.grid.major = ggplot2::element_blank(),
-      panel.grid.minor = ggplot2::element_blank()
+      panel.grid.minor = ggplot2::element_blank(),
+      axis.line = ggplot2::element_line(color = "gray30"),
+      axis.ticks = ggplot2::element_line(color = "gray30")
     )
 }
 
@@ -176,7 +178,9 @@ render_qq_plot <- function(model_obj) {
     ggplot2::theme_minimal(base_size = 13) +
     ggplot2::theme(
       panel.grid.major = ggplot2::element_blank(),
-      panel.grid.minor = ggplot2::element_blank()
+      panel.grid.minor = ggplot2::element_blank(),
+      axis.line = ggplot2::element_line(color = "gray30"),
+      axis.ticks = ggplot2::element_line(color = "gray30")
     )
 }
 

@@ -68,7 +68,9 @@ ggpairs_server <- function(id, data_reactive) {
           panel.grid.minor = ggplot2::element_blank(),
           panel.grid.major.x = ggplot2::element_blank(),
           panel.grid.major.y = ggplot2::element_blank(),
-          plot.title = ggplot2::element_text(size = 12, face = "bold")
+          plot.title = ggplot2::element_text(size = 12, face = "bold"),
+          axis.line = ggplot2::element_line(color = "gray30"),
+          axis.ticks = ggplot2::element_line(color = "gray30")
         )
     }
 
