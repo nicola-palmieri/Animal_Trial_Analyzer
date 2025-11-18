@@ -6,7 +6,6 @@ upload_ui <- function(id) {
   ns <- NS(id)
   sidebarLayout(
     sidebarPanel(
-      class = "ta-panel",
       width = 4,
       h4("Step 1 — Upload data"),
       p("Choose whether to load the example dataset or upload your own Excel file."),
@@ -31,7 +30,6 @@ upload_ui <- function(id) {
       uiOutput(ns("type_selectors"))
     ),
     mainPanel(
-      class = "ta-panel",
       width = 8,
       h4("Data preview"),
       verbatimTextOutput(ns("validation_msg")),
