@@ -438,6 +438,7 @@ build_descriptive_categorical_plot <- function(df,
         theme_minimal(base_size = base_size) +
         labs(title = var, x = NULL, y = y_label, fill = group_col) +
         theme(
+          plot.title = element_text(size = base_size, face = "bold", hjust = 0.5),
           axis.text.x = element_text(angle = 45, hjust = 1),
           panel.grid.major = element_blank(),
           panel.grid.minor = element_blank(),
@@ -472,6 +473,7 @@ build_descriptive_categorical_plot <- function(df,
         theme_minimal(base_size = base_size) +
         labs(title = var, x = NULL, y = y_label) +
         theme(
+          plot.title = element_text(size = base_size, face = "bold", hjust = 0.5),
           axis.text.x = element_text(angle = 45, hjust = 1),
           panel.grid.major = element_blank(),
           panel.grid.minor = element_blank(),
@@ -506,7 +508,7 @@ build_descriptive_categorical_plot <- function(df,
   if (isTRUE(validation$valid)) {
     combined <- patchwork::wrap_plots(plots, nrow = layout$nrow, ncol = layout$ncol) +
       patchwork::plot_annotation(
-        theme = theme(plot.title = element_text(size = 16, face = "bold"))
+        theme = theme(plot.title = element_text(size = base_size, face = "bold", hjust = 0.5))
       )
 
     combined <- apply_common_legend_layout(
