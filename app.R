@@ -96,7 +96,7 @@ ui <- navbarPage(
     ")),
     tags$script(HTML("
       Shiny.addCustomMessageHandler('toggleTabState', function(data) {
-        var selector = 'a[data-value="' + data.tab + '"]';
+        var selector = 'a[data-value=\"' + data.tab + '\"]';
         var tab = $(selector);
         if (data.disable) {
           tab.addClass('disabled');
@@ -106,7 +106,7 @@ ui <- navbarPage(
           tab.attr('aria-disabled', 'false');
         }
       });
-
+    
       $(document).on('click', 'a.nav-link.disabled', function(e) {
         e.preventDefault();
         return false;
