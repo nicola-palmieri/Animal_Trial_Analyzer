@@ -136,33 +136,47 @@ test_that("convert_wide_to_long behaves correctly across 20 Excel scenarios", {
   
   results <- map(paths, safe_convert)
   
+  # ---- Test 1: simple_clean ----
   out1 <- results[[1]]
   expect_null(out1$error)
   expect_s3_class(out1$result, "tbl_df")
-  expect_equal(nrow(out1$result), 2)
-  expect_true(all(c("ID", "Group") %in% names(out1$result)))
-  expect_true(any(grepl("^A_", names(out1$result))))
-  expect_true(any(grepl("^B_", names(out1$result))))
+  
+  # long format: 2 birds × 2 replicates = 4 rows
+  expect_equal(nrow(out1$result), 4)
+  
+  # required columns
+  expect_true(all(c("ID", "Group", "Replicate", "A", "B") %in% names(out1$result)))
+  
+  # Replicate column must contain Rep1 and Rep2
+  rep_vals <- as.character(out1$result$Replicate)
+  expect_true(all(rep_vals %in% c("Rep1", "Rep2")))
   
   
+  # ---- Test 2 ----
   out2 <- results[[2]]
   expect_null(out2$error)
   
+  # ---- Test 3 ----
   out3 <- results[[3]]
   expect_null(out3$error)
   
+  # ---- Test 4 ----
   out4 <- results[[4]]
   expect_null(out4$error)
   
+  # ---- Test 5 ----
   out5 <- results[[5]]
   expect_null(out5$error)
   expect_s3_class(out5$result, "tbl_df")
   
+  # ---- Test 7 ----
   out7 <- results[[7]]
   expect_null(out7$error)
   expect_true(ncol(out7$result) >= 3)
   
+  # ---- Test 19 ----
   out19 <- results[[19]]
   expect_null(out19$error)
   expect_s3_class(out19$result, "tbl_df")
+  
 })

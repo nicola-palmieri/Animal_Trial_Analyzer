@@ -23,13 +23,14 @@ convert_wide_to_long <- function(path, sheet = 1, replicate_col = "Replicate") {
   header1 <- as.character(unlist(headers[1, , drop = TRUE]))
   header2 <- as.character(unlist(headers[2, , drop = TRUE]))
   
-  if (all(header1 == "") || all(is.na(header1))) {
+  if (all(header1 == "" | is.na(header1))) {
     header1 <- header2
     header2 <- rep("", length(header1))
   }
   
   header1[header1 == ""] <- NA
   header1 <- zoo::na.locf(header1, na.rm = FALSE)
+  
   header2[is.na(header2) | header2 == ""] <- ""
   
   if (all(header2 == "")) {
@@ -47,24 +48,23 @@ convert_wide_to_long <- function(path, sheet = 1, replicate_col = "Replicate") {
   data_long <- data |>
     tidyr::pivot_longer(
       cols = tidyselect::all_of(measure_cols),
-      names_to = c("Variable", replicate_col),
+      names_to   = c("Variable", replicate_col),
       names_pattern = "^(.*)_([^_]*)$",
-      values_to = "Value"
+      values_to  = "Value"
     )
   
-  # Duplicate detection
   id_cols <- c(fixed_cols, replicate_col, "Variable")
   
   duplicates <- data_long |>
-    dplyr::group_by(across(all_of(id_cols))) |>
-    dplyr::summarise(.n = n(), .groups = "drop") |>
+    dplyr::group_by(dplyr::across(dplyr::all_of(id_cols))) |>
+    dplyr::summarise(.n = dplyr::n(), .groups = "drop") |>
     dplyr::filter(.n > 1)
   
   if (nrow(duplicates) > 0) {
     ex <- duplicates[1, , drop = FALSE]
     stop(
       sprintf(
-        "Duplicate measurements detected for variable '%s' and replicate '%s'.",
+        "Duplicate measurements detected for variable '%s' and replicate '%s'. Ensure header labels are unique before uploading.",
         as.character(ex$Variable),
         as.character(ex[[replicate_col]])
       ),
@@ -72,17 +72,14 @@ convert_wide_to_long <- function(path, sheet = 1, replicate_col = "Replicate") {
     )
   }
   
-  # Collapse replicates: pick the first non-NA per variable
-  rep_name <- replicate_col
-  
   data_long |>
     tidyr::pivot_wider(
-      names_from = dplyr::all_of(c("Variable", rep_name)),
-      values_from = "Value",
-      names_glue = paste0("{Variable}_{", rep_name, "}")
+      names_from  = "Variable",
+      values_from = "Value"
     ) |>
-    as_tibble()
+    tibble::as_tibble()
 }
+
 
 
 
