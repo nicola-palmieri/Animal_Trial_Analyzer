@@ -1483,7 +1483,7 @@ build_single_factor_barplot <- function(stats_df,
     theme_minimal(base_size = base_size) +
     labs(x = factor1, y = "Mean ± SE", title = title_text) +
     theme(
-      plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+      plot.title = element_text(size = base_size, face = "bold", hjust = 0.5),
       axis.title.x = element_text(margin = margin(t = 6)),
       axis.title.y = element_text(margin = margin(r = 6)),
       panel.grid.major = element_blank(),
@@ -1553,7 +1553,7 @@ build_two_factor_barplot <- function(stats_df,
     theme_minimal(base_size = base_size) +
     labs(x = factor1, y = "Mean ± SE", fill = factor2, title = title_text) +
     theme(
-      plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+      plot.title = element_text(size = base_size, face = "bold", hjust = 0.5),
       axis.title.x = element_text(margin = margin(t = 6)),
       axis.title.y = element_text(margin = margin(r = 6)),
       panel.grid.major = element_blank(),
@@ -2039,7 +2039,7 @@ plot_anova_barplot_meanse <- function(data,
         title_plot <- ggplot() +
           theme_void() +
           ggtitle(resp) +
-          theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5))
+          theme(plot.title = element_text(size = base_size, face = "bold", hjust = 0.5))
         
         response_plots[[resp]] <- title_plot / combined + patchwork::plot_layout(heights = c(0.08, 1))
       }
