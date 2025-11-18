@@ -460,11 +460,13 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
     plot_dimensions <- reactive({
       info <- plot_info()
       lay <- info$layout
+      sizes <- validate_subplot_dimensions(input$plot_width, input$plot_height)
       nrow_l <- (lay$strata$rows %||% 1L) * (lay$responses$rows %||% 1L)
       ncol_l <- (lay$strata$cols %||% 1L) * (lay$responses$cols %||% 1L)
       list(
-        width = max(200, as.numeric(input$plot_width  %||% 400) * ncol_l),
-        height = max(200, as.numeric(input$plot_height %||% 300) * nrow_l)
+        width = max(200, sizes$width * ncol_l),
+        height = max(200, sizes$height * nrow_l),
+        warning = sizes$warning
       )
     })
     
@@ -476,8 +478,11 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
     
     output$plot_warning <- renderUI({
       info <- plot_info()
-      if (!is.null(info$warning))
-        div(class = "alert alert-warning", HTML(info$warning))
+      size_warning <- plot_dimensions()$warning
+      warnings <- c(info$warning, size_warning)
+      warnings <- warnings[!vapply(warnings, is.null, logical(1))]
+      if (length(warnings) > 0)
+        div(class = "alert alert-warning", HTML(paste(warnings, collapse = "<br>")))
     })
     
     output$plot_line <- renderPlot({
