@@ -1214,7 +1214,8 @@ ensure_barplot_zero_baseline <- function(range_vals) {
   lower <- range_vals[1]
   if (is.na(lower)) return(range_vals)
 
-  range_vals[1] <- min(0, lower)
+  # Keep barplots anchored at zero to avoid negative baselines when no annotations
+  range_vals[1] <- 0
   range_vals
 }
 
