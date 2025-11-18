@@ -1,6 +1,12 @@
 # 📊 Table Analyzer
 
-Table Analyzer is a modular R/Shiny application that walks researchers from raw spreadsheets to publication-ready figures and tables. The current release streamlines each step of the workflow with dedicated modules for uploading, filtering, modeling, and visualization.
+Table Analyzer is a modular R/Shiny application that walks researchers from raw spreadsheets to publication-ready figures and tables. The v1.00 app ships with dedicated tabs for uploading, filtering, modeling, and visualization so you can run end-to-end analyses without leaving the browser.
+
+### Current status
+
+- Stable Shiny app focused on interactive descriptive statistics, ANOVA (one- and two-way), linear and mixed models, correlations, and PCA.
+- Built-in demo datasets let you try the workflow immediately; Excel uploads support both tidy long and two-row-header wide formats.
+- Export buttons mirror what you see in the UI—model summaries, Type-III ANOVA tables, diagnostic plots, and Word reports for LM/LMM modules.
 
 ---
 
@@ -46,9 +52,10 @@ Table Analyzer is a modular R/Shiny application that walks researchers from raw 
 ```r
 # Install core packages (run once)
 install.packages(c(
-  "shiny", "bslib", "dplyr", "tidyr", "ggplot2", "patchwork",
-  "DT", "GGally", "skimr", "emmeans", "lmerTest", "car",
-  "flextable", "officer", "zoo", "shinyjqui", "janitor"
+  "bslib", "car", "digest", "dplyr", "DT", "emmeans", "fitdistrplus",
+  "flextable", "GGally", "ggplot2", "ggsignif", "janitor", "lmerTest",
+  "officer", "patchwork", "readxl", "shiny", "shinyjqui", "skimr",
+  "tidyr", "zoo"
   # Optional: ggrepel for PCA loadings labels
 ))
 
