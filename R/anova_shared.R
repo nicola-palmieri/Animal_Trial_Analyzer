@@ -1414,6 +1414,22 @@ build_bar_plot_panel <- function(stats_df,
                                  nested_posthoc = NULL,
                                  y_limits = NULL) {
 
+  # Compute per-panel limits when not sharing axes so we can always anchor at zero
+  if (is.null(y_limits)) {
+    panel_range <- compute_barplot_panel_range(
+      stats_df,
+      factor1,
+      factor2,
+      posthoc_entry = posthoc_entry,
+      nested_posthoc = nested_posthoc
+    )
+
+    if (!is.null(panel_range)) {
+      y_limits <- expand_axis_limits(panel_range, lower_mult = 0, upper_mult = 0.12)
+      y_limits <- ensure_barplot_zero_baseline(y_limits)
+    }
+  }
+
   if (is.null(factor2) || !factor2 %in% names(stats_df)) {
     return(
       build_single_factor_barplot(
