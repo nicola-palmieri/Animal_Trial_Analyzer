@@ -185,7 +185,7 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
     observeEvent(plot_info(), {
       req(active())
       info <- plot_info()
-      apply_grid_defaults_if_empty(input, session, "plot_grid", info$defaults, n_items = info$panels)
+      apply_grid_defaults_if_empty(input, session, "plot_grid", info$defaults)
     }, ignoreNULL = TRUE)
 
     common_legend_available <- reactive({
