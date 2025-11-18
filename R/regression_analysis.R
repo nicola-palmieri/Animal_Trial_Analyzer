@@ -161,15 +161,23 @@ render_residual_plot <- function(model_obj) {
 
 render_qq_plot <- function(model_obj) {
   resid_vals <- stats::residuals(model_obj)
-  qq <- stats::qqnorm(resid_vals, plot.it = FALSE)
+  qq_base <- stats::qqnorm(resid_vals, plot.it = FALSE)
+  
   qq_df <- data.frame(
-    theoretical = qq$x,
-    sample = qq$y
+    theoretical = qq_base$x,
+    sample = qq_base$y
   )
-
+  
+  resid_mean <- mean(resid_vals)
+  resid_sd <- sd(resid_vals)
+  
   ggplot2::ggplot(qq_df, ggplot2::aes(x = theoretical, y = sample)) +
     ggplot2::geom_point(color = "steelblue", alpha = 0.8) +
-    ggplot2::geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+    ggplot2::geom_abline(
+      slope = resid_sd,
+      intercept = resid_mean,
+      linetype = "dashed"
+    ) +
     ggplot2::labs(
       title = "Normal Q-Q",
       x = "Theoretical quantiles",
@@ -183,6 +191,7 @@ render_qq_plot <- function(model_obj) {
       axis.ticks = ggplot2::element_line(color = "#9ca3af")
     )
 }
+
 
 assign_download_handler <- function(output, id, engine, response, stratum_display, model_obj) {
   output[[id]] <- downloadHandler(
