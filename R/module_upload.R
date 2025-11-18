@@ -137,8 +137,7 @@ upload_server <- function(id) {
             label = "Replicate column name",
             value = "Replicate",
             placeholder = "Replicate"
-          ),
-          helpText("Changes here instantly reprocess the uploaded wide sheet with the new column name.")
+          )
         ),
         "Choose the column name that will store the second header row when wide data is reshaped."
       )

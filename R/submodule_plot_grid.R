@@ -63,29 +63,11 @@ adjust_grid_layout <- function(n_items, layout) {
   if (is.null(layout) || length(layout) == 0) {
     return(list(nrow = 1L, ncol = 1L))
   }
-
-  n_items <- coerce_grid_value(n_items, default = 1L)
-  rows <- coerce_grid_value(layout$nrow, default = 1L)
-  cols <- coerce_grid_value(layout$ncol, default = 1L)
-
-  if (rows * cols <= n_items) {
-    return(list(nrow = rows, ncol = cols))
-  }
-
-  repeat {
-    adjusted <- FALSE
-    if (rows > 1L && (rows - 1L) * cols >= n_items) {
-      rows <- rows - 1L
-      adjusted <- TRUE
-    }
-    if (cols > 1L && rows * (cols - 1L) >= n_items) {
-      cols <- cols - 1L
-      adjusted <- TRUE
-    }
-    if (!adjusted) break
-  }
-
-  list(nrow = rows, ncol = cols)
+  
+  list(
+    nrow = as.integer(layout$nrow),
+    ncol = as.integer(layout$ncol)
+  )
 }
 
 plot_grid_ui <- function(id,
