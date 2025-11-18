@@ -42,7 +42,6 @@ metric_plot_ui <- function(id) {
   ns <- NS(id)
   div(
     class = "ta-plot-container",
-    uiOutput(ns("plot_warning")),
     plotOutput(ns("plot"), width = "100%", height = "auto")
   )
 }
@@ -200,19 +199,16 @@ build_metric_plot <- function(metric_info,
 
 
 metric_module_server <- function(id, filtered_data, summary_info, metric_key,
-                                 y_label, title, filename_prefix, is_active = NULL,
-                                 default_width = 400, default_height = 320) {
+                                 y_label, title, filename_prefix, is_active = NULL) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
-    subplot_sizes <- reactive({
-      validate_subplot_dimensions(
-        input$plot_width,
-        input$plot_height,
-        default_width = default_width,
-        default_height = default_height
-      )
-    })
+    resolve_dimension <- function(value, default) {
+      if (is.null(value) || !is.numeric(value) || is.na(value)) default else value
+    }
+
+    plot_width <- reactive(resolve_dimension(input$plot_width, 400))
+    plot_height <- reactive(resolve_dimension(input$plot_height, 300))
 
     module_active <- reactive({
       if (is.null(is_active)) TRUE else isTRUE(is_active())
@@ -322,16 +318,7 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
 
     plot_size <- reactive({
       req(module_active())
-      sizes <- subplot_sizes()
-      list(w = sizes$width, h = sizes$height, warning = sizes$warning)
-    })
-
-    output$plot_warning <- renderUI({
-      req(module_active())
-      size_warning <- plot_size()$warning
-      if (!is.null(size_warning)) {
-        div(class = "alert alert-warning", HTML(size_warning))
-      }
+      list(w = plot_width(), h = plot_height())
     })
 
     output$download_plot <- downloadHandler(

@@ -43,17 +43,14 @@ pairwise_correlation_visualize_ggpairs_server <- function(
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
+    # ---- Helpers -------------------------------------------------------------
+    sanitize <- function(x, default) {
+      v <- suppressWarnings(as.numeric(x))
+      if (is.na(v) || length(v) == 0) default else v
+    }
+    
     # ---- Reactives -----------------------------------------------------------
     df <- reactive(filtered_data())
-
-    subplot_sizes <- reactive({
-      validate_subplot_dimensions(
-        input$plot_width,
-        input$plot_height,
-        default_width = 800,
-        default_height = 600
-      )
-    })
     
     group_var <- reactive({
       info <- correlation_info()
@@ -93,11 +90,10 @@ pairwise_correlation_visualize_ggpairs_server <- function(
         strata_order = strata_order(),
         colors    = custom_colors(),
         base_size = base_size(),
-        plot_w    = subplot_sizes()$width,
-        plot_h    = subplot_sizes()$height,
+        plot_w    = sanitize(input$plot_width, 800),
+        plot_h    = sanitize(input$plot_height, 600),
         rows      = grid$rows(),
-        cols      = grid$cols(),
-        size_warning = subplot_sizes()$warning
+        cols      = grid$cols()
       )
     })
     
@@ -260,17 +256,11 @@ pairwise_correlation_visualize_ggpairs_server <- function(
     # ---- Unified sizing -------------------------------------------------------
     plot_dimensions <- reactive({
       lay <- cached_layout()
-      if (is.null(lay)) {
-        sizes <- subplot_sizes()
-        return(list(width = sizes$width, height = sizes$height, warning = sizes$warning))
-      }
-
-      sizes <- subplot_sizes()
-
+      if (is.null(lay)) return(list(width = 800, height = 600))
+      
       list(
-        width  = max(200, sizes$width * lay$cols),
-        height = max(200, sizes$height * lay$rows),
-        warning = sizes$warning
+        width  = max(200, state()$plot_w * lay$cols),
+        height = max(200, state()$plot_h * lay$rows)
       )
     })
     
@@ -306,13 +296,6 @@ pairwise_correlation_visualize_ggpairs_server <- function(
 
     list(
       warning = reactive({
-        info <- plot_info()
-        size_warning <- plot_dimensions()$warning
-        warnings <- c(if (is.null(info)) NULL else info$warning, size_warning)
-        warnings <- warnings[!vapply(warnings, is.null, logical(1))]
-        if (length(warnings) > 0) paste(warnings, collapse = "<br>") else NULL
-      }),
-      blocking_warning = reactive({
         info <- plot_info()
         if (is.null(info)) NULL else info$warning
       }),
