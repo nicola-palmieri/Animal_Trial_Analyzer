@@ -226,9 +226,16 @@ pairwise_correlation_visualize_ggpairs_server <- function(
         s$plot_w, s$plot_h,
         sep = "_"
       )
-      
+
       if (!identical(key, cached_key())) {
         info <- plot_info()
+        if (!is.null(info$warning)) {
+          cached_plot(NULL)
+          cached_layout(NULL)
+          cached_key(key)
+          return()
+        }
+
         if (!is.null(info$plot)) {
           cached_plot(info$plot)
           cached_layout(info$layout)

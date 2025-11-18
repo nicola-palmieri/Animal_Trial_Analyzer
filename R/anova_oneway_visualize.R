@@ -262,6 +262,12 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
 
       if (!identical(key, cached_key())) {
         info <- plot_info()
+        if (!is.null(info$warning)) {
+          cached_plot(NULL)
+          cached_key(key)
+          return()
+        }
+
         if (!is.null(info$plot)) {
           cached_plot(info$plot)
           cached_key(key)
