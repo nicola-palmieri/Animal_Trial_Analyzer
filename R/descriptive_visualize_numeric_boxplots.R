@@ -17,15 +17,12 @@ visualize_numeric_boxplots_ui <- function(id) {
       condition = sprintf("input['%s']", ns("show_outliers")),
       uiOutput(ns("outlier_label_ui"))
     ),
-    fluidRow(
-      column(6, with_help_tooltip(
-        numericInput(ns("plot_width"),  "Subplot width (px)",  value = 200, min = 200, max = 2000, step = 50),
-        "Control how wide each boxplot panel should be."
-      )),
-      column(6, with_help_tooltip(
-        numericInput(ns("plot_height"), "Subplot height (px)", value = 800, min = 200, max = 2000, step = 50),
-        "Control how tall each boxplot panel should be."
-      ))
+    subplot_size_ui(
+      ns,
+      width_value = 200,
+      height_value = 800,
+      width_help = "Control how wide each boxplot panel should be.",
+      height_help = "Control how tall each boxplot panel should be."
     ),
     plot_grid_ui(
       id = ns("plot_grid"),

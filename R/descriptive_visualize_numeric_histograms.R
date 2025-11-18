@@ -9,15 +9,10 @@ visualize_numeric_histograms_ui <- function(id) {
       checkboxInput(ns("use_density"), "Show density instead of count", FALSE),
       "Switch between showing counts or densities for each histogram."
     ),
-    fluidRow(
-      column(6, with_help_tooltip(
-        numericInput(ns("plot_width"),  "Subplot width (px)",  value = 400, min = 200, max = 2000, step = 50),
-        "Set the width of each histogram panel in pixels."
-      )),
-      column(6, with_help_tooltip(
-        numericInput(ns("plot_height"), "Subplot height (px)", value = 300, min = 200, max = 2000, step = 50),
-        "Set the height of each histogram panel in pixels."
-      ))
+    subplot_size_ui(
+      ns,
+      width_help = "Set the width of each histogram panel in pixels.",
+      height_help = "Set the height of each histogram panel in pixels."
     ),
     plot_grid_ui(
       id = ns("plot_grid"),

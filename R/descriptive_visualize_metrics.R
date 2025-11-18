@@ -7,15 +7,12 @@ metric_panel_ui <- function(id, default_width = 400, default_height = 300,
                             default_rows = 1, default_cols = 1) {
   ns <- NS(id)
   tagList(
-    fluidRow(
-      column(6, with_help_tooltip(
-        numericInput(ns("plot_width"),  "Subplot width (px)",  default_width, min = 200, max = 2000, step = 50),
-        "Set the width of each metric panel in pixels."
-      )),
-      column(6, with_help_tooltip(
-        numericInput(ns("plot_height"), "Subplot height (px)", default_height, min = 200, max = 2000, step = 50),
-        "Set the height of each metric panel in pixels."
-      ))
+    subplot_size_ui(
+      ns,
+      width_value = default_width,
+      height_value = default_height,
+      width_help = "Set the width of each metric panel in pixels.",
+      height_help = "Set the height of each metric panel in pixels."
     ),
     fluidRow(
       column(6, add_color_customization_ui(ns, multi_group = TRUE)),
