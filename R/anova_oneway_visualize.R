@@ -40,7 +40,7 @@ visualize_oneway_ui <- function(id) {
             checkboxInput(
               ns("lineplot_show_lines"),
               "Connect means with lines",
-              value = FALSE
+              value = TRUE
             ),
             "Draw connecting lines between group means."
           )),

@@ -40,7 +40,7 @@ visualize_twoway_ui <- function(id) {
             checkboxInput(
               ns("lineplot_show_lines"),
               "Connect means with lines",
-              value = FALSE
+              value = TRUE
             ),
             "Draw connecting lines between group means."
           )),
@@ -48,7 +48,7 @@ visualize_twoway_ui <- function(id) {
             checkboxInput(
               ns("lineplot_use_dodge"),
               "Dodge grouped means",
-              value = TRUE
+              value = FALSE
             ),
             "Offset the level means of the second factor along the x-axis to prevent overlap."
           ))
