@@ -46,26 +46,69 @@ for (f in list.files("R", full.names = TRUE, pattern = "\\.R$")) source(f)
 ui <- navbarPage(
   title = tagList(icon("table"), "Table Analyzer"),
   id = "main_nav",
-  theme = bs_theme(bootswatch = "flatly"),
+  theme = bs_theme(
+    bootswatch = "flatly",
+    base_font = font_google("Inter"),
+    heading_font = font_google("Inter", weight = 700),
+    primary = "#2563eb",
+    secondary = "#0ea5e9",
+    success = "#16a34a",
+    warning = "#f59e0b"
+  ),
   
   # ---- Custom CSS (copied from website) ----
   header = tags$head(
-    tags$style(HTML("
-      .container-fluid { max-width: 100%; margin: auto; }
+    tags$style(HTML(" 
+      body {
+        background: radial-gradient(circle at 20% 20%, rgba(37,99,235,0.08), transparent 25%),
+                    radial-gradient(circle at 80% 0%, rgba(14,165,233,0.08), transparent 20%),
+                    #f5f7fb;
+      }
+      .container-fluid { max-width: 1200px; margin: auto; }
+      .navbar-default {
+        background: linear-gradient(90deg, #1d4ed8 0%, #2563eb 50%, #0ea5e9 100%);
+        border: none;
+        box-shadow: 0 6px 18px rgba(0,0,0,0.08);
+      }
+      .navbar-default .navbar-brand, .navbar-default .navbar-nav > li > a {
+        color: #f8fafc !important;
+        font-weight: 600;
+      }
+      .navbar-default .navbar-nav > .active > a,
+      .navbar-default .navbar-nav > li > a:focus,
+      .navbar-default .navbar-nav > li > a:hover {
+        background: rgba(255,255,255,0.12) !important;
+        color: #fff !important;
+      }
       .hero {
-        background: linear-gradient(135deg, #f8f9fa 0%, #e9f5ff 100%);
-        border-radius: 16px;
-        padding: 40px 24px;
-        margin-top: 20px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        background: linear-gradient(135deg, #f8fafc 0%, #e0f2fe 100%);
+        border-radius: 20px;
+        padding: 48px 32px;
+        margin-top: 24px;
+        box-shadow: 0 14px 30px rgba(0,0,0,0.08);
       }
       h1, h2, h3 { margin-top: 0.4rem; }
+      h4 { font-weight: 700; color: #0f172a; }
+      p.lead { color: #475569; }
       .section { margin-top: 18px; }
-      .card { border-radius: 16px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
-      .nav-tabs > li > a { font-weight: 500; }
+      .card {
+        border-radius: 16px;
+        box-shadow: 0 10px 24px rgba(15,23,42,0.08);
+        border: 1px solid #e2e8f0;
+      }
+      .ta-panel {
+        background: #fff;
+        border-radius: 18px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 10px 24px rgba(15,23,42,0.08);
+        padding: 22px;
+      }
+      .ta-panel h4 { margin-top: 4px; }
+      .nav-tabs > li > a { font-weight: 600; }
+      .nav > li > a { padding: 14px 18px; border-radius: 12px; }
       .empty-state { max-width: 420px; margin-left: auto; margin-right: auto; }
       .empty-state-icon { font-size: 3rem; line-height: 1; }
-      .empty-state h4 { font-weight: 600; }
+      .empty-state h4 { font-weight: 700; color: #0f172a; }
       .ta-help-tooltip { cursor: help; display: inline-block; width: 100%; }
       .home-wrapper {
         min-height: calc(100vh - 180px);
@@ -74,22 +117,53 @@ ui <- navbarPage(
         justify-content: center;
       }
       .home-wrapper .hero {
-        max-width: 760px;
+        max-width: 820px;
         width: 100%;
       }
       .home-steps h5 {
-        font-weight: 600;
+        font-weight: 700;
       }
       .home-steps p {
         margin-bottom: 0;
-        color: #6c757d;
+        color: #6b7280;
+      }
+      .home-steps .fa-2x { color: #2563eb; }
+      .ta-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 12px;
+        border-radius: 999px;
+        background: rgba(37,99,235,0.12);
+        color: #1e3a8a;
+        font-weight: 600;
+        font-size: 0.9rem;
       }
       pre.shiny-text-output {
         white-space: pre;
         overflow-x: auto;
         font-family: Fira Mono, Source Code Pro, Monaco, monospace;
         font-size: 0.9rem;
+        background: #0f172a;
+        color: #e2e8f0;
+        padding: 12px;
+        border-radius: 12px;
       }
+      .well { background: #f8fafc; border-radius: 12px; }
+      .form-control, .selectize-input, .selectize-dropdown-content {
+        border-radius: 12px !important;
+      }
+      .btn-primary {
+        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+        border: none;
+        box-shadow: 0 10px 18px rgba(37,99,235,0.35);
+      }
+      .btn-default {
+        border-radius: 10px;
+      }
+      .table { border-radius: 12px; overflow: hidden; }
+      .dataTables_wrapper .dataTables_filter input { border-radius: 12px; }
+      .help-block, .text-muted { color: #64748b; }
     "))
   ),
 
