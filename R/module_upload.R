@@ -131,11 +131,14 @@ upload_server <- function(id) {
       }
 
       with_help_tooltip(
-        textInput(
-          ns("replicate_col"),
-          label = "Replicate column name",
-          value = "Replicate",
-          placeholder = "Replicate"
+        tagList(
+          textInput(
+            ns("replicate_col"),
+            label = "Replicate column name",
+            value = "Replicate",
+            placeholder = "Replicate"
+          ),
+          helpText("Changes here instantly reprocess the uploaded wide sheet with the new column name.")
         ),
         "Choose the column name that will store the second header row when wide data is reshaped."
       )
@@ -209,7 +212,7 @@ upload_server <- function(id) {
     # -----------------------------------------------------------
     # 4️⃣ Load selected sheet (handles both long & wide)
     # -----------------------------------------------------------
-    observeEvent(list(input$sheet, input$data_source), {
+    observeEvent(list(input$sheet, input$data_source, input$replicate_col), {
       req(input$file, input$sheet, input$data_source != "example")
       path <- input$file$datapath
 
