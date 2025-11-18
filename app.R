@@ -75,6 +75,11 @@ ui <- navbarPage(
         max-width: 760px;
         width: 100%;
       }
+      a.nav-link.disabled {
+        pointer-events: none;
+        color: #6c757d !important;
+        opacity: 0.7;
+      }
       .home-steps h5 {
         font-weight: 600;
       }
@@ -88,28 +93,51 @@ ui <- navbarPage(
         font-family: Fira Mono, Source Code Pro, Monaco, monospace;
         font-size: 0.9rem;
       }
+    ")),
+    tags$script(HTML("
+      Shiny.addCustomMessageHandler('toggleTabState', function(data) {
+        var selector = 'a[data-value="' + data.tab + '"]';
+        var tab = $(selector);
+        if (data.disable) {
+          tab.addClass('disabled');
+          tab.attr('aria-disabled', 'true');
+        } else {
+          tab.removeClass('disabled');
+          tab.attr('aria-disabled', 'false');
+        }
+      });
+
+      $(document).on('click', 'a.nav-link.disabled', function(e) {
+        e.preventDefault();
+        return false;
+      });
     "))
   ),
 
   tabPanel(
     title = tagList(icon("home"), " Home"),
+    value = "home_tab",
     home_ui("home")
   ),
 
   tabPanel(
     title = tagList(icon("upload"), " Upload"),
+    value = "upload_tab",
     fluidPage(upload_ui("upload"))
   ),
   tabPanel(
     title = tagList(icon("filter"), " Filter"),
+    value = "filter_tab",
     fluidPage(filter_ui("filter"))
   ),
   tabPanel(
     title = tagList(icon("chart-line"), " Analyze"),
+    value = "analysis_tab",
     fluidPage(analysis_ui("analysis"))
   ),
   tabPanel(
     title = tagList(icon("chart-area"), " Visualize"),
+    value = "visualize_tab",
     fluidPage(visualize_ui("visualize"))
   ),
 )
@@ -123,6 +151,22 @@ server <- function(input, output, session) {
   filtered  <- filter_server("filter", uploaded)
   analyzed  <- analysis_server("analysis", filtered)
   visualize_server("visualize", filtered, analyzed)
+
+  observe({
+    has_data <- !is.null(uploaded())
+    tabs <- c("filter_tab", "analysis_tab", "visualize_tab")
+
+    lapply(tabs, function(tab) {
+      session$sendCustomMessage(
+        "toggleTabState",
+        list(tab = tab, disable = !has_data)
+      )
+    })
+
+    if (!has_data && input$main_nav %in% tabs) {
+      updateNavbarPage(session, "main_nav", selected = "upload_tab")
+    }
+  })
 }
 
 # ---------------------------------------------------------------
