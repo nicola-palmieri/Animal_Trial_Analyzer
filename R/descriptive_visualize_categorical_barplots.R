@@ -323,7 +323,7 @@ apply_value_scale <- function(plot, show_proportions, show_value_labels) {
   } else if (isTRUE(show_value_labels)) {
     plot + scale_y_continuous(limits = c(0, NA), expand = expansion(mult = c(0.05, 0.12)))
   } else {
-    plot
+    plot + scale_y_continuous(limits = c(0, NA), expand = expansion(mult = c(0, 0.05)))
   }
 }
 

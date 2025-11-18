@@ -375,6 +375,7 @@ build_descriptive_numeric_histogram <- function(df,
     base +
       theme_minimal(base_size = base_size) +
       labs(x = var, y = y_label) +
+      scale_y_continuous(limits = c(0, NA), expand = expansion(mult = c(0, 0.05))) +
       theme(
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
