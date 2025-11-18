@@ -59,7 +59,7 @@ basic_grid_layout <- function(rows = NULL,
   )
 }
 
-apply_grid_defaults_if_empty <- function(input, session, grid_id, defaults, n_items = NULL) {
+apply_grid_defaults_if_empty <- function(input, session, grid_id, defaults) {
   if (is.null(defaults) || !is.list(defaults)) return()
 
   rows_default <- suppressWarnings(as.integer(defaults$rows[1]))
@@ -73,26 +73,11 @@ apply_grid_defaults_if_empty <- function(input, session, grid_id, defaults, n_it
   current_rows <- isolate(input[[rows_id]])
   current_cols <- isolate(input[[cols_id]])
 
-  needs_reset <- function(value) {
-    if (length(value) == 0) return(TRUE)
-    v <- suppressWarnings(as.integer(value[1]))
-    is.na(v)
-  }
-
-  is_invalid_for_grid <- function(rows, cols) {
-    if (is.null(n_items)) return(FALSE)
-    validation <- validate_grid(n_items, rows, cols)
-    isFALSE(validation$valid)
-  }
-
-  reset_rows <- needs_reset(current_rows) || is_invalid_for_grid(current_rows, current_cols)
-  reset_cols <- needs_reset(current_cols) || is_invalid_for_grid(current_rows, current_cols)
-
-  if (reset_rows) {
+  if (is.null(current_rows) || is.na(current_rows)) {
     updateNumericInput(session, rows_id, value = rows_default)
   }
 
-  if (reset_cols) {
+  if (is.null(current_cols) || is.na(current_cols)) {
     updateNumericInput(session, cols_id, value = cols_default)
   }
 }

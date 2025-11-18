@@ -163,7 +163,6 @@ pairwise_correlation_visualize_ggpairs_server <- function(
         return(list(
           plot = plot,
           layout = list(rows = defaults$rows, cols = defaults$cols),
-          panels = 1L,
           warning = NULL,
           defaults = defaults
         ))
@@ -211,7 +210,6 @@ pairwise_correlation_visualize_ggpairs_server <- function(
       list(
         plot = combined,
         layout = list(rows = layout$nrow, cols = layout$ncol),
-        panels = n_panels,
         warning = val$message,
         defaults = defaults
       )
@@ -254,7 +252,7 @@ pairwise_correlation_visualize_ggpairs_server <- function(
 
     observeEvent(plot_info(), {
       info <- plot_info()
-      apply_grid_defaults_if_empty(input, session, "plot_grid", info$defaults, n_items = info$panels)
+      apply_grid_defaults_if_empty(input, session, "plot_grid", info$defaults)
     }, ignoreNULL = TRUE)
 
     # ---- Unified sizing -------------------------------------------------------

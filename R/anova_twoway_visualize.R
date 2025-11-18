@@ -408,8 +408,8 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
 
     observeEvent(plot_info(), {
       info <- plot_info()
-      apply_grid_defaults_if_empty(input, session, "strata_grid", info$defaults$strata, n_items = info$panel_counts$strata)
-      apply_grid_defaults_if_empty(input, session, "response_grid", info$defaults$responses, n_items = info$panel_counts$responses)
+      apply_grid_defaults_if_empty(input, session, "strata_grid", info$defaults$strata)
+      apply_grid_defaults_if_empty(input, session, "response_grid", info$defaults$responses)
     }, ignoreNULL = TRUE)
 
     # ---- Cached ggplot object to avoid flicker ----
