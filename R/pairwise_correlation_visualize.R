@@ -85,7 +85,7 @@ visualize_ggpairs_server <- function(id, filtered_data, model_fit) {
       handle <- active_handle()
       req(handle)
 
-      warning_text <- handle$warning()
+      warning_text <- handle$blocking_warning()
       if (!is.null(warning_text)) return(NULL)
 
       plot_obj <- handle$plot()

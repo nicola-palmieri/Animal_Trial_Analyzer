@@ -525,22 +525,25 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
     }, ignoreNULL = TRUE)
 
     # ---- Unified sizing logic ----
+    subplot_sizes <- reactive({
+      validate_subplot_dimensions(
+        input$plot_width,
+        input$plot_height,
+        default_width = 400,
+        default_height = 300
+      )
+    })
+
     size_val <- reactiveVal(list(w = 800, h = 600))
-    
+
     observe({
       info <- plot_info()
       req(info)
 
       layout <- info$layout
-      base_w <- suppressWarnings(as.numeric(input$plot_width))
-      base_h <- suppressWarnings(as.numeric(input$plot_height))
-
-      valid_size <- function(x, default) {
-        if (is.na(x) || x <= 0) default else x
-      }
-
-      subplot_w <- valid_size(base_w, 400)
-      subplot_h <- valid_size(base_h, 300)
+      sizes <- subplot_sizes()
+      subplot_w <- sizes$width
+      subplot_h <- sizes$height
 
       if (is.null(layout)) {
         size_val(list(w = subplot_w, h = subplot_h))
@@ -553,10 +556,11 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
     
     output$plot_warning <- renderUI({
       info <- plot_info()
-      if (!is.null(info$warning)) {
-        div(class = "alert alert-warning", info$warning)
-      } else {
-        NULL
+      size_warning <- subplot_sizes()$warning
+      warnings <- c(info$warning, size_warning)
+      warnings <- warnings[!vapply(warnings, is.null, logical(1))]
+      if (length(warnings) > 0) {
+        div(class = "alert alert-warning", HTML(paste(warnings, collapse = "<br>")))
       }
     })
     
