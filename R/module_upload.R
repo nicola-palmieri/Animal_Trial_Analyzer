@@ -26,6 +26,7 @@ upload_ui <- function(id) {
       uiOutput(ns("layout_example")),
       uiOutput(ns("file_input")),
       uiOutput(ns("sheet_selector")),
+      uiOutput(ns("replicate_col_input")),
       uiOutput(ns("type_selectors"))
     ),
     mainPanel(
@@ -122,6 +123,23 @@ upload_server <- function(id) {
         "Provide the Excel workbook that stores your study measurements."
       )
     })
+
+    output$replicate_col_input <- renderUI({
+      req(input$data_source)
+      if (input$data_source != "wide") {
+        return(NULL)
+      }
+
+      with_help_tooltip(
+        textInput(
+          ns("replicate_col"),
+          label = "Replicate column name",
+          value = "Replicate",
+          placeholder = "Replicate"
+        ),
+        "Choose the column name that will store the second header row when wide data is reshaped."
+      )
+    })
     
     # -----------------------------------------------------------
     # 2️⃣ Example layout preview
@@ -196,10 +214,17 @@ upload_server <- function(id) {
       path <- input$file$datapath
 
       if (input$data_source == "wide") {
+        replicate_col <- input$replicate_col
+        if (is.null(replicate_col) || !nzchar(trimws(replicate_col))) {
+          replicate_col <- "Replicate"
+        } else {
+          replicate_col <- trimws(replicate_col)
+        }
+
         safe_result <- safe_convert_wide_to_long(
           path,
           sheet = input$sheet,
-          replicate_col = "Replicate"
+          replicate_col = replicate_col
         )
 
         if (!handle_safe_result(
