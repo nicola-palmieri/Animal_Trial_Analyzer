@@ -1065,14 +1065,14 @@ build_line_plot_panel <- function(stats_df,
         width = 0.15,
         color = color_value
       ) +
-      theme_minimal(base_size = base_size) +
+      ta_plot_theme(base_size = base_size) +
       labs(x = factor1, y = "Mean ± SE") +
       theme(
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
         axis.text.x = element_text(angle = 45, hjust = 1),
-        axis.line = element_line(color = "gray30"),
-        axis.ticks = element_line(color = "gray30")
+        axis.line = element_line(color = "#9ca3af"),
+        axis.ticks = element_line(color = "#9ca3af")
       )
   } else {
     group_levels <- if (is.factor(stats_df[[factor2]])) {
@@ -1141,7 +1141,7 @@ build_line_plot_panel <- function(stats_df,
     p <- p +
       point_layer +
       errorbar_layer +
-      theme_minimal(base_size = base_size) +
+      ta_plot_theme(base_size = base_size) +
       labs(
         x = factor1,
         y = "Mean ± SE",
@@ -1151,8 +1151,8 @@ build_line_plot_panel <- function(stats_df,
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
         axis.text.x = element_text(angle = 45, hjust = 1),
-        axis.line = element_line(color = "gray30"),
-        axis.ticks = element_line(color = "gray30")
+        axis.line = element_line(color = "#9ca3af"),
+        axis.ticks = element_line(color = "#9ca3af")
       ) +
       scale_color_manual(values = palette)
   }
@@ -1351,7 +1351,7 @@ plot_anova_lineplot_meanse <- function(data,
       }
 
       title_plot <- ggplot() +
-        theme_void() +
+        ta_plot_theme_void() +
         ggtitle(resp) +
         theme(
           plot.title = element_text(
@@ -1482,7 +1482,7 @@ build_single_factor_barplot <- function(stats_df,
       color = "gray40",
       linewidth = 0.5
     ) +
-    theme_minimal(base_size = base_size) +
+    ta_plot_theme(base_size = base_size) +
     labs(x = factor1, y = "Mean ± SE", title = title_text) +
     theme(
       plot.title = element_text(size = base_size, face = "bold", hjust = 0.5),
@@ -1491,8 +1491,8 @@ build_single_factor_barplot <- function(stats_df,
       panel.grid.major = element_blank(),
       panel.grid.minor = element_blank(),
       axis.text.x = element_text(angle = 45, hjust = 1),
-      axis.line = element_line(color = "gray30"),
-      axis.ticks = element_line(color = "gray30")
+      axis.line = element_line(color = "#9ca3af"),
+      axis.ticks = element_line(color = "#9ca3af")
     )
 
   expand_scale <- is.null(y_limits)
@@ -1552,7 +1552,7 @@ build_two_factor_barplot <- function(stats_df,
       color = "gray40",
       linewidth = 0.5
     ) +
-    theme_minimal(base_size = base_size) +
+    ta_plot_theme(base_size = base_size) +
     labs(x = factor1, y = "Mean ± SE", fill = factor2, title = title_text) +
     theme(
       plot.title = element_text(size = base_size, face = "bold", hjust = 0.5),
@@ -1561,8 +1561,8 @@ build_two_factor_barplot <- function(stats_df,
       panel.grid.major = element_blank(),
       panel.grid.minor = element_blank(),
       axis.text.x = element_text(angle = 45, hjust = 1),
-      axis.line = element_line(color = "gray30"),
-      axis.ticks = element_line(color = "gray30")
+      axis.line = element_line(color = "#9ca3af"),
+      axis.ticks = element_line(color = "#9ca3af")
     ) +
     scale_fill_manual(values = palette)
 
@@ -2037,12 +2037,12 @@ plot_anova_barplot_meanse <- function(data,
           nrow = current_layout$nrow,
           ncol = current_layout$ncol
         )
-        
+
         title_plot <- ggplot() +
-          theme_void() +
+          ta_plot_theme_void() +
           ggtitle(resp) +
           theme(plot.title = element_text(size = base_size, face = "bold", hjust = 0.5))
-        
+
         response_plots[[resp]] <- title_plot / combined + patchwork::plot_layout(heights = c(0.08, 1))
       }
     } else {

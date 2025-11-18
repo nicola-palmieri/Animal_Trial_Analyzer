@@ -363,14 +363,14 @@ build_descriptive_numeric_boxplot <- function(df,
       p <- ggplot(df, aes(x = .data[[group_var]], y = .data[[var]], fill = .data[[group_var]])) +
         geom_boxplot(outlier.shape = NA, width = 0.6) +
         scale_fill_manual(values = palette) +
-        theme_minimal(base_size = base_size) +
+        ta_plot_theme(base_size = base_size) +
         labs(x = NULL, y = var) +
         theme(
           axis.text.x = element_text(angle = 45, hjust = 1),
           panel.grid.major = element_blank(),
           panel.grid.minor = element_blank(),
-          axis.line = element_line(color = "gray30"),
-          axis.ticks = element_line(color = "gray30")
+          axis.line = element_line(color = "#9ca3af"),
+          axis.ticks = element_line(color = "#9ca3af")
         )
 
       needs_color_scale <- FALSE
@@ -425,15 +425,15 @@ build_descriptive_numeric_boxplot <- function(df,
       single_color <- resolve_single_color(custom_colors)
       p <- ggplot(df, aes(x = factor(1), y = .data[[var]])) +
         geom_boxplot(fill = single_color, width = 0.3) +
-        theme_minimal(base_size = base_size) +
+        ta_plot_theme(base_size = base_size) +
         labs(x = NULL, y = var) +
         theme(
           axis.text.x = element_blank(),
           axis.ticks.x = element_blank(),
           panel.grid.major = element_blank(),
           panel.grid.minor = element_blank(),
-          axis.line = element_line(color = "gray30"),
-          axis.ticks = element_line(color = "gray30")
+          axis.line = element_line(color = "#9ca3af"),
+          axis.ticks = element_line(color = "#9ca3af")
         )
 
       if (isTRUE(show_points)) {

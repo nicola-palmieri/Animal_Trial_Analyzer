@@ -435,15 +435,15 @@ build_descriptive_categorical_plot <- function(df,
       p <- ggplot(count_df, aes(x = .data[[var]], y = .data$value, fill = .data[[group_col]])) +
         geom_col(position = group_dodge, width = 0.65) +
         scale_fill_manual(values = palette) +
-        theme_minimal(base_size = base_size) +
+        ta_plot_theme(base_size = base_size) +
         labs(title = var, x = NULL, y = y_label, fill = group_col) +
         theme(
           plot.title = element_text(size = base_size, face = "bold", hjust = 0.5),
           axis.text.x = element_text(angle = 45, hjust = 1),
           panel.grid.major = element_blank(),
           panel.grid.minor = element_blank(),
-          axis.line = element_line(color = "gray30"),
-          axis.ticks = element_line(color = "gray30")
+          axis.line = element_line(color = "#9ca3af"),
+          axis.ticks = element_line(color = "#9ca3af")
         )
 
       p <- add_value_labels(p, count_df, show_value_labels, show_proportions, group_dodge, base_size)
@@ -470,15 +470,15 @@ build_descriptive_categorical_plot <- function(df,
 
       p <- ggplot(count_df, aes(x = .data[[var]], y = .data$value)) +
         geom_col(fill = single_fill, width = 0.65) +
-        theme_minimal(base_size = base_size) +
+        ta_plot_theme(base_size = base_size) +
         labs(title = var, x = NULL, y = y_label) +
         theme(
           plot.title = element_text(size = base_size, face = "bold", hjust = 0.5),
           axis.text.x = element_text(angle = 45, hjust = 1),
           panel.grid.major = element_blank(),
           panel.grid.minor = element_blank(),
-          axis.line = element_line(color = "gray30"),
-          axis.ticks = element_line(color = "gray30")
+          axis.line = element_line(color = "#9ca3af"),
+          axis.ticks = element_line(color = "#9ca3af")
         )
 
       p <- add_value_labels(p, count_df, show_value_labels, show_proportions, base_size = base_size)

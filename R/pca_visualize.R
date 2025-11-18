@@ -328,7 +328,7 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
     build_message_panel <- function(title, message, show_title = TRUE) {
       has_title <- isTRUE(show_title) && !is.null(title) && nzchar(title)
       ggplot() +
-        theme_void() +
+        ta_plot_theme_void() +
         annotate("text", x = 0.5, y = 0.5, label = message, size = 4, hjust = 0.5, vjust = 0.5) +
         coord_cartesian(xlim = c(0, 1), ylim = c(0, 1), clip = "off") +
         labs(title = if (has_title) title else NULL) +
@@ -665,7 +665,7 @@ build_pca_biplot <- function(pca_obj, data, color_var = NULL, shape_var = NULL,
       shape = if (is.null(shape_var)) 16 else NULL,
       color = if (is.null(color_var)) single_color else NULL
     ) +
-    theme_minimal(base_size = base_size) +
+    ta_plot_theme(base_size = base_size) +
     labs(
       x = x_lab,
       y = y_lab,
@@ -673,11 +673,10 @@ build_pca_biplot <- function(pca_obj, data, color_var = NULL, shape_var = NULL,
       shape = if (!is.null(shape_var)) shape_var else NULL
     ) +
     theme(
-      plot.title = element_text(size = 16, face = "bold"),
       panel.grid.major = element_blank(),
       panel.grid.minor = element_blank(),
-      axis.line = element_line(color = "gray30"),
-      axis.ticks = element_line(color = "gray30"),
+      axis.line = element_line(color = "#9ca3af"),
+      axis.ticks = element_line(color = "#9ca3af"),
       legend.position = "right"
     )
   

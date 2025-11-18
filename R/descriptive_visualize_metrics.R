@@ -184,16 +184,16 @@ build_metric_plot <- function(metric_info,
       geom_col(width = 0.65, fill = resolve_single_color(custom_colors)) +
       guides(fill = "none")
   }
-  
+
   p +
-    theme_minimal(base_size = base_size) +
+    ta_plot_theme(base_size = base_size) +
     labs(x = NULL, y = y_label, title = title) +
     theme(
       axis.text.x = element_text(angle = 45, hjust = 1),
       panel.grid.major = element_blank(),
       panel.grid.minor = element_blank(),
-      axis.line = element_line(color = "gray30"),
-      axis.ticks = element_line(color = "gray30")
+      axis.line = element_line(color = "#9ca3af"),
+      axis.ticks = element_line(color = "#9ca3af")
     )
 }
 

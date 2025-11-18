@@ -150,12 +150,12 @@ render_residual_plot <- function(model_obj) {
       x = "Fitted values",
       y = "Residuals"
     ) +
-    ggplot2::theme_minimal(base_size = 13) +
+    ta_plot_theme(base_size = 13) +
     ggplot2::theme(
       panel.grid.major = ggplot2::element_blank(),
       panel.grid.minor = ggplot2::element_blank(),
-      axis.line = ggplot2::element_line(color = "gray30"),
-      axis.ticks = ggplot2::element_line(color = "gray30")
+      axis.line = ggplot2::element_line(color = "#9ca3af"),
+      axis.ticks = ggplot2::element_line(color = "#9ca3af")
     )
 }
 
@@ -175,12 +175,12 @@ render_qq_plot <- function(model_obj) {
       x = "Theoretical quantiles",
       y = "Sample quantiles"
     ) +
-    ggplot2::theme_minimal(base_size = 13) +
+    ta_plot_theme(base_size = 13) +
     ggplot2::theme(
       panel.grid.major = ggplot2::element_blank(),
       panel.grid.minor = ggplot2::element_blank(),
-      axis.line = ggplot2::element_line(color = "gray30"),
-      axis.ticks = ggplot2::element_line(color = "gray30")
+      axis.line = ggplot2::element_line(color = "#9ca3af"),
+      axis.ticks = ggplot2::element_line(color = "#9ca3af")
     )
 }
 

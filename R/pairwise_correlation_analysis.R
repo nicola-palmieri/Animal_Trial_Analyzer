@@ -62,15 +62,13 @@ ggpairs_server <- function(id, data_reactive) {
           continuous = GGally::wrap("densityDiag", fill = basic_color_palette[1], alpha = 0.4)
         )
       ) +
-        ggplot2::theme_minimal(base_size = 11) +
+        ta_plot_theme(base_size = 11) +
         ggplot2::theme(
-          strip.text = ggplot2::element_text(face = "bold", size = 9),
-          panel.grid.minor = ggplot2::element_blank(),
+          strip.text = ggplot2::element_text(size = 9),
           panel.grid.major.x = ggplot2::element_blank(),
           panel.grid.major.y = ggplot2::element_blank(),
-          plot.title = ggplot2::element_text(size = 12, face = "bold"),
-          axis.line = ggplot2::element_line(color = "gray30"),
-          axis.ticks = ggplot2::element_line(color = "gray30")
+          axis.line = ggplot2::element_line(color = "#9ca3af"),
+          axis.ticks = ggplot2::element_line(color = "#9ca3af")
         )
     }
 
