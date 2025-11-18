@@ -439,6 +439,8 @@ build_descriptive_categorical_plot <- function(df,
         labs(title = var, x = NULL, y = y_label, fill = group_col) +
         theme(
           axis.text.x = element_text(angle = 45, hjust = 1),
+          axis.line = element_line(color = "black"),
+          axis.ticks = element_line(color = "black"),
           panel.grid.major = element_blank(),
           panel.grid.minor = element_blank()
         )
@@ -471,6 +473,8 @@ build_descriptive_categorical_plot <- function(df,
         labs(title = var, x = NULL, y = y_label) +
         theme(
           axis.text.x = element_text(angle = 45, hjust = 1),
+          axis.line = element_line(color = "black"),
+          axis.ticks = element_line(color = "black"),
           panel.grid.major = element_blank(),
           panel.grid.minor = element_blank()
         )
