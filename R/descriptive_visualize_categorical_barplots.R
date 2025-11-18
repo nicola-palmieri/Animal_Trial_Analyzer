@@ -437,7 +437,11 @@ build_descriptive_categorical_plot <- function(df,
         scale_fill_manual(values = palette) +
         theme_minimal(base_size = base_size) +
         labs(title = var, x = NULL, y = y_label, fill = group_col) +
-        theme(axis.text.x = element_text(angle = 45, hjust = 1))
+        theme(
+          axis.text.x = element_text(angle = 45, hjust = 1),
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank()
+        )
 
       p <- add_value_labels(p, count_df, show_value_labels, show_proportions, group_dodge, base_size)
       p <- apply_value_scale(p, show_proportions, show_value_labels)
@@ -465,7 +469,11 @@ build_descriptive_categorical_plot <- function(df,
         geom_col(fill = single_fill, width = 0.65) +
         theme_minimal(base_size = base_size) +
         labs(title = var, x = NULL, y = y_label) +
-        theme(axis.text.x = element_text(angle = 45, hjust = 1))
+        theme(
+          axis.text.x = element_text(angle = 45, hjust = 1),
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank()
+        )
 
       p <- add_value_labels(p, count_df, show_value_labels, show_proportions, base_size = base_size)
       p <- apply_value_scale(p, show_proportions, show_value_labels)
