@@ -374,7 +374,7 @@ build_descriptive_numeric_histogram <- function(df,
 
     base +
       theme_minimal(base_size = base_size) +
-      labs(title = var, x = var, y = y_label) +
+      labs(x = var, y = y_label) +
       theme(
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
@@ -398,10 +398,7 @@ build_descriptive_numeric_histogram <- function(df,
 
   validation <- validate_grid(n_panels, layout$nrow, layout$ncol)
   combined <- if (isTRUE(validation$valid)) {
-    patchwork::wrap_plots(plots, nrow = layout$nrow, ncol = layout$ncol) +
-      patchwork::plot_annotation(
-        theme = theme(plot.title = element_text(size = 16, face = "bold"))
-      )
+    patchwork::wrap_plots(plots, nrow = layout$nrow, ncol = layout$ncol)
   } else {
     NULL
   }

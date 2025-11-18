@@ -364,7 +364,7 @@ build_descriptive_numeric_boxplot <- function(df,
         geom_boxplot(outlier.shape = NA, width = 0.6) +
         scale_fill_manual(values = palette) +
         theme_minimal(base_size = base_size) +
-        labs(title = var, x = NULL, y = var) +
+        labs(x = NULL, y = var) +
         theme(
           axis.text.x = element_text(angle = 45, hjust = 1),
           panel.grid.major = element_blank(),
@@ -426,7 +426,7 @@ build_descriptive_numeric_boxplot <- function(df,
       p <- ggplot(df, aes(x = factor(1), y = .data[[var]])) +
         geom_boxplot(fill = single_color, width = 0.3) +
         theme_minimal(base_size = base_size) +
-        labs(title = var, x = NULL, y = var) +
+        labs(x = NULL, y = var) +
         theme(
           axis.text.x = element_blank(),
           axis.ticks.x = element_blank(),
@@ -502,10 +502,7 @@ build_descriptive_numeric_boxplot <- function(df,
 
   combined <- NULL
   if (isTRUE(validation$valid)) {
-    combined <- patchwork::wrap_plots(plots, nrow = layout$nrow, ncol = layout$ncol) +
-      patchwork::plot_annotation(
-        theme = theme(plot.title = element_text(size = 16, face = "bold"))
-      )
+    combined <- patchwork::wrap_plots(plots, nrow = layout$nrow, ncol = layout$ncol)
 
     combined <- apply_common_legend_layout(
       combined,
