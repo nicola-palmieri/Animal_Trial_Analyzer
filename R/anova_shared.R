@@ -1069,7 +1069,9 @@ build_line_plot_panel <- function(stats_df,
       labs(x = factor1, y = "Mean ± SE") +
       theme(
         panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank()
+        panel.grid.minor = element_blank(),
+        axis.line = element_line(color = "gray30"),
+        axis.ticks = element_line(color = "gray30")
       )
   } else {
     group_levels <- if (is.factor(stats_df[[factor2]])) {
@@ -1146,7 +1148,9 @@ build_line_plot_panel <- function(stats_df,
       ) +
       theme(
         panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank()
+        panel.grid.minor = element_blank(),
+        axis.line = element_line(color = "gray30"),
+        axis.ticks = element_line(color = "gray30")
       ) +
       scale_color_manual(values = palette)
   }
@@ -1467,7 +1471,9 @@ build_single_factor_barplot <- function(stats_df,
       axis.title.y = element_text(margin = margin(r = 6)),
       panel.grid.major = element_blank(),
       panel.grid.minor = element_blank(),
-      axis.text.x = element_text(angle = 0, hjust = 0.5)
+      axis.text.x = element_text(angle = 0, hjust = 0.5),
+      axis.line = element_line(color = "gray30"),
+      axis.ticks = element_line(color = "gray30")
     )
 
   expand_scale <- is.null(y_limits)
@@ -1535,7 +1541,9 @@ build_two_factor_barplot <- function(stats_df,
       axis.title.y = element_text(margin = margin(r = 6)),
       panel.grid.major = element_blank(),
       panel.grid.minor = element_blank(),
-      axis.text.x = element_text(angle = 0, hjust = 0.5)
+      axis.text.x = element_text(angle = 0, hjust = 0.5),
+      axis.line = element_line(color = "gray30"),
+      axis.ticks = element_line(color = "gray30")
     ) +
     scale_fill_manual(values = palette)
 

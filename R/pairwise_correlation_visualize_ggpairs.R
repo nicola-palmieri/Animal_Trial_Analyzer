@@ -111,7 +111,9 @@ pairwise_correlation_visualize_ggpairs_server <- function(
         ggplot2::theme(
           strip.text = ggplot2::element_text(face = "bold", size = 9),
           panel.grid.major = ggplot2::element_blank(),
-          panel.grid.minor = ggplot2::element_blank()
+          panel.grid.minor = ggplot2::element_blank(),
+          axis.line = ggplot2::element_line(color = "gray30"),
+          axis.ticks = ggplot2::element_line(color = "gray30")
         )
       
       if (!is.null(title)) p <- p + ggplot2::labs(title = title)

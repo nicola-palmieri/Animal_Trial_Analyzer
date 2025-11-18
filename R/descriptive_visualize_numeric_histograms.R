@@ -377,7 +377,9 @@ build_descriptive_numeric_histogram <- function(df,
       labs(title = var, x = var, y = y_label) +
       theme(
         panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank()
+        panel.grid.minor = element_blank(),
+        axis.line = element_line(color = "gray30"),
+        axis.ticks = element_line(color = "gray30")
       )
   })
 

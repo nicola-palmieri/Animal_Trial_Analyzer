@@ -368,7 +368,9 @@ build_descriptive_numeric_boxplot <- function(df,
         theme(
           axis.text.x = element_text(angle = 45, hjust = 1),
           panel.grid.major = element_blank(),
-          panel.grid.minor = element_blank()
+          panel.grid.minor = element_blank(),
+          axis.line = element_line(color = "gray30"),
+          axis.ticks = element_line(color = "gray30")
         )
 
       needs_color_scale <- FALSE
@@ -429,7 +431,9 @@ build_descriptive_numeric_boxplot <- function(df,
           axis.text.x = element_blank(),
           axis.ticks.x = element_blank(),
           panel.grid.major = element_blank(),
-          panel.grid.minor = element_blank()
+          panel.grid.minor = element_blank(),
+          axis.line = element_line(color = "gray30"),
+          axis.ticks = element_line(color = "gray30")
         )
 
       if (isTRUE(show_points)) {
