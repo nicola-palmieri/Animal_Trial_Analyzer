@@ -35,7 +35,7 @@ validate_grid <- function(n_items, rows, cols) {
     ))
   }
 
-  if (!too_small && (empty_row || empty_col)) {
+  if (empty_row || empty_col) {
     return(list(
       valid = FALSE,
       message = sprintf("⚠️ Grid %dx%d too large for %d subplots.", rows, cols, n_items)
