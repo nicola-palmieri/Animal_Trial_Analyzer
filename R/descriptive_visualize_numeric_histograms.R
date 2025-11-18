@@ -11,11 +11,11 @@ visualize_numeric_histograms_ui <- function(id) {
     ),
     fluidRow(
       column(6, with_help_tooltip(
-        numericInput(ns("plot_width"),  "Subplot width (px)",  400, 200, 2000, 50),
+        numericInput(ns("plot_width"),  "Subplot width (px)",  value = 400, min = 200, max = 2000, step = 50),
         "Set the width of each histogram panel in pixels."
       )),
       column(6, with_help_tooltip(
-        numericInput(ns("plot_height"), "Subplot height (px)", 300, 200, 2000, 50),
+        numericInput(ns("plot_height"), "Subplot height (px)", value = 300, min = 200, max = 2000, step = 50),
         "Set the height of each histogram panel in pixels."
       ))
     ),

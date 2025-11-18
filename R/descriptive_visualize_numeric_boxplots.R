@@ -19,11 +19,11 @@ visualize_numeric_boxplots_ui <- function(id) {
     ),
     fluidRow(
       column(6, with_help_tooltip(
-        numericInput(ns("plot_width"),  "Subplot width (px)",  200, 200, 2000, 50),
+        numericInput(ns("plot_width"),  "Subplot width (px)",  value = 200, min = 200, max = 2000, step = 50),
         "Control how wide each boxplot panel should be."
       )),
       column(6, with_help_tooltip(
-        numericInput(ns("plot_height"), "Subplot height (px)", 800, 200, 2000, 50),
+        numericInput(ns("plot_height"), "Subplot height (px)", value = 800, min = 200, max = 2000, step = 50),
         "Control how tall each boxplot panel should be."
       ))
     ),

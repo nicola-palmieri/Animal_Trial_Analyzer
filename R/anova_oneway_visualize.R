@@ -64,11 +64,11 @@ visualize_oneway_ui <- function(id) {
       ),
       fluidRow(
         column(6, with_help_tooltip(
-          numericInput(ns("plot_width"), "Subplot width (px)", value = 400, min = 200, max = 1200, step = 50),
+          numericInput(ns("plot_width"), "Subplot width (px)", value = 400, min = 200, max = 2000, step = 50),
           "Adjust how wide each subplot should be in pixels."
         )),
         column(6, with_help_tooltip(
-          numericInput(ns("plot_height"), "Subplot height (px)", value = 300, min = 200, max = 1200, step = 50),
+          numericInput(ns("plot_height"), "Subplot height (px)", value = 300, min = 200, max = 2000, step = 50),
           "Adjust how tall each subplot should be in pixels."
         ))
       ),

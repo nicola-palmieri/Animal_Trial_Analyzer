@@ -25,8 +25,8 @@ visualize_lm_ui <- function(id) {
       # Layout controls (strata/response grids), same pattern as ANOVA
       uiOutput(ns("layout_controls")),
       fluidRow(
-        column(6, numericInput(ns("plot_width"),  "Subplot width (px)",  400, 200, 2000, 50)),
-        column(6, numericInput(ns("plot_height"), "Subplot height (px)", 300, 200, 2000, 50))
+        column(6, numericInput(ns("plot_width"),  "Subplot width (px)",  value = 400, min = 200, max = 2000, step = 50)),
+        column(6, numericInput(ns("plot_height"), "Subplot height (px)", value = 300, min = 200, max = 2000, step = 50))
       ),
       # Color customization; auto-switch between single / grouped
       add_color_customization_ui(ns, multi_group = TRUE),  # server decides when it's single/group
