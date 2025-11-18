@@ -559,12 +559,61 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
         NULL
       }
     })
-    
-    output$plot <- renderPlot({
+
+    plot_cache_key <- reactive({
+      info <- plot_info()
+      entry <- pca_entry()
+
+      data_sig <- if (!is.null(entry$data)) {
+        digest::digest(entry$data, algo = "xxhash64")
+      } else {
+        NULL
+      }
+
+      model_sig <- if (!is.null(entry$model)) {
+        digest::digest(
+          list(
+            scores = entry$model$x[, 1:2, drop = FALSE],
+            rotation = entry$model$rotation[, 1:2, drop = FALSE],
+            center = entry$model$center,
+            scale = entry$model$scale
+          ),
+          algo = "xxhash64"
+        )
+      } else {
+        NULL
+      }
+
+      layout <- info$layout
+      dims <- size_val()
+
+      digest::digest(
+        list(
+          data = data_sig,
+          model = model_sig,
+          color = input$pca_color,
+          shape = input$pca_shape,
+          label = input$pca_label,
+          label_size = input$pca_label_size,
+          show_loadings = isTRUE(input$show_loadings),
+          loading_scale = input$loading_scale,
+          facet_var = info$facet_var,
+          facet_levels = info$facet_levels,
+          layout = layout,
+          width = dims$w,
+          height = dims$h,
+          base_size = base_size()
+        ),
+        algo = "xxhash64"
+      )
+    })
+
+    output$plot <- renderCachedPlot({
       info <- plot_info()
       if (!is.null(info$warning) || is.null(info$plot)) return(NULL)
       info$plot
     },
+    cacheKeyExpr = plot_cache_key(),
     width = function() size_val()$w,
     height = function() size_val()$h,
     res = 96)

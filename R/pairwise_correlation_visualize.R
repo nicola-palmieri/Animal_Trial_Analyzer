@@ -81,7 +81,7 @@ visualize_ggpairs_server <- function(id, filtered_data, model_fit) {
       }
     })
 
-    output$plot <- renderPlot({
+    output$plot <- renderCachedPlot({
       handle <- active_handle()
       req(handle)
 
@@ -91,6 +91,14 @@ visualize_ggpairs_server <- function(id, filtered_data, model_fit) {
       plot_obj <- handle$plot()
       validate(need(!is.null(plot_obj), "No plot available."))
       print(plot_obj)
+    },
+    cacheKeyExpr = {
+      handle <- active_handle()
+      if (is.null(handle) || is.null(handle$cache_key)) {
+        NULL
+      } else {
+        handle$cache_key()
+      }
     },
     width = function() {
       handle <- active_handle()

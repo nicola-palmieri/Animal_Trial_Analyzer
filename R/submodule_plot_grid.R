@@ -149,7 +149,7 @@ plot_grid_server <- function(id,
                              rows_max = 10L,
                              cols_min = 1L,
                              cols_max = 10L,
-                             debounce_ms = 150) {
+                             debounce_ms = 400) {
   moduleServer(id, function(input, output, session) {
     sanitize <- function(x, min_value, max_value) {
       if (length(x) == 0) return(NA_integer_)
