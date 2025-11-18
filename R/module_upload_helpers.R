@@ -1,6 +1,5 @@
 # Clean names + convert characters to ordered factors
 preprocess_uploaded_table <- function(df) {
-  #df <- janitor::clean_names(df)
   df <- df |> mutate(across(where(is.character), auto_factor_order))
   df
 }
