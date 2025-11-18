@@ -15,11 +15,6 @@ home_ui <- function(id) {
           class = "lead text-muted",
           "Turn your tabular data into publication-ready tables and plots."
         ),
-        div(
-          class = "home-actions mt-3",
-          actionButton(ns("go_upload"), label = tagList(icon("upload"), "Upload data"), class = "btn-primary btn-lg"),
-          actionButton(ns("go_visualize"), label = tagList(icon("chart-area"), "Jump to visuals"), class = "btn-default btn-lg")
-        ),
         br(),
         div(
           class = "home-steps",
@@ -77,12 +72,6 @@ home_ui <- function(id) {
 
 home_server <- function(id) {
   moduleServer(id, function(input, output, session) {
-    observeEvent(input$go_upload, {
-      updateNavbarPage(session$rootScope(), "main_nav", selected = "upload")
-    })
-
-    observeEvent(input$go_visualize, {
-      updateNavbarPage(session$rootScope(), "main_nav", selected = "visualize")
-    })
+    # Placeholder for future home page interactivity
   })
 }
