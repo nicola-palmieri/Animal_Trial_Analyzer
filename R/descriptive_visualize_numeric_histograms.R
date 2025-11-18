@@ -358,7 +358,9 @@ build_descriptive_numeric_histogram <- function(df,
             aes(fill = .data[[group_var]]),
             position = "identity",
             alpha = 0.5,
-            bins = 30
+            bins = 30,
+            color = "black",
+            linewidth = 0.2
           ) +
           scale_fill_manual(values = palette) +
           labs(fill = group_var)
@@ -368,7 +370,13 @@ build_descriptive_numeric_histogram <- function(df,
       if (density_mode) {
         base <- base + geom_density(fill = single_color, color = single_color, alpha = 0.35)
       } else {
-        base <- base + geom_histogram(fill = single_color, color = single_color, bins = 30)
+        base <- base +
+          geom_histogram(
+            fill = single_color,
+            color = "black",
+            bins = 30,
+            linewidth = 0.2
+          )
       }
     }
 
