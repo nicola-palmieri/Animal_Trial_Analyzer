@@ -299,6 +299,7 @@ pairwise_correlation_visualize_ggpairs_server <- function(
         if (is.null(info)) NULL else info$warning
       }),
       plot = reactive(cached_plot()),
+      cache_key = reactive(cached_key()),
       width = reactive(plot_dimensions()$width),
       height = reactive(plot_dimensions()$height)
     )
