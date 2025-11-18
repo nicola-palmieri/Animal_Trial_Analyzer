@@ -23,8 +23,6 @@ library(skimr)
 library(tidyr)
 library(zoo)
 
-theme_set(theme_get() + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()))
-
 options(shiny.autoreload = TRUE)
 options(shiny.maxRequestSize = 200 * 1024^2)
 
