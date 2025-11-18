@@ -263,6 +263,13 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
       )
       if (!identical(key, cached_key())) {
         info <- isolate(plot_info())
+
+        if (!is.null(info$warning)) {
+          cached_plot(NULL)
+          cached_key(key)
+          return()
+        }
+
         if (!is.null(info$plot)) {
           cached_plot(info$plot)
           cached_key(key)
