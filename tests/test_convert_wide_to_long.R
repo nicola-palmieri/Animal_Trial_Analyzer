@@ -150,6 +150,10 @@ test_that("convert_wide_to_long behaves correctly across 20 Excel scenarios", {
   # Replicate column must contain Rep1 and Rep2
   rep_vals <- as.character(out1$result$Replicate)
   expect_true(all(rep_vals %in% c("Rep1", "Rep2")))
+
+  custom_rep_result <- convert_wide_to_long(paths[[1]], replicate_col = "Run")
+  expect_true(all(c("Run", "A", "B") %in% names(custom_rep_result)))
+  expect_true(all(as.character(custom_rep_result$Run) %in% c("Rep1", "Rep2")))
   
   
   # ---- Test 2 ----
