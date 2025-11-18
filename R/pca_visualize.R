@@ -674,8 +674,6 @@ build_pca_biplot <- function(pca_obj, data, color_var = NULL, shape_var = NULL,
     ) +
     theme(
       plot.title = element_text(size = 16, face = "bold"),
-      axis.line = element_line(color = "black"),
-      axis.ticks = element_line(color = "black"),
       panel.grid.major = element_blank(),
       panel.grid.minor = element_blank(),
       legend.position = "right"

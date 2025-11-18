@@ -110,8 +110,6 @@ pairwise_correlation_visualize_ggpairs_server <- function(
         ggplot2::theme_minimal(base_size = base_size) +
         ggplot2::theme(
           strip.text = ggplot2::element_text(face = "bold", size = 9),
-          axis.line = ggplot2::element_line(color = "black"),
-          axis.ticks = ggplot2::element_line(color = "black"),
           panel.grid.major = ggplot2::element_blank(),
           panel.grid.minor = ggplot2::element_blank()
         )

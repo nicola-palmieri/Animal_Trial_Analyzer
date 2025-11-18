@@ -1068,8 +1068,6 @@ build_line_plot_panel <- function(stats_df,
       theme_minimal(base_size = base_size) +
       labs(x = factor1, y = "Mean ± SE") +
       theme(
-        axis.line = element_line(color = "black"),
-        axis.ticks = element_line(color = "black"),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank()
       )
@@ -1147,8 +1145,6 @@ build_line_plot_panel <- function(stats_df,
         color = factor2
       ) +
       theme(
-        axis.line = element_line(color = "black"),
-        axis.ticks = element_line(color = "black"),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank()
       ) +
@@ -1469,8 +1465,6 @@ build_single_factor_barplot <- function(stats_df,
       plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
       axis.title.x = element_text(margin = margin(t = 6)),
       axis.title.y = element_text(margin = margin(r = 6)),
-      axis.line = element_line(color = "black"),
-      axis.ticks = element_line(color = "black"),
       panel.grid.major = element_blank(),
       panel.grid.minor = element_blank(),
       axis.text.x = element_text(angle = 0, hjust = 0.5)
@@ -1539,8 +1533,6 @@ build_two_factor_barplot <- function(stats_df,
       plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
       axis.title.x = element_text(margin = margin(t = 6)),
       axis.title.y = element_text(margin = margin(r = 6)),
-      axis.line = element_line(color = "black"),
-      axis.ticks = element_line(color = "black"),
       panel.grid.major = element_blank(),
       panel.grid.minor = element_blank(),
       axis.text.x = element_text(angle = 0, hjust = 0.5)

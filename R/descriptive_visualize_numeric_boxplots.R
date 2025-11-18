@@ -367,8 +367,6 @@ build_descriptive_numeric_boxplot <- function(df,
         labs(title = var, x = NULL, y = var) +
         theme(
           axis.text.x = element_text(angle = 45, hjust = 1),
-          axis.line = element_line(color = "black"),
-          axis.ticks = element_line(color = "black"),
           panel.grid.major = element_blank(),
           panel.grid.minor = element_blank()
         )
@@ -430,8 +428,6 @@ build_descriptive_numeric_boxplot <- function(df,
         theme(
           axis.text.x = element_blank(),
           axis.ticks.x = element_blank(),
-          axis.line = element_line(color = "black"),
-          axis.ticks = element_line(color = "black"),
           panel.grid.major = element_blank(),
           panel.grid.minor = element_blank()
         )
