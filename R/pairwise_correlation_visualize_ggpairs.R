@@ -107,21 +107,21 @@ pairwise_correlation_visualize_ggpairs_server <- function(
         lower = list(continuous = GGally::wrap("points", alpha = 0.6, colour = color, size = 1.5)),
         diag  = list(continuous = GGally::wrap("densityDiag", fill = color, alpha = 0.4))
       ) +
-        ggplot2::theme_minimal(base_size = base_size) +
+        ta_plot_theme(base_size = base_size) +
         ggplot2::theme(
-          strip.text = ggplot2::element_text(face = "bold", size = 9),
+          strip.text = ggplot2::element_text(size = 9),
           panel.grid.major = ggplot2::element_blank(),
           panel.grid.minor = ggplot2::element_blank(),
-          axis.line = ggplot2::element_line(color = "gray30"),
-          axis.ticks = ggplot2::element_line(color = "gray30")
+          axis.line = ggplot2::element_line(color = "#9ca3af"),
+          axis.ticks = ggplot2::element_line(color = "#9ca3af")
         )
-      
+
       if (!is.null(title)) p <- p + ggplot2::labs(title = title)
-      
+
       # wrap ggmatrix into a real ggplot object
       gtable <- GGally::ggmatrix_gtable(p)
       ggplot2::ggplot() +
-        ggplot2::theme_void() +
+        ta_plot_theme_void() +
         ggplot2::annotation_custom(
           grob = gtable,
           xmin = -Inf, xmax = Inf,
