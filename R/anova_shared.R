@@ -42,7 +42,6 @@ build_anova_layout_controls <- function(ns, input, info) {
   tagList(strata_inputs, response_inputs)
 }
 
-
 # ===============================================================
 # 📊 Prepare stratified models for ANOVA (one-way / two-way)
 # ===============================================================
