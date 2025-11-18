@@ -19,34 +19,40 @@ auto_factor_order <- function(x) {
 
 
 convert_wide_to_long <- function(path, sheet = 1, replicate_col = "Replicate") {
-  # ---- Read first two rows to capture merged header structure ----
+  
+  # ---- Load first two rows ----
   headers <- readxl::read_excel(path, sheet = sheet, n_max = 2, col_names = FALSE)
   header1 <- as.character(unlist(headers[1, , drop = TRUE]))
   header2 <- as.character(unlist(headers[2, , drop = TRUE]))
   
-  # ---- Fill blanks forward in first header ----
+  # ---- Handle blank first header row ----
+  if (all(header1 == "" | is.na(header1))) {
+    header1 <- header2
+    header2 <- rep("", length(header1))
+  }
+  
+  # ---- Fill blanks in upper header ----
   header1[header1 == ""] <- NA
   header1 <- zoo::na.locf(header1, na.rm = FALSE)
+  
   header2[is.na(header2) | header2 == ""] <- ""
   
-  # ---- Combine headers safely ----
+  # ---- If no second header exists, extract replicate label from name ----
+  if (all(header2 == "")) {
+    header2 <- ifelse(grepl("_", header1), sub(".*_", "", header1), "")
+  }
+  
+  # ---- Build clean names ----
   clean_names <- ifelse(header2 == "", header1, paste0(header1, "_", header2))
   clean_names <- make.unique(clean_names, sep = "_")
   
-  # ---- Detect number of fixed columns ----
-  first_empty <- which(is.na(headers[1, ]) | headers[1, ] == "")[1]
-  if (is.na(first_empty)) {
-    n_fixed <- 0
-  } else {
-    n_fixed <- max(0, first_empty - 2)
-  }
-  fixed_cols <- clean_names[seq_len(n_fixed)]
-  measure_cols <- setdiff(clean_names, fixed_cols)
+  fixed_cols <- clean_names[header2 == ""]
+  measure_cols <- clean_names[header2 != ""]
   
-  # ---- Read data with computed names ----
+  # ---- Read full data ----
   data <- readxl::read_excel(path, sheet = sheet, skip = 2, col_names = clean_names)
   
-  # ---- Reshape from wide to long then back to tidy ----
+  # ---- Long form ----
   data_long <- data |>
     pivot_longer(
       cols = tidyselect::all_of(measure_cols),
@@ -54,45 +60,41 @@ convert_wide_to_long <- function(path, sheet = 1, replicate_col = "Replicate") {
       names_pattern = "^(.*)_([^_]*)$",
       values_to = "Value"
     )
-
-  # ---- Detect duplicate measurements before widening ----
+  
+  # ---- Duplicate detection ----
   id_cols <- c(fixed_cols, replicate_col, "Variable")
+  
   duplicates <- data_long |>
-    dplyr::group_by(dplyr::across(dplyr::all_of(id_cols))) |>
-    dplyr::summarise(.n = dplyr::n(), .groups = "drop") |>
-    dplyr::filter(.n > 1)
-
+    group_by(across(all_of(id_cols))) |>
+    summarise(n = n(), .groups = "drop") |>
+    filter(n > 1)
+  
   if (nrow(duplicates) > 0) {
-    example <- duplicates[1, , drop = FALSE]
-    var_label <- example$Variable
-    if (is.factor(var_label)) {
-      var_label <- as.character(var_label)
-    }
-    if (length(var_label) == 0 || is.na(var_label) || identical(var_label, "")) {
-      var_label <- "<unknown>"
-    }
-
-    replicate_label <- example[[replicate_col]]
-    if (is.factor(replicate_label)) {
-      replicate_label <- as.character(replicate_label)
-    }
-    if (length(replicate_label) == 0 || is.na(replicate_label) || identical(replicate_label, "")) {
-      replicate_label <- "<blank>"
-    }
-
-    stop(
-      sprintf(
-        "Duplicate measurements detected for variable '%s' and replicate '%s'. Ensure header labels are unique before uploading.",
-        var_label,
-        replicate_label
-      ),
-      call. = FALSE
-    )
+    ex <- duplicates[1, ]
+    
+    stop(sprintf(
+      "Duplicate measurements detected for variable '%s' and replicate '%s'. Ensure header labels are unique before uploading.",
+      as.character(ex$Variable %||% "<unknown>"),
+      as.character(ex[[replicate_col]] %||% "<blank>")
+    ), call. = FALSE)
   }
-
-  data_long |>
-    pivot_wider(names_from = "Variable", values_from = "Value") |>
+  
+  # ---- Build final column name manually ----
+  data_long <- data_long |>
+    mutate(
+      .final_name = paste0(Variable, "_", .data[[replicate_col]])
+    )
+  
+  # ---- Pivot wider safely ----
+  data_wide <- data_long |>
+    select(all_of(fixed_cols), .final_name, Value) |>
+    pivot_wider(
+      names_from = .final_name,
+      values_from = Value
+    ) |>
     as_tibble()
+  
+  data_wide
 }
 
 safe_convert_wide_to_long <- purrr::safely(convert_wide_to_long)

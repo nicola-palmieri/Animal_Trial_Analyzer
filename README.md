@@ -56,10 +56,6 @@ install.packages(c(
 shiny::runApp(".")
 ```
 
-The app auto-sources all modules from the `R/` directory, bumps the upload size limit to 200 MB, and enables Shiny autoreload for development.
-
----
-
 ## 📂 Data expectations
 
 - Numeric responses should be stored in numeric columns.
