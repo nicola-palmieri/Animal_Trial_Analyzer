@@ -967,6 +967,11 @@ finalize_anova_plot_result <- function(response_plots,
   }
   warning_text <- if (length(warnings) > 0) paste(warnings, collapse = "<br/>") else NULL
 
+  panel_counts <- list(
+    strata = if (has_strata) max(1L, strata_panel_count) else 1L,
+    responses = length(response_plots)
+  )
+
   final_plot <- NULL
   if (is.null(warning_text)) {
     if (length(response_plots) == 1) {
@@ -1003,6 +1008,7 @@ finalize_anova_plot_result <- function(response_plots,
       )
     ),
     warning = warning_text,
+    panel_counts = panel_counts,
     defaults = list(
       strata = context$strata_defaults,
       responses = response_defaults
