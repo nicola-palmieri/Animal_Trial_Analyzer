@@ -1070,6 +1070,7 @@ build_line_plot_panel <- function(stats_df,
       theme(
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1),
         axis.line = element_line(color = "gray30"),
         axis.ticks = element_line(color = "gray30")
       )
@@ -1149,6 +1150,7 @@ build_line_plot_panel <- function(stats_df,
       theme(
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1),
         axis.line = element_line(color = "gray30"),
         axis.ticks = element_line(color = "gray30")
       ) +
@@ -1488,7 +1490,7 @@ build_single_factor_barplot <- function(stats_df,
       axis.title.y = element_text(margin = margin(r = 6)),
       panel.grid.major = element_blank(),
       panel.grid.minor = element_blank(),
-      axis.text.x = element_text(angle = 0, hjust = 0.5),
+      axis.text.x = element_text(angle = 45, hjust = 1),
       axis.line = element_line(color = "gray30"),
       axis.ticks = element_line(color = "gray30")
     )
@@ -1558,7 +1560,7 @@ build_two_factor_barplot <- function(stats_df,
       axis.title.y = element_text(margin = margin(r = 6)),
       panel.grid.major = element_blank(),
       panel.grid.minor = element_blank(),
-      axis.text.x = element_text(angle = 0, hjust = 0.5),
+      axis.text.x = element_text(angle = 45, hjust = 1),
       axis.line = element_line(color = "gray30"),
       axis.ticks = element_line(color = "gray30")
     ) +
