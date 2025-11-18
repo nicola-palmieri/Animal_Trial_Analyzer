@@ -70,14 +70,8 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
       if (is.null(is_active)) TRUE else isTRUE(is_active())
     })
     
-    subplot_sizes <- reactive({
-      validate_subplot_dimensions(
-        input$plot_width,
-        input$plot_height,
-        default_width = 400,
-        default_height = 300
-      )
-    })
+    plot_width  <- reactive({ as.numeric(input$plot_width  %||% 400) })
+    plot_height <- reactive({ as.numeric(input$plot_height %||% 300) })
     grid <- plot_grid_server("plot_grid", cols_max = 100L)
     base_size <- base_size_server(input, default = 13)
     
@@ -225,20 +219,15 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
       nrow_l <- if (!is.null(lay$nrow)) as.integer(lay$nrow) else 1L
       ncol_l <- if (!is.null(lay$ncol)) as.integer(lay$ncol) else 1L
       list(
-        width = max(200, subplot_sizes()$width  * ncol_l),
-        height = max(200, subplot_sizes()$height * nrow_l),
-        warning = subplot_sizes()$warning
+        width = max(200, plot_width()  * ncol_l),
+        height = max(200, plot_height() * nrow_l)
       )
     })
-
+    
     output$grid_warning <- renderUI({
       req(active())
       info <- plot_info()
-      size_warning <- plot_dimensions()$warning
-      warnings <- c(info$warning, size_warning)
-      warnings <- warnings[!vapply(warnings, is.null, logical(1))]
-      if (length(warnings) > 0)
-        div(class = "alert alert-warning", HTML(paste(warnings, collapse = "<br>")))
+      if (!is.null(info$warning)) div(class = "alert alert-warning", info$warning)
     })
     
     output$download_plot <- downloadHandler(
