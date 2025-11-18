@@ -519,6 +519,11 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
       )
     })
 
+    observeEvent(plot_info(), {
+      info <- plot_info()
+      apply_grid_defaults_if_empty(input, session, "facet_grid", info$defaults)
+    }, ignoreNULL = TRUE)
+
     # ---- Unified sizing logic ----
     size_val <- reactiveVal(list(w = 800, h = 600))
     

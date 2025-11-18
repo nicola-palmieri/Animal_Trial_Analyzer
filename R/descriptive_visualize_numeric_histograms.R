@@ -146,6 +146,12 @@ visualize_numeric_histograms_server <- function(id, filtered_data, summary_info,
       )
     })
 
+    observeEvent(plot_info(), {
+      req(active())
+      info <- plot_info()
+      apply_grid_defaults_if_empty(input, session, "plot_grid", info$defaults)
+    }, ignoreNULL = TRUE)
+
     common_legend_available <- reactive({
       req(active())
       info <- plot_info()

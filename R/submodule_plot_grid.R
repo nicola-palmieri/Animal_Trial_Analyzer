@@ -59,6 +59,29 @@ basic_grid_layout <- function(rows = NULL,
   )
 }
 
+apply_grid_defaults_if_empty <- function(input, session, grid_id, defaults) {
+  if (is.null(defaults) || !is.list(defaults)) return()
+
+  rows_default <- suppressWarnings(as.integer(defaults$rows[1]))
+  cols_default <- suppressWarnings(as.integer(defaults$cols[1]))
+
+  if (any(!is.finite(c(rows_default, cols_default)))) return()
+
+  rows_id <- paste0(grid_id, "-rows")
+  cols_id <- paste0(grid_id, "-cols")
+
+  current_rows <- isolate(input[[rows_id]])
+  current_cols <- isolate(input[[cols_id]])
+
+  if (is.null(current_rows) || is.na(current_rows)) {
+    updateNumericInput(session, rows_id, value = rows_default)
+  }
+
+  if (is.null(current_cols) || is.na(current_cols)) {
+    updateNumericInput(session, cols_id, value = cols_default)
+  }
+}
+
 adjust_grid_layout <- function(n_items, layout) {
   if (is.null(layout) || length(layout) == 0) {
     return(list(nrow = 1L, ncol = 1L))
