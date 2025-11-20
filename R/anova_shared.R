@@ -43,6 +43,22 @@ build_anova_layout_controls <- function(ns, input, info) {
 }
 
 
+# ---------------------------------------------------------------
+# Formula utilities
+# ---------------------------------------------------------------
+
+anova_protect_vars <- function(vars) {
+  if (is.null(vars) || length(vars) == 0) return(vars)
+
+  vals <- vapply(vars, function(v) {
+    if (is.null(v) || is.na(v) || !nzchar(v)) return("")
+    if (grepl("^`.*`$", v)) v else paste0("`", v, "`")
+  }, character(1))
+
+  vals[nzchar(vals)]
+}
+
+
 # ===============================================================
 # 📊 Prepare stratified models for ANOVA (one-way / two-way)
 # ===============================================================
@@ -91,19 +107,22 @@ prepare_stratified_anova <- function(
     NULL
   }
 
+  factor1_rhs <- anova_protect_vars(factor1_var)
+  factor2_rhs <- anova_protect_vars(factor2_var)
+
   rhs <- switch(
     model,
-    oneway_anova = factor1_var,
-    twoway_anova = if (!is.null(factor1_var) && !is.null(factor2_var)) {
-      paste(factor1_var, factor2_var, sep = " *")
+    oneway_anova = factor1_rhs,
+    twoway_anova = if (length(factor1_rhs) > 0 && length(factor2_rhs) > 0) {
+      paste(factor1_rhs, factor2_rhs, sep = " *")
     } else {
-      factor1_var
+      factor1_rhs
     },
-    factor1_var
+    factor1_rhs
   )
   rhs <- if (is.null(rhs) || rhs == "") "1" else rhs
 
-  build_formula <- function(resp) stats::as.formula(paste(resp, "~", rhs))
+  build_formula <- function(resp) stats::as.formula(paste(anova_protect_vars(resp), "~", rhs))
   safe_fit <- purrr::safely(function(fml, data) stats::aov(fml, data = data))
 
   fit_models_for_data <- function(data) {
@@ -192,14 +211,15 @@ prepare_anova_outputs <- function(model_obj, factor_names) {
   posthoc_significant <- numeric(0)
   
   # --- Post-hoc Tukey (one-way or two-way specific) ---
-  if (length(factor_names) == 1) {
-    f1 <- factor_names[1]
-    if (f1 %in% names(model_obj$model)) {
-      res <- tryCatch({
-        emm <- emmeans::emmeans(model_obj, specs = f1)
-        contrasts <- emmeans::contrast(emm, method = "pairwise", adjust = "tukey")
-        as.data.frame(summary(contrasts))
-      }, error = function(e) list(error = e$message))
+    if (length(factor_names) == 1) {
+      f1 <- factor_names[1]
+      f1_spec <- anova_protect_vars(f1)
+      if (f1 %in% names(model_obj$model)) {
+        res <- tryCatch({
+          emm <- emmeans::emmeans(model_obj, specs = as.formula(paste("~", f1_spec)))
+          contrasts <- emmeans::contrast(emm, method = "pairwise", adjust = "tukey")
+          as.data.frame(summary(contrasts))
+        }, error = function(e) list(error = e$message))
       
       if (is.data.frame(res)) {
         res$Factor <- f1
@@ -213,12 +233,16 @@ prepare_anova_outputs <- function(model_obj, factor_names) {
   } else if (length(factor_names) == 2) {
     f1 <- factor_names[1]
     f2 <- factor_names[2]
+
+    f1_spec <- anova_protect_vars(f1)
+    f2_spec <- anova_protect_vars(f2)
     
     # --- main-effect Tukey for both factors (averaged) ---
     for (ff in c(f1, f2)) {
       if (ff %in% names(model_obj$model)) {
+        ff_spec <- anova_protect_vars(ff)
         res_main <- tryCatch({
-          emm_main <- emmeans::emmeans(model_obj, specs = ff)
+          emm_main <- emmeans::emmeans(model_obj, specs = as.formula(paste("~", ff_spec)))
           contrasts_main <- emmeans::contrast(emm_main, method = "pairwise", adjust = "tukey")
           as.data.frame(summary(contrasts_main))
         }, error = function(e) list(error = e$message))
@@ -232,10 +256,10 @@ prepare_anova_outputs <- function(model_obj, factor_names) {
         }
       }
     }
-    
+
     # --- nested contrasts of factor2 within each level of factor1 ---
     res_nested <- tryCatch({
-      formula_nested <- as.formula(paste("pairwise ~", f2, "|", f1))
+      formula_nested <- as.formula(paste("pairwise ~", f2_spec, "|", f1_spec))
       emm_nested <- emmeans::emmeans(model_obj, specs = formula_nested, adjust = "tukey")
       contrasts_df <- as.data.frame(summary(emm_nested$contrasts))
       contrasts_df$Factor <- paste0(f2, "_within_", f1)

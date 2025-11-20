@@ -11,6 +11,35 @@ compact_chr <- function(x) {
   x
 }
 
+reg_protect_vars <- function(vars) {
+  if (is.null(vars) || length(vars) == 0) return(vars)
+
+  vals <- vapply(vars, function(v) {
+    if (is.null(v) || is.na(v) || !nzchar(v)) return("")
+    if (grepl("^`.*`$", v)) v else paste0("`", v, "`")
+  }, character(1))
+
+  vals[nzchar(vals)]
+}
+
+reg_protect_interactions <- function(interactions) {
+  if (is.null(interactions) || length(interactions) == 0) return(interactions)
+
+  vapply(interactions, function(term) {
+    parts <- strsplit(term, ":", fixed = TRUE)[[1]]
+    paste(reg_protect_vars(parts), collapse = ":")
+  }, character(1))
+}
+
+reg_formula_text <- function(dep, rhs) {
+  dep <- reg_protect_vars(dep)
+  if (length(rhs) == 0) {
+    paste(dep, "~ 1")
+  } else {
+    paste(dep, "~", paste(rhs, collapse = " + "))
+  }
+}
+
 trim_output_section <- function(lines, start_pattern, end_pattern = NULL, end_offset = 0) {
   start <- grep(start_pattern, lines)[1]
   if (is.na(start)) return(lines)
@@ -78,16 +107,21 @@ reg_interactions_ui <- function(ns, fixed, fac_vars) {
 
 reg_compose_rhs <- function(fixed, covar, interactions, random = NULL, engine = c("lm","lmm")) {
   engine <- match.arg(engine)
-  rhs <- c(compact_chr(fixed), compact_chr(covar), compact_chr(interactions))
+  fixed <- reg_protect_vars(compact_chr(fixed))
+  covar <- reg_protect_vars(compact_chr(covar))
+  interactions <- reg_protect_interactions(compact_chr(interactions))
+
+  rhs <- c(fixed, covar, interactions)
   if (engine == "lmm" && !is.null(random) && nzchar(random)) {
-    rhs <- c(rhs, paste0("(1|", random, ")"))
+    rand <- reg_protect_vars(random)
+    rhs <- c(rhs, paste0("(1|", rand, ")"))
   }
   rhs
 }
 
 reg_formula_preview_ui <- function(ns, dep, rhs) {
   if (is.null(dep) || !nzchar(dep)) return(NULL)
-  form_txt <- if (length(rhs) == 0) paste(dep, "~ 1") else paste(dep, "~", paste(rhs, collapse = " + "))
+  form_txt <- reg_formula_text(dep, rhs)
   wellPanel(
     strong("Model formula: "),
     code(form_txt)
@@ -100,7 +134,7 @@ reg_formula_preview_ui <- function(ns, dep, rhs) {
 
 reg_fit_model <- function(dep, rhs, data, engine = c("lm","lmm")) {
   engine <- match.arg(engine)
-  form <- as.formula(if (length(rhs) == 0) paste(dep, "~ 1") else paste(dep, "~", paste(rhs, collapse = " + ")))
+  form <- as.formula(reg_formula_text(dep, rhs))
   if (engine == "lm") {
     lm(form, data = data)
   } else {
