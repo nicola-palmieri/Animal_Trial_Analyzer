@@ -208,5 +208,4 @@ add_theme_to_plot <- function(plot_obj, theme_obj) {
   }
 }
 
-#### Section: Statistics Summarisation ####
 
