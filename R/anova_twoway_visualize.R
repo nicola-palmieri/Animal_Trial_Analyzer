@@ -1,5 +1,5 @@
 # ===============================================================
-# 🧪 Visualization Module — Two-way ANOVA (Simplified & Consistent)
+# 🧪 Visualization Module — Two-way ANOVA (Apply-button version)
 # ===============================================================
 
 visualize_twoway_ui <- function(id) {
@@ -36,22 +36,28 @@ visualize_twoway_ui <- function(id) {
       conditionalPanel(
         condition = sprintf("input['%s'] === 'lineplot_mean_se'", ns("plot_type")),
         fluidRow(
-          column(6, with_help_tooltip(
-            checkboxInput(
-              ns("lineplot_show_lines"),
-              "Connect means with lines",
-              value = TRUE
-            ),
-            "Draw connecting lines between group means."
-          )),
-          column(6, with_help_tooltip(
-            checkboxInput(
-              ns("lineplot_use_dodge"),
-              "Dodge grouped means",
-              value = FALSE
-            ),
-            "Offset the level means of the second factor along the x-axis to prevent overlap."
-          ))
+          column(
+            6,
+            with_help_tooltip(
+              checkboxInput(
+                ns("lineplot_show_lines"),
+                "Connect means with lines",
+                value = TRUE
+              ),
+              "Draw connecting lines between group means."
+            )
+          ),
+          column(
+            6,
+            with_help_tooltip(
+              checkboxInput(
+                ns("lineplot_use_dodge"),
+                "Dodge grouped means",
+                value = FALSE
+              ),
+              "Offset the level means of the second factor along the x-axis to prevent overlap."
+            )
+          )
         )
       ),
       uiOutput(ns("axis_and_jitter")),
@@ -59,42 +65,48 @@ visualize_twoway_ui <- function(id) {
       uiOutput(ns("layout_controls")),
       fluidRow(
         column(6, add_color_customization_ui(ns, multi_group = TRUE)),
-        column(6, tagList(
-          base_size_ui(
-            ns,
-            default = 13,
-            help_text = "Adjust the base font size used for the ANOVA plots."
-          ),
-          uiOutput(ns("common_legend_controls"))
-        ))
+        column(
+          6,
+          tagList(
+            base_size_ui(
+              ns,
+              default = 13,
+              help_text = "Adjust the base font size used for the ANOVA plots."
+            ),
+            uiOutput(ns("common_legend_controls"))
+          )
+        )
       ),
+      
       br(),
-      with_help_tooltip(
-        downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;"),
-        "Save the current figure as an image file."
+      
+      fluidRow(
+        column(6, actionButton(ns("apply_plot"), "Apply changes", width = "100%")),
+        column(6, downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;"))
       )
     ),
     mainPanel(
       width = 8,
       h4("Plots"),
       uiOutput(ns("plot_warning")),
-      # Pre-mounted panels for instant switching
-      conditionalPanel(
-        condition = sprintf("input['%s'] === 'lineplot_mean_se'", ns("plot_type")),
-        plotOutput(ns("plot_line"), height = "auto")
-      ),
-      conditionalPanel(
-        condition = sprintf("input['%s'] === 'barplot_mean_se'", ns("plot_type")),
-        plotOutput(ns("plot_bar"), height = "auto")
-      )
+      plotOutput(ns("plot"), height = "auto")
     )
   )
 }
 
 
+
 visualize_twoway_server <- function(id, filtered_data, model_info) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
+    
+    stored <- reactiveValues(
+      plot = NULL,
+      warning = NULL,
+      layout = NULL,
+      plot_width = NULL,
+      plot_height = NULL
+    )
     
     df <- reactive(filtered_data())
     
@@ -111,402 +123,219 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
     })
     
     custom_colors <- add_color_customization_server(
-      ns, input, output, df,
+      ns = ns,
+      input = input,
+      output = output,
+      data = df,
       color_var_reactive = color_var,
       multi_group = TRUE,
       level_order_reactive = factor2_levels
     )
     
-    base_size <- base_size_server(input, default = 13)
+    base_size <- base_size_server(input = input, default = 13)
+    
     strata_grid <- plot_grid_server("strata_grid")
     response_grid <- plot_grid_server("response_grid")
-
-    active <- reactive(TRUE)
-
-    legend_state <- reactiveValues(
-      enabled = FALSE,
-      position = "bottom"
-    )
-
-    observeEvent(input$use_common_legend, {
-      req(!is.null(input$use_common_legend))
-      legend_state$enabled <- isTRUE(input$use_common_legend)
-    }, ignoreNULL = TRUE)
-
-    observeEvent(input$common_legend_position, {
-      req(!is.null(input$common_legend_position))
-      legend_state$position <- input$common_legend_position
-    }, ignoreNULL = TRUE)
-
-    common_legend_available <- reactive({
-      info <- model_info()
-      if (is.null(info) || !identical(info$type, "twoway_anova")) {
-        return(FALSE)
-      }
-      has_multiple_responses <- length(info$responses %||% character()) > 1
-      has_strata <- !is.null(info$strata) && !is.null(info$strata$var)
-      has_multiple_responses || has_strata
-    })
-
-    observeEvent(common_legend_available(), {
-      if (!isTRUE(common_legend_available())) {
-        legend_state$enabled <- FALSE
-      }
-    })
-
-    output$common_legend_controls <- renderUI({
-      legend_supported <- input$plot_type %in% c("lineplot_mean_se", "barplot_mean_se")
-      if (!isTRUE(common_legend_available()) || !legend_supported) {
-        return(NULL)
-      }
-
-      checkbox <- div(
-        class = "mt-3",
-        with_help_tooltip(
-          checkboxInput(
-            ns("use_common_legend"),
-            "Use common legend",
-            value = isTRUE(legend_state$enabled)
-          ),
-          "Merge the legends across responses or strata into a single shared legend."
-        )
-      )
-
-      legend_position <- if (isTRUE(legend_state$enabled)) {
-        div(
-          class = "mt-2",
-          with_help_tooltip(
-            selectInput(
-              ns("common_legend_position"),
-              "Legend position",
-              choices = c(
-                "Bottom" = "bottom",
-                "Right" = "right",
-                "Top" = "top",
-                "Left" = "left"
-              ),
-              selected = legend_state$position %||% "bottom"
-            ),
-            "Choose where the combined legend should be displayed."
-          )
-        )
-      } else {
-        NULL
-      }
-
-      tagList(checkbox, legend_position)
-    })
-
-    single_subplot <- reactive({
-      info <- model_info()
-      if (is.null(info) || !identical(info$type, "twoway_anova")) {
-        return(FALSE)
-      }
-
-      responses <- info$responses
-      n_responses <- if (!is.null(responses) && length(responses) > 0) {
-        length(responses)
-      } else {
-        0L
-      }
-      n_responses <- max(1L, n_responses)
-
-      strata_info <- info$strata
-      strata_levels <- if (!is.null(strata_info)) strata_info$levels else NULL
-      n_strata <- if (!is.null(strata_levels) && length(strata_levels) > 0) {
-        length(strata_levels)
-      } else {
-        0L
-      }
-      n_strata <- max(1L, n_strata)
-
-      (n_responses * n_strata) <= 1L
-    })
-
-    observeEvent(single_subplot(), {
-      if (isTRUE(single_subplot()) && isTRUE(input$share_y_axis)) {
-        updateCheckboxInput(session, "share_y_axis", value = FALSE)
-      }
-    })
-
-    output$axis_and_jitter <- renderUI({
-      disable_share <- isTRUE(single_subplot())
-      share_checkbox <- checkboxInput(
-        ns("share_y_axis"),
-        "Use common y-axis across plots",
-        value = isTRUE(input$share_y_axis)
-      )
-      share_widget <- with_help_tooltip(
-        share_checkbox,
-        "Lock the y-axis range so every subplot uses the same scale."
-      )
-      if (disable_share) {
-        share_widget <- tags$fieldset(
-          class = "border-0 p-0 m-0",
-          disabled = "disabled",
-          share_widget
-        )
-      }
-
-      jitter_widget <- NULL
-      if (isTRUE(input$plot_type == "lineplot_mean_se")) {
-        jitter_widget <- with_help_tooltip(
-          checkboxInput(
-            ns("lineplot_show_jitter"),
-            "Overlay jittered data",
-            value = isTRUE(input$lineplot_show_jitter)
-          ),
-          "Overlay raw observations with light jitter for context."
-        )
-      }
-
-      fluidRow(
-        column(6, share_widget),
-        column(6, jitter_widget)
-      )
-    })
-
-    state <- reactive({
-      legend_supported <- input$plot_type %in% c("lineplot_mean_se", "barplot_mean_se")
-      use_common_legend <- isTRUE(common_legend_available()) &&
-        legend_supported &&
-        isTRUE(legend_state$enabled)
-      legend_pos <- legend_state$position
-      valid_positions <- c("bottom", "top", "left", "right")
-      resolved_position <- if (!is.null(legend_pos) && legend_pos %in% valid_positions) {
-        legend_pos
-      } else {
-        "bottom"
-      }
-      list(
-        data        = df(),
-        info        = model_info(),
-        strata_rows = strata_grid$rows(),
-        strata_cols = strata_grid$cols(),
-        resp_rows   = response_grid$rows(),
-        resp_cols   = response_grid$cols(),
-        colors        = custom_colors(),
-        base_size     = base_size(),
-        show_labels   = isTRUE(input$show_bar_labels),
-        show_lines    = isTRUE(input$lineplot_show_lines),
-        use_dodge     = isTRUE(input$lineplot_use_dodge),
-        show_jitter   = isTRUE(input$lineplot_show_jitter),
-        plot_type     = input$plot_type,
-        share_y_axis  = isTRUE(input$share_y_axis),
-        common_legend = use_common_legend,
-        legend_position = if (use_common_legend) resolved_position else NULL
-      )
-    })
-
-    compute_all_plots <- function(data,
-                                  info,
-                                  layout_inputs,
-                                  colors,
-                                  base_size_value,
-                                  show_labels,
-                                  show_lines,
-                                  show_jitter,
-                                  use_dodge,
-                                  share_y_axis,
-                                  common_legend = FALSE,
-                                  legend_position = NULL) {
-      if (is.null(info) || !identical(info$type, "twoway_anova") || is.null(data) || nrow(data) == 0) {
-        return(list(
-          lineplot_mean_se = list(plot = NULL, warning = "No data or results available.", layout = NULL),
-          barplot_mean_se  = list(plot = NULL, warning = "No data or results available.", layout = NULL)
-        ))
-      }
-
-      responses <- info$responses
-      if (!is.null(responses) && length(responses) > 0 && is.data.frame(data)) {
-        missing_cols <- setdiff(responses, names(data))
-        if (length(missing_cols) > 0) {
-          message <- sprintf(
-            "The following response variable(s) are no longer available in the dataset: %s.",
-            paste(missing_cols, collapse = ", ")
-          )
-        } else {
-          non_numeric <- responses[!vapply(responses, function(col) is.numeric(data[[col]]), logical(1))]
-          message <- if (length(non_numeric) > 0) {
-            sprintf(
-              "The selected response variable(s) must be numeric for visualization. Please update their type in the Upload tab: %s.",
-              paste(non_numeric, collapse = ", ")
-            )
-          } else {
-            NULL
-          }
-        }
-
-        if (!is.null(message)) {
-          placeholder_layout <- list(
-            strata = list(rows = 1L, cols = 1L),
-            responses = list(rows = 1L, cols = 1L)
-          )
-          placeholder <- list(plot = NULL, warning = message, layout = placeholder_layout)
-          return(list(
-            lineplot_mean_se = placeholder,
-            barplot_mean_se  = placeholder
-          ))
-        }
-      }
-      list(
-        lineplot_mean_se = plot_anova_lineplot_meanse(
-          data, info, layout_inputs,
-          line_colors = colors,
-          base_size = base_size_value,
-          show_lines = show_lines,
-          show_jitter = show_jitter,
-          use_dodge = use_dodge,
-          share_y_axis = share_y_axis,
-          common_legend = common_legend,
-          legend_position = legend_position
-        ),
-        barplot_mean_se = plot_anova_barplot_meanse(
-          data, info, layout_values = layout_inputs,
-          line_colors = colors,
-          show_value_labels = show_labels,
-          base_size = base_size_value,
-          posthoc_all = info$posthoc,
-          share_y_axis = share_y_axis,
-          common_legend = common_legend,
-          legend_position = legend_position
-        )
-      )
-    }
     
-    plot_info <- reactive({
-      s <- state()
-      req(!is.null(s$data), !is.null(s$info))
-      layout_inputs <- list(
-        strata_rows = s$strata_rows,
-        strata_cols = s$strata_cols,
-        resp_rows   = s$resp_rows,
-        resp_cols   = s$resp_cols
-      )
-      res <- compute_all_plots(
-        s$data, s$info, layout_inputs,
-        s$colors, s$base_size,
-        s$show_labels,
-        s$show_lines,
-        s$show_jitter,
-        s$use_dodge,
-        s$share_y_axis,
-        s$common_legend,
-        s$legend_position
-      )
-      res[[if (!is.null(s$plot_type) && s$plot_type %in% names(res)) s$plot_type else "lineplot_mean_se"]]
-    })
-
-    observeEvent(plot_info(), {
-      info <- plot_info()
-      apply_grid_defaults_if_empty(input, session, "strata_grid", info$defaults$strata, n_items = info$panel_counts$strata)
-      apply_grid_defaults_if_empty(input, session, "response_grid", info$defaults$responses, n_items = info$panel_counts$responses)
-    }, ignoreNULL = TRUE)
-
-    # ---- Cached ggplot object to avoid flicker ----
-    hash_key <- function(data) {
-      if (is.null(data) || !is.data.frame(data)) return("no-data")
-      digest::digest(data, algo = "xxhash64")
-    }
-    
-    cached_plot <- reactiveVal(NULL)
-    cached_key  <- reactiveVal(NULL)
-    
-    observe({
-      s <- state()
-      dat <- s$data
-      key <- paste(
-        hash_key(dat),
-        s$plot_type,
-        s$show_labels,
-        s$show_lines,
-        s$show_jitter,
-        s$use_dodge,
-        s$colors,
-        s$base_size,
-        s$strata_rows,
-        s$strata_cols,
-        s$resp_rows,
-        s$resp_cols,
-        s$share_y_axis,
-        s$common_legend,
-        s$legend_position %||% "none",
-        sep = "_"
-      )
-      if (!identical(key, cached_key())) {
-        info <- plot_info()
-        if (!is.null(info$warning)) {
-          cached_plot(NULL)
-          cached_key(key)
-          return()
-        }
-
-        if (!is.null(info$plot)) {
-          cached_plot(info$plot)
-          cached_key(key)
-        }
-      }
-    })
-    
-    plot_dimensions <- reactive({
-      info <- plot_info()
-      lay <- info$layout
-      nrow_l <- (lay$strata$rows %||% 1L) * (lay$responses$rows %||% 1L)
-      ncol_l <- (lay$strata$cols %||% 1L) * (lay$responses$cols %||% 1L)
-      list(
-        width = max(200, as.numeric(input$plot_width  %||% 400) * ncol_l),
-        height = max(200, as.numeric(input$plot_height %||% 300) * nrow_l)
-      )
-    })
-    
+    # UI render
     output$layout_controls <- renderUI({
       info <- model_info()
       req(info)
       build_anova_layout_controls(ns, input, info)
     })
     
-    output$plot_warning <- renderUI({
-      info <- plot_info()
-      if (!is.null(info$warning))
-        div(class = "alert alert-warning", HTML(info$warning))
-    })
-    
-    output$plot_line <- renderPlot({
-      p <- cached_plot()
-      if (is.null(p) || input$plot_type != "lineplot_mean_se") return(NULL)
-      print(p)
-    },
-    width  = function() plot_dimensions()$width,
-    height = function() plot_dimensions()$height,
-    res = 96)
-    
-    output$plot_bar <- renderPlot({
-      p <- cached_plot()
-      if (is.null(p) || input$plot_type != "barplot_mean_se") return(NULL)
-      print(p)
-    },
-    width  = function() plot_dimensions()$width,
-    height = function() plot_dimensions()$height,
-    res = 96)
-    
-    
-    
-    output$download_plot <- downloadHandler(
-      filename = function() paste0("anova_plot_", Sys.Date(), ".png"),
-      content = function(file) {
-        p <- cached_plot()
-        req(!is.null(p))
-        s <- plot_dimensions()
-        ggsave(
-          file, p, device = "png", dpi = 300,
-          width = s$width / 96, height = s$height / 96,
-          units = "in", limitsize = FALSE
+    output$axis_and_jitter <- renderUI({
+      jitter_widget <- NULL
+      if (input$plot_type == "lineplot_mean_se") {
+        jitter_widget <- with_help_tooltip(
+          checkboxInput(
+            ns("lineplot_show_jitter"),
+            "Overlay jittered data",
+            value = isTRUE(input$lineplot_show_jitter)
+          ),
+          "Overlay raw observations with jitter."
         )
       }
+      
+      fluidRow(
+        column(
+          6,
+          with_help_tooltip(
+            checkboxInput(
+              ns("share_y_axis"),
+              "Use common y-axis across plots",
+              value = isTRUE(input$share_y_axis)
+            ),
+            "Use the same y-scale for all panels."
+          )
+        ),
+        column(6, jitter_widget)
+      )
+    })
+    
+    # Common legend UI
+    legend_state <- reactiveValues(
+      enabled = FALSE,
+      position = "bottom"
     )
     
-    outputOptions(output, "plot_line", suspendWhenHidden = TRUE)
-    outputOptions(output, "plot_bar",  suspendWhenHidden = TRUE)
+    common_legend_available <- reactive({
+      info <- model_info()
+      if (is.null(info) || !identical(info$type, "twoway_anova"))
+        return(FALSE)
+      has_mult_resp <- length(info$responses %||% character()) > 1
+      has_strata <- !is.null(info$strata) && !is.null(info$strata$var)
+      has_mult_resp || has_strata
+    })
     
+    observeEvent(input$use_common_legend, {
+      legend_state$enabled <- isTRUE(input$use_common_legend)
+    }, ignoreNULL = TRUE)
+    
+    observeEvent(input$common_legend_position, {
+      legend_state$position <- input$common_legend_position
+    }, ignoreNULL = TRUE)
+    
+    output$common_legend_controls <- renderUI({
+      if (!common_legend_available()) return(NULL)
+      
+      legend_enabled <- isTRUE(legend_state$enabled)
+      
+      legend_checkbox <- with_help_tooltip(
+        checkboxInput(
+          ns("use_common_legend"),
+          "Use common legend",
+          value = legend_enabled
+        ),
+        "Merge legends across subplots."
+      )
+      
+      legend_position <- NULL
+      if (legend_enabled) {
+        legend_position <- with_help_tooltip(
+          selectInput(
+            ns("common_legend_position"),
+            "Legend position",
+            c("Bottom" = "bottom", "Right" = "right", "Top" = "top", "Left" = "left"),
+            selected = legend_state$position
+          ),
+          "Choose where to place the combined legend."
+        )
+      }
+      
+      tagList(legend_checkbox, legend_position)
+    })
+    
+    # ------------------------------------------------------------------
+    # APPLY button (core logic)
+    # ------------------------------------------------------------------
+    observeEvent(input$apply_plot, {
+      data <- df()
+      info <- model_info()
+      
+      stored$plot_width  <- input$plot_width
+      stored$plot_height <- input$plot_height
+      
+      if (is.null(info) || is.null(data) || nrow(data) == 0) {
+        stored$warning <- "No data or ANOVA results available."
+        stored$plot <- NULL
+        return()
+      }
+      
+      # Build layout
+      layout_inputs <- list(
+        strata_rows = strata_grid$rows(),
+        strata_cols = strata_grid$cols(),
+        resp_rows   = response_grid$rows(),
+        resp_cols   = response_grid$cols()
+      )
+      
+      # Legend handling
+      legend_supported <- input$plot_type %in% c("lineplot_mean_se", "barplot_mean_se")
+      use_common_legend <- legend_supported && common_legend_available() && legend_state$enabled
+      legend_position <- if (use_common_legend) legend_state$position else NULL
+      
+      # Compute all plots
+      results <- list(
+        lineplot_mean_se = plot_anova_lineplot_meanse(
+          data, info, layout_inputs,
+          line_colors  = custom_colors(),
+          base_size    = base_size(),
+          show_lines   = input$lineplot_show_lines,
+          show_jitter  = input$lineplot_show_jitter,
+          use_dodge    = input$lineplot_use_dodge,
+          share_y_axis = input$share_y_axis,
+          common_legend = use_common_legend,
+          legend_position = legend_position
+        ),
+        
+        barplot_mean_se = plot_anova_barplot_meanse(
+          data, info, layout_inputs,
+          line_colors       = custom_colors(),
+          show_value_labels = input$show_bar_labels,
+          base_size         = base_size(),
+          posthoc_all       = info$posthoc,
+          share_y_axis      = input$share_y_axis,
+          common_legend     = use_common_legend,
+          legend_position   = legend_position
+        )
+      )
+      
+      chosen <- input$plot_type
+      
+      stored$warning <- results[[chosen]]$warning
+      stored$plot    <- results[[chosen]]$plot
+      stored$layout  <- results[[chosen]]$layout
+    })
+    
+    # ------------------------------------------------------------------
+    # OUTPUTS
+    # ------------------------------------------------------------------
+    
+    output$plot_warning <- renderUI({
+      if (!is.null(stored$warning))
+        div(class = "alert alert-warning", stored$warning)
+    })
+    
+    output$plot <- renderPlot({
+      p <- stored$plot
+      if (is.null(p)) return(NULL)
+      print(p)
+    },
+    width = function() {
+      lay <- stored$layout
+      if (is.null(lay)) return(600)
+      total_cols <- (lay$strata$cols %||% 1) * (lay$responses$cols %||% 1)
+      stored$plot_width * total_cols
+    },
+    height = function() {
+      lay <- stored$layout
+      if (is.null(lay)) return(600)
+      total_rows <- (lay$strata$rows %||% 1) * (lay$responses$rows %||% 1)
+      stored$plot_height * total_rows
+    },
+    res = 96)
+    
+    output$download_plot <- downloadHandler(
+      filename = function() paste0("anova_twoway_plot_", Sys.Date(), ".png"),
+      content = function(file) {
+        p <- stored$plot
+        req(!is.null(p))
+        
+        lay <- stored$layout
+        req(!is.null(lay))
+        
+        total_cols <- (lay$strata$cols %||% 1) * (lay$responses$cols %||% 1)
+        total_rows <- (lay$strata$rows %||% 1) * (lay$responses$rows %||% 1)
+        
+        w_in <- (stored$plot_width  * total_cols) / 96
+        h_in <- (stored$plot_height * total_rows) / 96
+        
+        ggsave(file, p, dpi = 300,
+               width = w_in, height = h_in,
+               units = "in", limitsize = FALSE)
+      }
+    )
   })
 }
+
