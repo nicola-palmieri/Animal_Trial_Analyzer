@@ -305,7 +305,7 @@ upload_server <- function(id) {
       for (col in cols) {
         sel <- input[[paste0("type_", col)]] %||% "Numeric"
         if (sel == "Categorical") {
-          data[[col]] <- factor(as.character(data[[col]]))
+          data[[col]] <- auto_factor_order(as.character(data[[col]]))
         } else {
           data[[col]] <- suppressWarnings(as.numeric(as.character(data[[col]])))
         }
