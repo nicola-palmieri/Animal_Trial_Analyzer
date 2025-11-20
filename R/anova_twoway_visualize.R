@@ -126,13 +126,49 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
     
     strata_grid <- plot_grid_server("strata_grid")
     response_grid <- plot_grid_server("response_grid")
-    
+
     # UI render
     output$layout_controls <- renderUI({
       info <- model_info()
       req(info)
       build_anova_layout_controls(ns, input, info)
     })
+
+    prefill_grid_defaults <- function() {
+      data <- df()
+      info <- model_info()
+
+      if (is.null(info) || is.null(data) || nrow(data) == 0) return()
+
+      layout_inputs <- list(
+        strata_rows = strata_grid$rows(),
+        strata_cols = strata_grid$cols(),
+        resp_rows   = response_grid$rows(),
+        resp_cols   = response_grid$cols()
+      )
+
+      context <- initialize_anova_plot_context(data, info, layout_inputs)
+
+      apply_grid_defaults_if_empty(
+        input,
+        session,
+        "strata_grid",
+        context$strata_defaults,
+        n_items = context$n_expected_strata
+      )
+
+      response_defaults <- compute_default_grid(length(context$responses %||% character()))
+
+      apply_grid_defaults_if_empty(
+        input,
+        session,
+        "response_grid",
+        response_defaults,
+        n_items = length(context$responses %||% character())
+      )
+    }
+
+    observeEvent(list(df(), model_info()), prefill_grid_defaults(), ignoreNULL = TRUE)
     
     output$axis_and_jitter <- renderUI({
       jitter_widget <- NULL
