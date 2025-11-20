@@ -1447,7 +1447,8 @@ build_bar_plot_panel <- function(stats_df,
       factor1,
       factor2,
       posthoc_entry = posthoc_entry,
-      nested_posthoc = nested_posthoc
+      nested_posthoc = nested_posthoc,
+      show_value_labels = show_value_labels
     )
 
     if (!is.null(panel_range)) {
@@ -1898,7 +1899,8 @@ compute_barplot_panel_range <- function(stats_df,
                                         factor1,
                                         factor2,
                                         posthoc_entry = NULL,
-                                        nested_posthoc = NULL) {
+                                        nested_posthoc = NULL,
+                                        show_value_labels = FALSE) {
   if (is.null(stats_df) || nrow(stats_df) == 0) return(NULL)
   values <- c(stats_df$mean - stats_df$se, stats_df$mean + stats_df$se)
   values <- values[is.finite(values)]
@@ -1914,6 +1916,21 @@ compute_barplot_panel_range <- function(stats_df,
 
   if (!is.null(prep) && !is.null(prep$max_y) && is.finite(prep$max_y)) {
     max_val <- max(max_val, prep$max_y)
+  }
+
+  if (isTRUE(show_value_labels)) {
+    label_positions <- stats_df$mean + dplyr::coalesce(stats_df$se, 0)
+    negative_rows <- stats_df$mean < 0 & !is.na(stats_df$mean)
+    label_positions[negative_rows] <- stats_df$mean[negative_rows] - dplyr::coalesce(stats_df$se[negative_rows], 0)
+    label_positions <- label_positions[is.finite(label_positions)]
+
+    if (length(label_positions) > 0) {
+      max_val <- max(max_val, label_positions)
+      # Add a small data-driven offset to keep text comfortably inside limits
+      data_span <- diff(range(c(values, label_positions), na.rm = TRUE))
+      extra_pad <- if (is.finite(data_span) && data_span > 0) data_span * 0.08 else abs(max_val) * 0.08
+      max_val <- max_val + extra_pad
+    }
   }
 
   c(rng[1], max_val)
@@ -1951,7 +1968,8 @@ compute_barplot_shared_limits <- function(context,
         rng <- compute_barplot_panel_range(
           stats_df, factor1, factor2,
           posthoc_entry = stratum_posthoc,
-          nested_posthoc = stratum_posthoc
+          nested_posthoc = stratum_posthoc,
+          show_value_labels = show_value_labels
         )
         combined <- update_numeric_range(combined, rng)
       }
@@ -1963,7 +1981,8 @@ compute_barplot_shared_limits <- function(context,
       rng <- compute_barplot_panel_range(
         stats_df, factor1, factor2,
         posthoc_entry = posthoc_entry,
-        nested_posthoc = posthoc_entry
+        nested_posthoc = posthoc_entry,
+        show_value_labels = show_value_labels
       )
       combined <- update_numeric_range(combined, rng)
     }
