@@ -13,10 +13,12 @@ visualize_numeric_boxplots_ui <- function(id) {
       checkboxInput(ns("show_outliers"), "Highlight boxplot outliers", FALSE),
       "Highlight points that fall outside the typical range."
     ),
+    
     conditionalPanel(
       condition = sprintf("input['%s']", ns("show_outliers")),
       uiOutput(ns("outlier_label_ui"))
     ),
+    
     subplot_size_ui(
       ns,
       width_value = 200,
@@ -24,36 +26,50 @@ visualize_numeric_boxplots_ui <- function(id) {
       width_help = "Control how wide each boxplot panel should be.",
       height_help = "Control how tall each boxplot panel should be."
     ),
+    
     plot_grid_ui(
       id = ns("plot_grid"),
-      rows_help = "Choose how many rows of plots to display when multiple charts are shown.",
-      cols_help = "Choose how many columns of plots to display when multiple charts are shown.",
+      rows_help = "Choose how many rows of plots to display.",
+      cols_help = "Choose how many columns of plots to display.",
       cols_max = 100L
     ),
+    
     fluidRow(
       column(6, add_color_customization_ui(ns, multi_group = TRUE)),
       column(6, tagList(
         base_size_ui(
           ns,
           default = 13,
-          help_text = "Adjust the base font size used for boxplot text elements."
+          help_text = "Adjust the base font size used for boxplot text."
         ),
         uiOutput(ns("common_legend_controls"))
       ))
     ),
-    hr(),
-    with_help_tooltip(
-      downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;"),
-      "Save the boxplots as an image file."
+    br(),
+    fluidRow(
+      column(
+        6,
+        actionButton(
+          ns("apply_plot"),
+          "Apply changes",
+          width = "100%"
+        )
+      ),
+      column(
+        6,
+        downloadButton(
+          ns("download_plot"),
+          "Download plot",
+          style = "width: 100%;"
+        )
+      )
     )
   )
 }
 
-
 visualize_numeric_boxplots_plot_ui <- function(id) {
   ns <- NS(id)
   div(
-    class = "ta-plot-container",
     uiOutput(ns("grid_warning")),
     plotOutput(ns("plot"), width = "100%", height = "auto")
   )
@@ -62,43 +78,38 @@ visualize_numeric_boxplots_plot_ui <- function(id) {
 
 visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, is_active = NULL) {
   moduleServer(id, function(input, output, session) {
+    
     ns <- session$ns
     
-    hash_key <- function(data, cols = NULL) {
-      if (is.null(data) || !is.data.frame(data)) return("no-data")
-      keep <- if (is.null(cols)) names(data) else intersect(cols, names(data))
-      digest::digest(data[, keep, drop = FALSE], algo = "xxhash64")
-    }
+    #======================================================
+    # Stored state (same pattern as ANOVA + Barplots)
+    #======================================================
+    stored <- reactiveValues(
+      plot = NULL,
+      warning = NULL,
+      layout = NULL,
+      plot_width = 200,
+      plot_height = 800
+    )
     
-    active <- reactive({
-      if (is.null(is_active)) TRUE else isTRUE(is_active())
-    })
+    df <- reactive(filtered_data())
     
-    plot_width  <- reactive({ as.numeric(input$plot_width  %||% 200) })
-    plot_height <- reactive({ as.numeric(input$plot_height %||% 800) })
     grid <- plot_grid_server("plot_grid", cols_max = 100L)
     base_size <- base_size_server(input, default = 13)
     
-    color_var <- reactive({
-      info <- summary_info()
-      dat <- filtered_data()
-      g <- resolve_reactive(info$group_var)
-      if (is.null(info) || is.null(dat) || !is.data.frame(dat)) return(NULL)
-      if (is.null(g) || g == "" || g == "None" || !g %in% names(dat)) return(NULL)
-      g
-    })
-    
-    custom_colors <- add_color_customization_server(
-      ns, input, output, filtered_data, color_var, multi_group = TRUE
-    )
-    
+    #======================================================
+    # Outlier label dropdown (depends on data)
+    #======================================================
     output$outlier_label_ui <- renderUI({
-      dat <- filtered_data()
-      if (is.null(dat) || !is.data.frame(dat)) return(NULL)
+      dat <- df()
+      if (is.null(dat)) return(NULL)
+      
       cat_cols <- names(dat)[vapply(dat, \(x) is.character(x) || is.factor(x) || is.logical(x), logical(1))]
       cat_cols <- sort(unique(cat_cols))
+      
       current <- isolate(input$outlier_label)
-      current <- if (is.null(current) || !nzchar(current) || !current %in% cat_cols) "" else current
+      if (is.null(current) || !current %in% cat_cols) current <- ""
+      
       with_help_tooltip(
         selectInput(
           ns("outlier_label"),
@@ -110,220 +121,160 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
       )
     })
     
-    legend_state <- reactiveValues(
-      enabled = FALSE,
-      position = "bottom"
+    #======================================================
+    # Color grouping
+    #======================================================
+    color_var <- reactive({
+      info <- summary_info()
+      g <- resolve_reactive(info$group_var)
+      dat <- df()
+      if (is.null(g) || is.null(dat) || !g %in% names(dat)) return(NULL)
+      g
+    })
+    
+    custom_colors <- add_color_customization_server(
+      ns, input, output, df, color_var, multi_group = TRUE
     )
-
+    
+    #======================================================
+    # Common legend toggle
+    #======================================================
+    legend_state <- reactiveValues(enabled = FALSE, position = "bottom")
+    
     observeEvent(input$use_common_legend, {
-      req(!is.null(input$use_common_legend))
       legend_state$enabled <- isTRUE(input$use_common_legend)
-    }, ignoreNULL = TRUE)
-
+    })
+    
     observeEvent(input$common_legend_position, {
-      req(!is.null(input$common_legend_position))
       legend_state$position <- input$common_legend_position
-    }, ignoreNULL = TRUE)
-
-    state <- reactive({
-      legend_allowed <- !is.null(color_var())
-      valid_positions <- c("bottom", "top", "left", "right")
-      resolved_position <- if (!is.null(legend_state$position) && legend_state$position %in% valid_positions) {
-        legend_state$position
-      } else {
-        "bottom"
-      }
-      use_common_legend <- legend_allowed && isTRUE(legend_state$enabled)
-      list(
-        info = summary_info(),
-        dat = filtered_data(),
-        show_points = isTRUE(input$show_points),
-        show_outliers = isTRUE(input$show_outliers),
-        label_var = validate_outlier_label(input$outlier_label),
-        colors = custom_colors(),
-        base_size = base_size(),
-        rows = grid$rows(),
-        cols = grid$cols(),
-        common_legend = use_common_legend,
-        legend_position = if (use_common_legend) resolved_position else NULL
-      )
     })
     
-    plot_info <- reactive({
-      req(active())
-      s <- state()
-      info <- s$info
-      req(!is.null(info))
-      processed <- resolve_reactive(info$processed_data)
-      dat <- if (!is.null(processed)) processed else s$dat
-      req(!is.null(dat), is.data.frame(dat), nrow(dat) > 0)
-      build_descriptive_numeric_boxplot(
-        df = dat,
-        selected_vars = resolve_reactive(info$selected_vars),
-        group_var = resolve_reactive(info$group_var),
-        show_points = s$show_points,
-        show_outliers = s$show_outliers,
-        outlier_label_var = s$label_var,
-        nrow_input = s$rows,
-        ncol_input = s$cols,
-        custom_colors = s$colors,
-        base_size = s$base_size,
-        common_legend = s$common_legend,
-        legend_position = s$legend_position
-      )
-    })
-
-    observeEvent(plot_info(), {
-      req(active())
-      info <- plot_info()
-      apply_grid_defaults_if_empty(input, session, "plot_grid", info$defaults, n_items = info$panels)
-    }, ignoreNULL = TRUE)
-
-    common_legend_available <- reactive({
-      req(active())
-      info <- plot_info()
-      has_group <- !is.null(color_var())
-      n_panels <- info$panels %||% 0L
-      has_group && n_panels > 1L
-    })
-
-    observeEvent(common_legend_available(), {
-      if (!isTRUE(common_legend_available())) {
-        legend_state$enabled <- FALSE
-      }
-    })
-
     output$common_legend_controls <- renderUI({
-      legend_supported <- TRUE
-      if (!isTRUE(common_legend_available()) || !legend_supported) {
-        return(NULL)
-      }
-
-      checkbox <- div(
-        class = "mt-3",
-        with_help_tooltip(
-          checkboxInput(
-            ns("use_common_legend"),
-            "Use common legend",
-            value = isTRUE(legend_state$enabled)
+      if (is.null(color_var())) return(NULL)
+      
+      checkbox <- with_help_tooltip(
+        checkboxInput(
+          ns("use_common_legend"),
+          "Use common legend",
+          value = legend_state$enabled
+        ),
+        "Merge legends across panels."
+      )
+      
+      pos <- NULL
+      if (legend_state$enabled) {
+        pos <- with_help_tooltip(
+          selectInput(
+            ns("common_legend_position"),
+            "Legend position",
+            c("Bottom"="bottom","Right"="right","Top"="top","Left"="left"),
+            selected = legend_state$position
           ),
-          "Merge the legends across panels into a single shared legend."
+          "Choose placement for the combined legend."
         )
-      )
-
-      legend_position <- if (isTRUE(legend_state$enabled)) {
-        div(
-          class = "mt-2",
-          with_help_tooltip(
-            selectInput(
-              ns("common_legend_position"),
-              "Legend position",
-              choices = c(
-                "Bottom" = "bottom",
-                "Right" = "right",
-                "Top" = "top",
-                "Left" = "left"
-              ),
-              selected = legend_state$position %||% "bottom"
-            ),
-            "Choose where the combined legend should be displayed."
-          )
-        )
-      } else {
-        NULL
       }
-
-      tagList(checkbox, legend_position)
+      
+      tagList(checkbox, pos)
     })
     
-    plot_dimensions <- reactive({
-      req(active())
-      lay <- plot_info()$layout
-      nrow_l <- if (!is.null(lay$nrow)) as.integer(lay$nrow) else 1L
-      ncol_l <- if (!is.null(lay$ncol)) as.integer(lay$ncol) else 1L
-      list(
-        width = max(200, plot_width()  * ncol_l),
-        height = max(200, plot_height() * nrow_l)
+    #======================================================
+    # APPLY BUTTON — the *only* place where plots are computed
+    #======================================================
+    observeEvent(input$apply_plot, {
+      
+      stored$plot_width  <- input$plot_width
+      stored$plot_height <- input$plot_height
+      
+      data <- df()
+      info <- summary_info()
+      
+      if (is.null(data) || is.null(info) || nrow(data) == 0) {
+        stored$warning <- "No data available."
+        stored$plot <- NULL
+        return()
+      }
+      
+      s_vars <- resolve_reactive(info$selected_vars)
+      g_var  <- resolve_reactive(info$group_var)
+      processed <- resolve_reactive(info$processed_data)
+      dat <- if (!is.null(processed)) processed else data
+      
+      res <- build_descriptive_numeric_boxplot(
+        df = dat,
+        selected_vars = s_vars,
+        group_var = g_var,
+        show_points = input$show_points,
+        show_outliers = input$show_outliers,
+        outlier_label_var = validate_outlier_label(input$outlier_label),
+        nrow_input = grid$rows(),
+        ncol_input = grid$cols(),
+        custom_colors = custom_colors(),
+        base_size = base_size(),
+        common_legend = legend_state$enabled,
+        legend_position = if (legend_state$enabled) legend_state$position else NULL
       )
+      
+      stored$plot    <- res$plot
+      stored$layout  <- res$layout
+      stored$warning <- res$warning
     })
     
+    #======================================================
+    # warnings
+    #======================================================
     output$grid_warning <- renderUI({
-      req(active())
-      info <- plot_info()
-      if (!is.null(info$warning)) div(class = "alert alert-warning", info$warning)
+      if (!is.null(stored$warning))
+        div(class = "alert alert-warning", stored$warning)
     })
     
+    #======================================================
+    # RENDER PLOT
+    #======================================================
+    output$plot <- renderPlot({
+      p <- stored$plot
+      if (is.null(p)) return(NULL)
+      print(p)
+    },
+    width = function() {
+      lay <- stored$layout
+      if (is.null(lay)) return(600)
+      stored$plot_width * (lay$ncol %||% 1)
+    },
+    height = function() {
+      lay <- stored$layout
+      if (is.null(lay)) return(600)
+      stored$plot_height * (lay$nrow %||% 1)
+    },
+    res = 96)
+    
+    #======================================================
+    # DOWNLOAD BUTTON (same behavior as ANOVA + categorical)
+    #======================================================
     output$download_plot <- downloadHandler(
       filename = function() paste0("numeric_boxplots_", Sys.Date(), ".png"),
       content = function(file) {
-        req(active())
-        info <- plot_info()
-        req(is.null(info$warning), !is.null(info$plot))
-        s <- plot_dimensions()
-        ggplot2::ggsave(
-          file, info$plot, device = "png", dpi = 300,
-          width = s$width / 96, height = s$height / 96,
-          units = "in", limitsize = FALSE
+        p <- stored$plot
+        req(!is.null(p))
+        
+        lay <- stored$layout
+        nc <- (lay$ncol %||% 1)
+        nr <- (lay$nrow %||% 1)
+        
+        w_in <- (stored$plot_width  * nc) / 96
+        h_in <- (stored$plot_height * nr) / 96
+        
+        ggsave(
+          file, p,
+          dpi = 300,
+          width = w_in,
+          height = h_in,
+          units = "in",
+          limitsize = FALSE
         )
       }
     )
-    
-    cached_plot <- reactiveVal(NULL)
-    cached_key  <- reactiveVal(NULL)
-    
-    observe({
-      req(active())
-      s <- state()
-      dat <- s$dat
-      cols <- resolve_reactive(s$info$selected_vars)
-      key <- paste(
-        hash_key(dat, cols),
-        resolve_reactive(s$info$group_var),
-        s$show_points,
-        s$show_outliers,
-        s$label_var,
-        s$colors,
-        s$base_size,
-        s$rows,
-        s$cols,
-        s$common_legend,
-        s$legend_position %||% "",
-        sep = "_"
-      )
-      
-      if (!identical(key, cached_key())) {
-        info <- isolate(plot_info())
-
-        if (!is.null(info$warning)) {
-          cached_plot(NULL)
-          cached_key(key)
-          return()
-        }
-
-        if (!is.null(info$plot)) {
-          cached_plot(info$plot)
-          cached_key(key)
-        }
-      }
-    })
-    
-    output$plot <- renderPlot({
-      req(active())
-      p <- cached_plot()
-      validate(need(!is.null(p), "Plot not ready"))
-      print(p)
-    },
-    width  = function() plot_dimensions()$width,
-    height = function() plot_dimensions()$height,
-    res = 96)
-    
-    outputOptions(output, "plot", suspendWhenHidden = TRUE)
   })
 }
-
-
-
-
 
 
 build_descriptive_numeric_boxplot <- function(df,

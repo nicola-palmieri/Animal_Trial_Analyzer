@@ -42,27 +42,22 @@ visualize_descriptive_server <- function(id, filtered_data, descriptive_summary)
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
-    # Active plot type
+    # Active plot type name (UI only)
     active_type <- reactive({
       req(input$plot_type)
       input$plot_type
     })
     
-    # Always mount all submodules once (outputs suspended when hidden)
-    visualize_categorical_barplots_server("categorical", filtered_data, descriptive_summary,
-                                          is_active = reactive(active_type() == "categorical"))
-    visualize_numeric_boxplots_server("boxplots", filtered_data, descriptive_summary,
-                                      is_active = reactive(active_type() == "boxplots"))
-    visualize_numeric_histograms_server("histograms", filtered_data, descriptive_summary,
-                                        is_active = reactive(active_type() == "histograms"))
-    visualize_cv_server("cv", filtered_data, descriptive_summary,
-                        is_active = reactive(active_type() == "cv"))
-    visualize_outliers_server("outliers", filtered_data, descriptive_summary,
-                              is_active = reactive(active_type() == "outliers"))
-    visualize_missing_server("missing", filtered_data, descriptive_summary,
-                             is_active = reactive(active_type() == "missing"))
+    # Mount submodules ONCE
+    # They no longer depend on "is_active"
+    visualize_categorical_barplots_server("categorical", filtered_data, descriptive_summary)
+    visualize_numeric_boxplots_server("boxplots", filtered_data, descriptive_summary)
+    visualize_numeric_histograms_server("histograms", filtered_data, descriptive_summary)
+    visualize_cv_server("cv", filtered_data, descriptive_summary)
+    visualize_outliers_server("outliers", filtered_data, descriptive_summary)
+    visualize_missing_server("missing", filtered_data, descriptive_summary)
     
-    # Render once; use conditionalPanel to show the correct one
+    # ---- SUB-CONTROLS UI ----
     output$sub_controls <- renderUI({
       tagList(
         conditionalPanel(
@@ -92,6 +87,7 @@ visualize_descriptive_server <- function(id, filtered_data, descriptive_summary)
       )
     })
     
+    # ---- PLOT AREA UI ----
     output$plot_ui <- renderUI({
       tagList(
         conditionalPanel(
@@ -122,3 +118,4 @@ visualize_descriptive_server <- function(id, filtered_data, descriptive_summary)
     })
   })
 }
+

@@ -2,7 +2,6 @@
 # 🟦 Descriptive Visualization — Summary Metrics
 # ===============================================================
 
-# ---- UI helpers ----
 metric_panel_ui <- function(id, default_width = 400, default_height = 300,
                             default_rows = 1, default_cols = 1) {
   ns <- NS(id)
@@ -19,16 +18,31 @@ metric_panel_ui <- function(id, default_width = 400, default_height = 300,
       column(6, base_size_ui(
         ns,
         default = 13,
-        help_text = "Adjust the base font size used for metric plot text elements."
+        help_text = "Adjust the base font size used for metric plots."
       ))
     ),
-    hr(),
-    with_help_tooltip(
-      downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;"),
-      "Save the metric charts as an image file."
+    br(),
+    fluidRow(
+      column(
+        6,
+        actionButton(
+          ns("apply_plot"),
+          "Apply changes",
+          width = "100%"
+        )
+      ),
+      column(
+        6,
+        downloadButton(
+          ns("download_plot"),
+          "Download plot",
+          style = "width: 100%;"
+        )
+      )
     )
   )
 }
+
 
 
 visualize_cv_ui <- visualize_outliers_ui <- visualize_missing_ui <- function(id) {
@@ -37,10 +51,7 @@ visualize_cv_ui <- visualize_outliers_ui <- visualize_missing_ui <- function(id)
 
 metric_plot_ui <- function(id) {
   ns <- NS(id)
-  div(
-    class = "ta-plot-container",
-    plotOutput(ns("plot"), width = "100%", height = "auto")
-  )
+  plotOutput(ns("plot"), width = "100%", height = "auto")
 }
 
 visualize_cv_plot_ui <- visualize_outliers_plot_ui <- visualize_missing_plot_ui <- metric_plot_ui
@@ -200,87 +211,74 @@ build_metric_plot <- function(metric_info,
 
 metric_module_server <- function(id, filtered_data, summary_info, metric_key,
                                  y_label, title, filename_prefix, is_active = NULL) {
+  
   moduleServer(id, function(input, output, session) {
+    
     ns <- session$ns
-
-    resolve_dimension <- function(value, default) {
-      if (is.null(value) || !is.numeric(value) || is.na(value)) default else value
-    }
-
-    plot_width <- reactive(resolve_dimension(input$plot_width, 400))
-    plot_height <- reactive(resolve_dimension(input$plot_height, 300))
-
-    module_active <- reactive({
-      if (is.null(is_active)) TRUE else isTRUE(is_active())
-    })
-
+    
+    # ---- Stored state (same as all other modules) ----
+    stored <- reactiveValues(
+      plot = NULL,
+      warning = NULL,
+      plot_width  = 400,
+      plot_height = 300
+    )
+    
+    df <- reactive(filtered_data())
+    base_size <- base_size_server(input, default = 13)
+    
+    # Color variable
     color_var_reactive <- reactive({
       info <- summary_info()
-      if (is.null(info)) return(NULL)
-
       group_var <- resolve_reactive(info$group_var)
-      if (is.null(group_var) || group_var %in% c("", "None")) return(NULL)
-
-      dat <- filtered_data()
-      if (is.null(dat) || !is.data.frame(dat) || !group_var %in% names(dat)) return(NULL)
-
+      dat <- df()
+      if (is.null(group_var) || !group_var %in% names(dat)) return(NULL)
       group_var
     })
-
+    
     custom_colors <- add_color_customization_server(
-      ns = ns,
-      input = input,
-      output = output,
-      data = filtered_data,
+      ns, input, output, df,
       color_var_reactive = color_var_reactive,
       multi_group = TRUE
     )
-
-    base_size <- base_size_server(
-      input = input,
-      default = 13
-    )
-
-    cached_plot_details <- reactiveVal(NULL)
-
-    invalidate_cache <- function() {
-      cached_plot_details(NULL)
-    }
-
-    observeEvent(
-      list(
-        summary_info(),
-        filtered_data(),
-        custom_colors(),
-        base_size()
-      ),
-      {
-        invalidate_cache()
-      },
-      ignoreNULL = FALSE
-    )
-
-    compute_plot_details <- function() {
+    
+    # ---- APPLY button ----
+    observeEvent(input$apply_plot, {
+      
+      stored$plot_width  <- input$plot_width
+      stored$plot_height <- input$plot_height
+      
+      data <- df()
       info <- summary_info()
-      validate(need(!is.null(info), "Summary not available."))
-
+      
+      # Basic checks
+      if (is.null(info) || is.null(data) || nrow(data) == 0) {
+        stored$warning <- "No data available."
+        stored$plot <- NULL
+        return()
+      }
+      
       processed <- resolve_reactive(info$processed_data)
-      dat <- if (!is.null(processed)) processed else filtered_data()
-
-      validate(need(!is.null(dat) && is.data.frame(dat) && nrow(dat) > 0, "No data available."))
-
+      dat <- if (!is.null(processed)) processed else data
+      
       selected_vars <- resolve_reactive(info$selected_vars)
-      group_var <- resolve_reactive(info$group_var)
+      group_var     <- resolve_reactive(info$group_var)
       strata_levels <- resolve_reactive(info$strata_levels)
-      group_label <- resolve_reactive(info$group_label)
-
+      group_label   <- resolve_reactive(info$group_label)
+      
+      # Select numeric vars in correct order
       numeric_vars <- names(dat)[vapply(dat, is.numeric, logical(1))]
       if (!is.null(selected_vars) && length(selected_vars) > 0) {
-        # Preserve the order specified in the UI while filtering to numeric columns.
         numeric_vars <- selected_vars[selected_vars %in% numeric_vars]
       }
-      validate(need(length(numeric_vars) > 0, "No numeric variables available for plotting."))
-
+      
+      if (length(numeric_vars) == 0) {
+        stored$warning <- "No numeric variables available for this metric."
+        stored$plot <- NULL
+        return()
+      }
+      
+      # Compute CV / Outliers / Missingness
       metric_info <- prepare_metric_data(
         data = dat,
         numeric_vars = numeric_vars,
@@ -288,76 +286,60 @@ metric_module_server <- function(id, filtered_data, summary_info, metric_key,
         strata_levels = strata_levels,
         metric = metric_key
       )
-
-      validate(need(!is.null(metric_info), "Unable to compute metric for the selected variables."))
-
+      
+      if (is.null(metric_info)) {
+        stored$warning <- "Unable to compute metric for selected variables."
+        stored$plot <- NULL
+        return()
+      }
+      
       if (!is.null(group_label)) {
         metric_info$group_label <- group_label
       }
-
-      list(
-        plot = build_metric_plot(
-          metric_info,
-          y_label,
-          title,
-          custom_colors = custom_colors(),
-          base_size = base_size()
-        )
+      
+      p <- build_metric_plot(
+        metric_info = metric_info,
+        y_label = y_label,
+        title = title,
+        custom_colors = custom_colors(),
+        base_size = base_size()
       )
-    }
-
-    plot_details <- reactive({
-      req(module_active())
-      details <- cached_plot_details()
-      if (is.null(details)) {
-        details <- compute_plot_details()
-        cached_plot_details(details)
-      }
-      details
+      
+      stored$plot    <- p
+      stored$warning <- NULL
     })
-
-    plot_size <- reactive({
-      req(module_active())
-      list(w = plot_width(), h = plot_height())
-    })
-
+    
+    # ---- Render Plot ----
+    output$plot <- renderPlot({
+      p <- stored$plot
+      if (is.null(p)) return(NULL)
+      print(p)
+    },
+    width = function() stored$plot_width,
+    height = function() stored$plot_height,
+    res = 96)
+    
+    # ---- Download ----
     output$download_plot <- downloadHandler(
       filename = function() paste0(filename_prefix, "_", Sys.Date(), ".png"),
       content = function(file) {
-        req(module_active())
-        details <- plot_details()
-        req(details$plot)
-        size <- plot_size()
-        ggplot2::ggsave(
-          filename = file,
-          plot = details$plot,
-          device = "png",
+        p <- stored$plot
+        req(!is.null(p))
+        
+        w_in <- stored$plot_width  / 96
+        h_in <- stored$plot_height / 96
+        
+        ggsave(
+          file, p,
           dpi = 300,
-          width = size$w / 96,
-          height = size$h / 96,
-          units = "in",
-          limitsize = FALSE
+          width = w_in, height = h_in,
+          units = "in", limitsize = FALSE
         )
       }
     )
-
-    output$plot <- renderPlot({
-      req(module_active())
-      details <- plot_details()
-      if (!is.null(details$warning) || is.null(details$plot)) return(NULL)
-      print(details$plot)
-    },
-    width = function() {
-      req(module_active())
-      plot_size()$w
-    },
-    height = function() {
-      req(module_active())
-      plot_size()$h
-    },
-    res = 96)
   })
 }
+
 
 
 metric_server_factory <- function(metric_key, y_label, filename_prefix) {
