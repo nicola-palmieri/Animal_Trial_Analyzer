@@ -42,9 +42,7 @@ build_anova_layout_controls <- function(ns, input, info) {
 }
 
 
-# ---------------------------------------------------------------
-# Formula utilities
-# ---------------------------------------------------------------
+#### Formula utilities ####
 
 render_anova_results <- function(ns, model_info, module_label = "ANOVA") {
   if (is.null(model_info)) return(NULL)
@@ -141,9 +139,7 @@ bind_anova_outputs <- function(ns, output, models_reactive) {
   })
 }
 
-# ---------------------------------------------------------------
-# Results export
-# ---------------------------------------------------------------
+#### Results export ####
 
 bind_single_model_outputs <- function(output, summary_id, download_id,
                                       model_entry, response_name, factors,
@@ -429,9 +425,7 @@ compile_anova_results <- function(model_info) {
   )
 }
 
-# ---------------------------------------------------------------
-# Output composition
-# ---------------------------------------------------------------
+#### Output composition ####
 
 #### Section: ANOVA Output Processing ####
 
@@ -581,9 +575,7 @@ prepare_anova_outputs <- function(model_obj, factor_names) {
   )
 }
 
-# ---------------------------------------------------------------
-# Collate tidy summaries from ANOVA models
-# ---------------------------------------------------------------
+#### Collate tidy summaries from ANOVA models ####
 
 download_all_anova_results <- function(models_info, file) {
   if (is.null(models_info) || is.null(models_info$models)) {
@@ -770,9 +762,7 @@ write_anova_docx <- function(results, file) {
 }
 
 
-# ---------------------------------------------------------------
-# Plotting
-# ---------------------------------------------------------------
+#### Plotting ####
 
 #### Section: Plot Context Initialization ####
 
@@ -1198,9 +1188,7 @@ plot_anova_barplot_meanse <- function(data,
 }
 
 
-# ---------------------------------------------------------------
-# Low-level utilities
-# ---------------------------------------------------------------
+#### Low-level utilities ####
 
 compute_barplot_shared_limits <- function(context,
                                           data,
