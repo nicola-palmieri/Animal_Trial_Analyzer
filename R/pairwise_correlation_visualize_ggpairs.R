@@ -126,6 +126,7 @@ pairwise_correlation_visualize_ggpairs_server <- function(
     
     # ---- Unified compute plot_info() -----------------------------------------
     plot_info <- eventReactive(apply_trigger(), {
+      req(isTRUE(apply_trigger() > 0))
       s <- state()
       dat <- s$data
       info <- s$info
@@ -209,7 +210,7 @@ pairwise_correlation_visualize_ggpairs_server <- function(
         plot_w = s$plot_w,
         plot_h = s$plot_h
       )
-    }, ignoreNULL = FALSE)
+    }, ignoreNULL = TRUE, ignoreInit = TRUE)
 
     observeEvent(plot_info(), {
       info <- plot_info()
@@ -219,6 +220,10 @@ pairwise_correlation_visualize_ggpairs_server <- function(
     # ---- Unified sizing -------------------------------------------------------
     plot_dimensions <- reactive({
       info <- plot_info()
+      if (is.null(info)) {
+        return(list(width = 800, height = 600))
+      }
+
       lay <- info$layout
       plot_w <- info$plot_w %||% 800
       plot_h <- info$plot_h %||% 600
@@ -232,7 +237,7 @@ pairwise_correlation_visualize_ggpairs_server <- function(
     # ---- Outputs --------------------------------------------------------------
     output$plot <- renderPlot({
       info <- plot_info()
-      if (!is.null(info$warning)) return(NULL)
+      if (is.null(info) || !is.null(info$warning)) return(NULL)
       p <- info$plot
       validate(need(!is.null(p), "Plot not ready"))
       print(p)
@@ -250,7 +255,7 @@ pairwise_correlation_visualize_ggpairs_server <- function(
       }),
       plot = reactive({
         info <- plot_info()
-        if (!is.null(info$warning)) return(NULL)
+        if (is.null(info) || !is.null(info$warning)) return(NULL)
         info$plot
       }),
       width = reactive(plot_dimensions()$width),

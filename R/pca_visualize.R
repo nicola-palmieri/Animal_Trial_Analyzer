@@ -351,6 +351,7 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
     }
 
     plot_info <- eventReactive(input$apply_plot, {
+      req(isTRUE(input$apply_plot > 0))
       req(input$plot_type)
       validate(need(input$plot_type == "biplot", "Unsupported plot type."))
 
@@ -526,7 +527,7 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
         plot_width = plot_w,
         plot_height = plot_h
       )
-    }, ignoreNULL = FALSE)
+    }, ignoreNULL = TRUE, ignoreInit = TRUE)
 
     observeEvent(plot_info(), {
       info <- plot_info()
@@ -535,6 +536,10 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
 
     plot_dimensions <- reactive({
       info <- plot_info()
+      if (is.null(info)) {
+        return(list(w = 800, h = 600))
+      }
+
       layout <- info$layout
 
       plot_w <- info$plot_width %||% 800
@@ -548,6 +553,7 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
     
     output$plot_warning <- renderUI({
       info <- plot_info()
+      if (is.null(info)) return(NULL)
       if (!is.null(info$warning)) {
         div(class = "alert alert-warning", info$warning)
       } else {
@@ -557,7 +563,7 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
 
     output$plot <- renderPlot({
       info <- plot_info()
-      if (!is.null(info$warning) || is.null(info$plot)) return(NULL)
+      if (is.null(info) || !is.null(info$warning) || is.null(info$plot)) return(NULL)
       info$plot
     },
     width = function() plot_dimensions()$w,
@@ -577,6 +583,7 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
       },
       content = function(file) {
         info <- plot_info()
+        req(!is.null(info))
         req(is.null(info$warning))
         s <- plot_dimensions()
         ggsave(
