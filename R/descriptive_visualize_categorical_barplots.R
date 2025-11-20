@@ -171,10 +171,18 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
         common_legend = legend_state$enabled,
         legend_position = if (legend_state$enabled) legend_state$position else NULL
       )
-      
+
       stored$plot    <- res$plot
       stored$warning <- res$warning
       stored$layout  <- res$layout
+
+      apply_grid_defaults_if_empty(
+        input,
+        session,
+        "plot_grid",
+        res$defaults,
+        n_items = res$panels
+      )
     })
     
     # -------------------------
