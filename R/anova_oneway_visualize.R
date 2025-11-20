@@ -77,9 +77,75 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
       color_var_reactive = reactive(NULL),
       multi_group = FALSE
     )
-    
+
     base_size <- base_size_server(input = input, default = 14)
-    
+
+    saved_inputs <- reactiveVal(list())
+
+    track_input <- function(input_id, store = TRUE) {
+      if (isTRUE(store)) {
+        observeEvent(input[[input_id]], {
+          current <- isolate(saved_inputs())
+          current[[input_id]] <- input[[input_id]]
+          saved_inputs(current)
+        }, ignoreInit = TRUE)
+      }
+    }
+
+    update_if_needed <- function(input_id, value, updater) {
+      if (is.null(value)) return()
+      current <- isolate(input[[input_id]])
+      if (!identical(current, value)) {
+        updater(session, input_id, value)
+      }
+    }
+
+    restore_saved_inputs <- function() {
+      saved <- isolate(saved_inputs())
+
+      update_if_needed("plot_type", saved$plot_type, function(session, id, value) {
+        updateSelectInput(session, id, selected = value)
+      })
+
+      update_if_needed("lineplot_show_lines", saved$lineplot_show_lines, function(session, id, value) {
+        updateCheckboxInput(session, id, value = value)
+      })
+
+      update_if_needed("lineplot_show_jitter", saved$lineplot_show_jitter, function(session, id, value) {
+        updateCheckboxInput(session, id, value = value)
+      })
+
+      update_if_needed("share_y_axis", saved$share_y_axis, function(session, id, value) {
+        updateCheckboxInput(session, id, value = value)
+      })
+
+      update_if_needed("plot_width", saved$plot_width, function(session, id, value) {
+        updateNumericInput(session, id, value = value)
+      })
+
+      update_if_needed("plot_height", saved$plot_height, function(session, id, value) {
+        updateNumericInput(session, id, value = value)
+      })
+
+      update_if_needed("plot_base_size", saved$plot_base_size, function(session, id, value) {
+        updateNumericInput(session, id, value = value)
+      })
+    }
+
+    track_input("plot_type")
+    track_input("lineplot_show_lines")
+    track_input("lineplot_show_jitter")
+    track_input("share_y_axis")
+    track_input("plot_width")
+    track_input("plot_height")
+    track_input("plot_base_size")
+
+    observeEvent(model_info(), {
+      session$onFlushed(function() {
+        restore_saved_inputs()
+      }, once = TRUE)
+    }, ignoreNULL = FALSE)
+
     strata_grid   <- plot_grid_server("strata_grid")
     response_grid <- plot_grid_server("response_grid")
     
