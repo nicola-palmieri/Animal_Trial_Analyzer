@@ -22,11 +22,6 @@ visualize_oneway_ui <- function(id) {
       ),
       
       conditionalPanel(
-        condition = sprintf("input['%s'] === 'barplot_mean_se'", ns("plot_type")),
-        checkboxInput(ns("show_bar_labels"), "Show value labels on bars", value = FALSE)
-      ),
-      
-      conditionalPanel(
         condition = sprintf("input['%s'] === 'lineplot_mean_se'", ns("plot_type")),
         fluidRow(
           column(6, checkboxInput(ns("lineplot_show_lines"),  "Connect means with lines", value = TRUE)),
@@ -127,7 +122,6 @@ visualize_oneway_server <- function(id, filtered_data, model_info) {
           data, info,
           layout_values     = layout_inputs,
           line_colors       = custom_colors(),
-          show_value_labels = input$show_bar_labels,
           base_size         = base_size(),
           posthoc_all       = info$posthoc,
           share_y_axis      = input$share_y_axis
