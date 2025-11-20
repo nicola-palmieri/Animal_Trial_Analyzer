@@ -136,6 +136,47 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
     custom_colors <- add_color_customization_server(
       ns, input, output, df, color_var, multi_group = TRUE
     )
+
+    prefill_grid_defaults <- function() {
+      data <- df()
+      info <- summary_info()
+
+      if (is.null(data) || is.null(info) || nrow(data) == 0) return()
+
+      s_vars <- resolve_reactive(info$selected_vars)
+      processed <- resolve_reactive(info$processed_data)
+      dat <- if (!is.null(processed)) processed else data
+
+      num_vars <- names(dat)[vapply(dat, is.numeric, logical(1))]
+      if (!is.null(s_vars) && length(s_vars) > 0) {
+        num_vars <- intersect(num_vars, s_vars)
+      }
+      if (length(num_vars) == 0) return()
+
+      has_data <- vapply(num_vars, function(var) {
+        vec <- dat[[var]]
+        any(!is.na(vec))
+      }, logical(1))
+
+      n_panels <- sum(has_data)
+      if (n_panels == 0) return()
+
+      defaults <- list(rows = 1L, cols = max(1L, as.integer(n_panels)))
+
+      apply_grid_defaults_if_empty(
+        input,
+        session,
+        "plot_grid",
+        defaults,
+        n_items = n_panels
+      )
+    }
+
+    observe({
+      req(df())
+      req(summary_info())
+      prefill_grid_defaults()
+    })
     
     #======================================================
     # Common legend toggle
@@ -214,10 +255,18 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
         common_legend = legend_state$enabled,
         legend_position = if (legend_state$enabled) legend_state$position else NULL
       )
-      
+
       stored$plot    <- res$plot
       stored$layout  <- res$layout
       stored$warning <- res$warning
+
+      apply_grid_defaults_if_empty(
+        input,
+        session,
+        "plot_grid",
+        res$defaults,
+        n_items = res$panels
+      )
     })
     
     #======================================================

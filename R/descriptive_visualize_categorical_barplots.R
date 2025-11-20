@@ -92,6 +92,69 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
     custom_colors <- add_color_customization_server(
       ns, input, output, df, color_var, multi_group = TRUE
     )
+
+    prefill_grid_defaults <- function() {
+      data <- df()
+      info <- summary_info()
+
+      if (is.null(data) || is.null(info) || nrow(data) == 0) return()
+
+      s_vars <- resolve_reactive(info$selected_vars)
+      g_var  <- resolve_reactive(info$group_var)
+      strata_levels <- resolve_reactive(info$strata_levels)
+      processed <- resolve_reactive(info$processed_data)
+
+      dat <- if (!is.null(processed)) processed else data
+
+      factor_vars <- names(dat)[vapply(dat, function(x) {
+        is.character(x) || is.factor(x) || is.logical(x)
+      }, logical(1))]
+
+      if (!is.null(s_vars) && length(s_vars) > 0) {
+        factor_vars <- intersect(factor_vars, s_vars)
+      }
+      if (length(factor_vars) == 0) return()
+
+      if (!is.null(g_var) && g_var %in% names(dat)) {
+        dat[[g_var]] <- as.character(dat[[g_var]])
+        dat[[g_var]][is.na(dat[[g_var]]) | trimws(dat[[g_var]]) == ""] <- "Missing"
+
+        if (!is.null(strata_levels) && length(strata_levels) > 0) {
+          keep_levels <- unique(strata_levels)
+          dat <- dat[dat[[g_var]] %in% keep_levels, , drop = FALSE]
+          if (nrow(dat) == 0) return()
+          dat[[g_var]] <- factor(dat[[g_var]], levels = keep_levels)
+        } else {
+          dat[[g_var]] <- factor(dat[[g_var]], levels = unique(dat[[g_var]]))
+        }
+      } else {
+        g_var <- NULL
+      }
+
+      has_data <- vapply(factor_vars, function(var) {
+        cols <- intersect(c(var, g_var), names(dat))
+        var_data <- dat[, cols, drop = FALSE]
+        var_data[[var]] <- as.character(var_data[[var]])
+        any(!is.na(var_data[[var]]) & trimws(var_data[[var]]) != "")
+      }, logical(1))
+
+      n_panels <- sum(has_data)
+      if (n_panels == 0) return()
+
+      apply_grid_defaults_if_empty(
+        input,
+        session,
+        "plot_grid",
+        compute_default_grid(n_panels),
+        n_items = n_panels
+      )
+    }
+
+    observe({
+      req(df())
+      req(summary_info())
+      prefill_grid_defaults()
+    })
     
     # --------------------------
     # Common legend logic
@@ -171,10 +234,18 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
         common_legend = legend_state$enabled,
         legend_position = if (legend_state$enabled) legend_state$position else NULL
       )
-      
+
       stored$plot    <- res$plot
       stored$warning <- res$warning
       stored$layout  <- res$layout
+
+      apply_grid_defaults_if_empty(
+        input,
+        session,
+        "plot_grid",
+        res$defaults,
+        n_items = res$panels
+      )
     })
     
     # -------------------------

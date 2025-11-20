@@ -126,12 +126,52 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
     
     strata_grid <- plot_grid_server("strata_grid")
     response_grid <- plot_grid_server("response_grid")
-    
+
     # UI render
     output$layout_controls <- renderUI({
       info <- model_info()
       req(info)
       build_anova_layout_controls(ns, input, info)
+    })
+
+    prefill_grid_defaults <- function() {
+      data <- df()
+      info <- model_info()
+
+      if (is.null(info) || is.null(data) || nrow(data) == 0) return()
+
+      layout_inputs <- list(
+        strata_rows = strata_grid$rows(),
+        strata_cols = strata_grid$cols(),
+        resp_rows   = response_grid$rows(),
+        resp_cols   = response_grid$cols()
+      )
+
+      context <- initialize_anova_plot_context(data, info, layout_inputs)
+
+      apply_grid_defaults_if_empty(
+        input,
+        session,
+        "strata_grid",
+        context$strata_defaults,
+        n_items = context$n_expected_strata
+      )
+
+      response_defaults <- compute_default_grid(length(context$responses %||% character()))
+
+      apply_grid_defaults_if_empty(
+        input,
+        session,
+        "response_grid",
+        response_defaults,
+        n_items = length(context$responses %||% character())
+      )
+    }
+
+    observe({
+      req(df())
+      req(model_info())
+      prefill_grid_defaults()
     })
     
     output$axis_and_jitter <- renderUI({
@@ -271,10 +311,27 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
       )
       
       chosen <- input$plot_type
-      
-      stored$warning <- results[[chosen]]$warning
-      stored$plot    <- results[[chosen]]$plot
-      stored$layout  <- results[[chosen]]$layout
+      chosen_result <- results[[chosen]]
+
+      stored$warning <- chosen_result$warning
+      stored$plot    <- chosen_result$plot
+      stored$layout  <- chosen_result$layout
+
+      apply_grid_defaults_if_empty(
+        input,
+        session,
+        "strata_grid",
+        chosen_result$defaults$strata,
+        n_items = chosen_result$panel_counts$strata
+      )
+
+      apply_grid_defaults_if_empty(
+        input,
+        session,
+        "response_grid",
+        chosen_result$defaults$responses,
+        n_items = chosen_result$panel_counts$responses
+      )
     })
     
     # ------------------------------------------------------------------

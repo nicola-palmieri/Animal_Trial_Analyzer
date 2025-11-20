@@ -142,6 +142,60 @@ visualize_numeric_histograms_server <- function(id, filtered_data, summary_info,
       
       tagList(checkbox, pos)
     })
+
+    prefill_grid_defaults <- function() {
+      data <- df()
+      info <- summary_info()
+
+      if (is.null(data) || is.null(info) || nrow(data) == 0) return()
+
+      s_vars <- resolve_reactive(info$selected_vars)
+      g_var  <- resolve_reactive(info$group_var)
+      strata_levels <- resolve_reactive(info$strata_levels)
+
+      processed <- resolve_reactive(info$processed_data)
+      dat <- if (!is.null(processed)) processed else data
+
+      num_vars <- names(Filter(is.numeric, dat))
+      if (!is.null(s_vars) && length(s_vars) > 0) {
+        num_vars <- intersect(num_vars, s_vars)
+      }
+      if (length(num_vars) == 0) return()
+
+      valid_panels <- vapply(num_vars, function(var) {
+        cols <- intersect(c(var, g_var), names(dat))
+        plot_data <- dat[, cols, drop = FALSE]
+
+        if (!is.null(g_var)) {
+          plot_data[[g_var]] <- as.character(plot_data[[g_var]])
+          if (!is.null(strata_levels) && length(strata_levels) > 0) {
+            keep_levels <- unique(strata_levels)
+            plot_data <- plot_data[plot_data[[g_var]] %in% keep_levels, , drop = FALSE]
+          }
+        }
+
+        keep <- is.finite(plot_data[[var]])
+        keep[is.na(keep)] <- FALSE
+        any(keep)
+      }, logical(1))
+
+      n_panels <- sum(valid_panels)
+      if (n_panels == 0) return()
+
+      apply_grid_defaults_if_empty(
+        input,
+        session,
+        "plot_grid",
+        compute_default_grid(n_panels),
+        n_items = n_panels
+      )
+    }
+
+    observe({
+      req(df())
+      req(summary_info())
+      prefill_grid_defaults()
+    })
     
     # ================================================================
     # APPLY — compute histogram only when user clicks
@@ -180,10 +234,18 @@ visualize_numeric_histograms_server <- function(id, filtered_data, summary_info,
         common_legend = legend_state$enabled,
         legend_position = if (legend_state$enabled) legend_state$position else NULL
       )
-      
+
       stored$plot    <- res$plot
       stored$layout  <- res$layout
       stored$warning <- res$warning
+
+      apply_grid_defaults_if_empty(
+        input,
+        session,
+        "plot_grid",
+        res$defaults,
+        n_items = res$panels
+      )
     })
     
     # ================================================================
