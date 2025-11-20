@@ -19,7 +19,12 @@ visualize_ggpairs_ui <- function(id) {
         ),
         "Choose how to visualise the pairwise relationships between variables."
       ),
-      uiOutput(ns("sub_controls"))
+      uiOutput(ns("sub_controls")),
+      br(),
+      fluidRow(
+        column(6, actionButton(ns("apply_plot"), "Apply changes", width = "100%")),
+        column(6, downloadButton(ns("download_plot"), "Download Plot", style = "width: 100%;"))
+      )
     ),
     mainPanel(
       width = 8,
@@ -43,25 +48,6 @@ visualize_ggpairs_server <- function(id, filtered_data, model_fit) {
       info
     })
 
-    ggpairs_handle <- pairwise_correlation_visualize_ggpairs_server(
-      "ggpairs",
-      filtered_data,
-      correlation_info
-    )
-
-    active_handle <- reactive({
-      info <- correlation_info()
-      type <- input$plot_type
-
-      if (is.null(info) || is.null(type)) {
-        return(NULL)
-      }
-
-      switch(type,
-             "GGPairs" = ggpairs_handle,
-             NULL)
-    })
-
     output$sub_controls <- renderUI({
       info <- correlation_info()
       if (is.null(info)) {
@@ -71,43 +57,44 @@ visualize_ggpairs_server <- function(id, filtered_data, model_fit) {
       }
     })
 
-    output$plot_warning <- renderUI({
-      handle <- active_handle()
-      if (is.null(handle)) return(NULL)
+    ggpairs_state <- pairwise_correlation_visualize_ggpairs_server(
+      "ggpairs",
+      filtered_data,
+      correlation_info,
+      apply_trigger = reactive(input$apply_plot)
+    )
 
-      warning_text <- handle$warning()
+    output$plot_warning <- renderUI({
+      warning_text <- ggpairs_state$warning()
       if (!is.null(warning_text)) {
         div(class = "alert alert-warning", HTML(warning_text))
       }
     })
 
-    output$plot <- renderCachedPlot({
-      handle <- active_handle()
-      req(handle)
-
-      warning_text <- handle$warning()
-      if (!is.null(warning_text)) return(NULL)
-
-      plot_obj <- handle$plot()
+    output$plot <- renderPlot({
+      plot_obj <- ggpairs_state$plot()
       validate(need(!is.null(plot_obj), "No plot available."))
       print(plot_obj)
     },
-    cacheKeyExpr = {
-      handle <- active_handle()
-      if (is.null(handle) || is.null(handle$cache_key)) {
-        NULL
-      } else {
-        handle$cache_key()
-      }
-    },
-    width = function() {
-      handle <- active_handle()
-      if (is.null(handle)) 800 else handle$width()
-    },
-    height = function() {
-      handle <- active_handle()
-      if (is.null(handle)) 600 else handle$height()
-    },
+    width = function() ggpairs_state$width(),
+    height = function() ggpairs_state$height(),
     res = 96)
+
+    output$download_plot <- downloadHandler(
+      filename = function() paste0("pairwise_correlation_ggpairs_", Sys.Date(), ".png"),
+      content = function(file) {
+        p <- ggpairs_state$plot()
+        dims <- ggpairs_state$dimensions()
+        validate(need(!is.null(p), "No plot"))
+        validate(need(!is.null(dims), "No layout"))
+        ggplot2::ggsave(
+          file, p, dpi = 300,
+          width = dims$width / 96,
+          height = dims$height / 96,
+          units = "in",
+          limitsize = FALSE
+        )
+      }
+    )
   })
 }
