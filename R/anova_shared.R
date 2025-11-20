@@ -1923,7 +1923,8 @@ compute_barplot_shared_limits <- function(context,
                                           data,
                                           factor1,
                                           factor2,
-                                          posthoc_all = NULL) {
+                                          posthoc_all = NULL,
+                                          show_value_labels = FALSE) {
   combined <- NULL
 
   for (resp in context$responses) {
@@ -1969,7 +1970,9 @@ compute_barplot_shared_limits <- function(context,
   }
 
   if (is.null(combined)) return(NULL)
-  limits <- expand_axis_limits(combined, lower_mult = 0.05, upper_mult = 0.12)
+  upper_padding <- if (isTRUE(show_value_labels)) 0.18 else 0.12
+
+  limits <- expand_axis_limits(combined, lower_mult = 0.05, upper_mult = upper_padding)
   ensure_barplot_zero_baseline(limits)
 }
 
@@ -2000,7 +2003,14 @@ plot_anova_barplot_meanse <- function(data,
   }
 
   shared_y_limits <- if (isTRUE(share_y_axis)) {
-    compute_barplot_shared_limits(context, data, factor1, factor2, posthoc_all)
+    compute_barplot_shared_limits(
+      context,
+      data,
+      factor1,
+      factor2,
+      posthoc_all,
+      show_value_labels
+    )
   } else {
     NULL
   }
