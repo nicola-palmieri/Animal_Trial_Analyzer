@@ -1,3 +1,5 @@
+#### Error helpers ####
+
 format_safe_error_message <- function(title, details = NULL) {
   if (is.null(title) || !nzchar(title)) {
     title <- "Error"
@@ -55,4 +57,29 @@ validate_numeric_columns <- function(data, columns, context_label = "response va
   }
 
   invisible(TRUE)
+}
+
+#### Levels helpers ####
+
+resolve_order_levels <- function(values) {
+  if (is.null(values)) return(character())
+  
+  if (is.factor(values)) {
+    levels(values)
+  } else {
+    values <- values[!is.na(values)]
+    unique(as.character(values))
+  }
+}
+
+#### Reactive helpers ####
+
+resolve_reactive <- function(value, default = NULL) {
+  if (is.null(value)) {
+    return(default)
+  }
+  
+  resolved <- if (is.reactive(value)) value() else value
+  
+  if (is.null(resolved)) default else resolved
 }
