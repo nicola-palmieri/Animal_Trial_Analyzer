@@ -214,10 +214,18 @@ visualize_numeric_boxplots_server <- function(id, filtered_data, summary_info, i
         common_legend = legend_state$enabled,
         legend_position = if (legend_state$enabled) legend_state$position else NULL
       )
-      
+
       stored$plot    <- res$plot
       stored$layout  <- res$layout
       stored$warning <- res$warning
+
+      apply_grid_defaults_if_empty(
+        input,
+        session,
+        "plot_grid",
+        res$defaults,
+        n_items = res$panels
+      )
     })
     
     #======================================================
