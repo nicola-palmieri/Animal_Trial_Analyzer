@@ -1,19 +1,19 @@
 # Clean names + convert characters to ordered factors
 preprocess_uploaded_table <- function(df) {
-  df <- df |> mutate(across(where(is.character), auto_factor_order))
-  df
+  df |> mutate(across(where(is.character) | where(is.factor), auto_factor_order))
 }
 
-# Convert character to factor with numeric-aware order
+# Convert character/factor to factor with numeric-aware order
 auto_factor_order <- function(x) {
-  if (!is.character(x)) return(x)
-  nums <- suppressWarnings(as.numeric(gsub("\\D", "", x)))
-  if (all(is.na(nums))) {
-    factor(x, levels = sort(unique(x)))
-  } else {
-    x <- factor(x, levels = unique(x[order(nums, na.last = TRUE)]))
-    x
-  }
+  if (!is.factor(x) && !is.character(x)) return(x)
+
+  ordered_levels <- stringr::str_sort(
+    if (is.factor(x)) levels(x) else unique(x),
+    numeric = TRUE,
+    na_last = TRUE
+  )
+
+  factor(x, levels = ordered_levels, ordered = is.ordered(x))
 }
 
 

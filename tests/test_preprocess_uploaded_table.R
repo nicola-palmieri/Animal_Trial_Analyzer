@@ -33,7 +33,7 @@ test_that("preprocess_uploaded_table cleans column names and orders factors", {
 })
 
 test_that("preprocess_uploaded_table handles all-character dataframes", {
-  
+
   df <- tibble(
     ColA = c("x", "y", "z"),
     ColB = c("10", "2", "30")
@@ -44,6 +44,19 @@ test_that("preprocess_uploaded_table handles all-character dataframes", {
   expect_s3_class(out, "tbl_df")
   expect_true(all(sapply(out, is.factor)))
   expect_equal(names(out), c("col_a", "col_b"))
+})
+
+test_that("auto_factor_order reorders factors with numeric-aware sorting", {
+
+  df <- tibble(
+    Letter = factor(c("B", "A"), levels = c("B", "A")),
+    Mix    = c("v10", "v2", "v1")
+  )
+
+  out <- preprocess_uploaded_table(df)
+
+  expect_equal(levels(out$Letter), c("A", "B"))
+  expect_equal(levels(out$Mix), c("v1", "v2", "v10"))
 })
 
 test_that("preprocess_uploaded_table handles numeric-only dataframes", {
