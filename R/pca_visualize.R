@@ -445,6 +445,31 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
       show_loadings <- isTRUE(input$show_loadings)
       loading_scale <- ifelse(is.null(input$loading_scale) || is.na(input$loading_scale), 1.2, input$loading_scale)
 
+      max_levels <- if (exists("MAX_STRATIFICATION_LEVELS")) MAX_STRATIFICATION_LEVELS else 10L
+
+      validate_levels <- function(var) {
+        if (is.null(var) || !var %in% names(data)) {
+          return(NULL)
+        }
+
+        column <- data[[var]]
+        values <- if (is.factor(column)) {
+          levels(base::droplevels(column))
+        } else {
+          unique(as.character(column[!is.na(column)]))
+        }
+
+        values <- values[!is.na(values) & nzchar(values)]
+        n_levels <- length(values)
+
+        validate(need(
+          n_levels <= max_levels,
+          sprintf("'%s' has too many levels (%d > %d).", var, n_levels, max_levels)
+        ))
+
+        values
+      }
+
       facet_info <- facet_selection()
       facet_var <- facet_info$var
       facet_levels <- facet_info$levels
