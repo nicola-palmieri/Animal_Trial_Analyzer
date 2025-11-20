@@ -4,7 +4,6 @@ plot_anova_barplot_meanse <- function(data,
                                       info,
                                       layout_values = list(),
                                       line_colors = NULL,
-                                      show_value_labels = FALSE,
                                       base_size = 14,
                                       posthoc_all = NULL,
                                       share_y_axis = FALSE,
@@ -32,8 +31,7 @@ plot_anova_barplot_meanse <- function(data,
       data,
       factor1,
       factor2,
-      posthoc_all,
-      show_value_labels
+      posthoc_all
     )
   } else {
     NULL
@@ -79,7 +77,6 @@ plot_anova_barplot_meanse <- function(data,
           factor2 = factor2,
           line_colors = line_colors,
           base_fill = base_fill,
-          show_value_labels = show_value_labels,
           base_size = base_size,
           posthoc_entry = stratum_posthoc,
           nested_posthoc = stratum_posthoc,
@@ -116,7 +113,6 @@ plot_anova_barplot_meanse <- function(data,
         factor2 = factor2,
         line_colors = line_colors,
         base_fill = base_fill,
-        show_value_labels = show_value_labels,
         base_size = base_size,
         posthoc_entry = posthoc_entry,
         nested_posthoc = posthoc_entry,
@@ -138,8 +134,7 @@ compute_barplot_shared_limits <- function(context,
                                           data,
                                           factor1,
                                           factor2,
-                                          posthoc_all = NULL,
-                                          show_value_labels = FALSE) {
+                                          posthoc_all = NULL) {
   combined <- NULL
 
   for (resp in context$responses) {
@@ -185,9 +180,8 @@ compute_barplot_shared_limits <- function(context,
   }
 
   if (is.null(combined)) return(NULL)
-  upper_padding <- if (isTRUE(show_value_labels)) 0.18 else 0.12
 
-  limits <- expand_axis_limits(combined, lower_mult = 0.05, upper_mult = upper_padding)
+  limits <- expand_axis_limits(combined, lower_mult = 0.05, upper_mult = 0.12)
   ensure_barplot_zero_baseline(limits)
 }
 
@@ -247,7 +241,6 @@ build_bar_plot_panel <- function(stats_df,
                                  factor2,
                                  line_colors,
                                  base_fill,
-                                 show_value_labels = FALSE,
                                  base_size = 14,
                                  posthoc_entry = NULL,
                                  nested_posthoc = NULL,
@@ -276,7 +269,6 @@ build_bar_plot_panel <- function(stats_df,
         title_text,
         factor1,
         base_fill,
-        show_value_labels,
         base_size,
         posthoc_entry,
         y_limits = y_limits
@@ -291,7 +283,6 @@ build_bar_plot_panel <- function(stats_df,
     factor2,
     line_colors,
     base_fill,
-    show_value_labels,
     base_size,
     nested_posthoc,
     y_limits = y_limits
@@ -303,7 +294,6 @@ build_single_factor_barplot <- function(stats_df,
                                         title_text,
                                         factor1,
                                         base_fill,
-                                        show_value_labels,
                                         base_size,
                                         posthoc_entry,
                                         y_limits = NULL) {
@@ -332,13 +322,6 @@ build_single_factor_barplot <- function(stats_df,
 
   expand_scale <- is.null(y_limits)
 
-  if (isTRUE(show_value_labels)) {
-    plot_obj <- add_bar_value_labels(
-      plot_obj, stats_df, factor1, format_numeric_labels, base_size,
-      expand_scale = expand_scale
-    )
-  }
-
   if (!is.null(posthoc_entry)) {
     plot_obj <- add_significance_annotations(
       plot_obj, stats_df, factor1, posthoc_entry,
@@ -353,46 +336,12 @@ build_single_factor_barplot <- function(stats_df,
   plot_obj
 }
 
-
-add_bar_value_labels <- function(plot_obj,
-                                stats_df,
-                                factor1,
-                                format_numeric_labels,
-                                base_size,
-                                expand_scale = TRUE) {
-  label_df <- stats_df |>
-    dplyr::mutate(
-      .se = dplyr::coalesce(se, 0),
-      label_text = format_numeric_labels(mean),
-      label_y = ifelse(mean >= 0, mean + .se, mean - .se),
-      label_vjust = ifelse(mean >= 0, -0.4, 1.2)
-    )
-
-  plot_obj <- plot_obj +
-    geom_text(
-      data = label_df,
-      aes(x = !!sym(factor1), y = label_y, label = label_text, vjust = label_vjust),
-      color = "gray20",
-      size = compute_label_text_size(base_size),
-      fontface = "bold",
-      inherit.aes = FALSE
-    )
-
-  if (isTRUE(expand_scale)) {
-    plot_obj <- plot_obj + scale_y_continuous(expand = expansion(mult = c(0.05, 0.12)))
-  }
-
-  plot_obj
-}
-
-
 build_two_factor_barplot <- function(stats_df,
                                      title_text,
                                      factor1,
                                      factor2,
                                      line_colors,
                                      base_fill,
-                                     show_value_labels,
                                      base_size,
                                      nested_posthoc = NULL,
                                      y_limits = NULL) {
@@ -433,14 +382,6 @@ build_two_factor_barplot <- function(stats_df,
 
   expand_scale <- is.null(y_limits)
 
-  if (isTRUE(show_value_labels)) {
-    plot_obj <- add_grouped_bar_value_labels(
-      plot_obj, stats_df, factor1, factor2,
-      format_numeric_labels, dodge, base_size,
-      expand_scale = expand_scale
-    )
-  }
-
   if (!is.null(nested_posthoc)) {
     plot_obj <- add_nested_significance_annotations(
       plot_obj, stats_df, factor1, factor2, nested_posthoc,
@@ -450,47 +391,6 @@ build_two_factor_barplot <- function(stats_df,
 
   if (!is.null(y_limits) && all(is.finite(y_limits))) {
     plot_obj <- plot_obj + scale_y_continuous(limits = y_limits, expand = expansion(mult = c(0, 0)))
-  }
-
-  plot_obj
-}
-
-add_grouped_bar_value_labels <- function(plot_obj,
-                                         stats_df,
-                                         factor1,
-                                         factor2,
-                                         format_numeric_labels,
-                                         dodge,
-                                         base_size,
-                                         expand_scale = TRUE) {
-  label_df <- stats_df |>
-    dplyr::mutate(
-      .se = dplyr::coalesce(se, 0),
-      label_text = format_numeric_labels(mean),
-      label_y = ifelse(mean >= 0, mean + .se, mean - .se),
-      label_vjust = ifelse(mean >= 0, -0.4, 1.2)
-    )
-
-  plot_obj <- plot_obj +
-    geom_text(
-      data = label_df,
-      aes(
-        x = !!sym(factor1),
-        y = label_y,
-        label = label_text,
-        vjust = label_vjust,
-        fill = NULL,
-        group = !!sym(factor2)
-      ),
-      position = dodge,
-      color = "gray20",
-      size = compute_label_text_size(base_size),
-      fontface = "bold",
-      inherit.aes = FALSE
-    )
-
-  if (isTRUE(expand_scale)) {
-    plot_obj <- plot_obj + scale_y_continuous(expand = expansion(mult = c(0.05, 0.12)))
   }
 
   plot_obj

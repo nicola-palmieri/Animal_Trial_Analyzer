@@ -9,10 +9,6 @@ visualize_categorical_barplots_ui <- function(id) {
       checkboxInput(ns("show_proportions"), "Show proportions instead of counts", FALSE),
       "Switch between raw counts and percentages for each category."
     ),
-    with_help_tooltip(
-      checkboxInput(ns("show_value_labels"), "Show value labels on bars", FALSE),
-      "Display the numeric value on top of each bar."
-    ),
     subplot_size_ui(
       ns,
       width_help = "Set the width of each categorical plot in pixels.",
@@ -168,7 +164,6 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
         group_var = g_var,
         strata_levels = strata_levels,
         show_proportions = input$show_proportions,
-        show_value_labels = input$show_value_labels,
         nrow_input = grid$rows(),
         ncol_input = grid$cols(),
         fill_colors = custom_colors(),
@@ -239,59 +234,15 @@ visualize_categorical_barplots_server <- function(id, filtered_data, summary_inf
   })
 }
 
-format_value_labels <- function(df, show_proportions) {
-  formatter <- if (isTRUE(show_proportions)) {
-    scales::label_percent(accuracy = 0.1, trim = TRUE)
-  } else {
-    scales::label_comma(accuracy = 1, trim = TRUE)
-  }
-
-  df |>
-    dplyr::mutate(
-      label_text = formatter(.data$value),
-      label_y = .data$value,
-      label_vjust = ifelse(.data$value >= 0, -0.4, 1.2)
-    )
-}
-
-apply_value_scale <- function(plot, show_proportions, show_value_labels) {
+apply_value_scale <- function(plot, show_proportions) {
   if (isTRUE(show_proportions)) {
-    scale_args <- list(labels = scales::percent_format(accuracy = 1))
-    if (isTRUE(show_value_labels)) {
-      scale_args$limits <- c(0, NA)
-      scale_args$expand <- expansion(mult = c(0.02, 0.12))
-    } else {
-      scale_args$limits <- c(0, 1)
-    }
-    plot + do.call(scale_y_continuous, scale_args)
-  } else if (isTRUE(show_value_labels)) {
-    plot + scale_y_continuous(limits = c(0, NA), expand = expansion(mult = c(0.05, 0.12)))
+    plot + scale_y_continuous(
+      labels = scales::percent_format(accuracy = 1),
+      limits = c(0, 1)
+    )
   } else {
     plot + scale_y_continuous(limits = c(0, NA), expand = expansion(mult = c(0, 0.05)))
   }
-}
-
-add_value_labels <- function(plot,
-                             data,
-                             show_value_labels,
-                             show_proportions,
-                             position = NULL,
-                             base_size = 13) {
-  if (!isTRUE(show_value_labels)) return(plot)
-
-  label_df <- format_value_labels(data, show_proportions)
-
-  position <- if (is.null(position)) "identity" else position
-
-  plot +
-    geom_text(
-      data = label_df,
-      aes(label = label_text, y = label_y, vjust = label_vjust),
-      position = position,
-      color = "gray20",
-      size = compute_label_text_size(base_size),
-      fontface = "bold"
-    )
 }
 
 build_descriptive_categorical_plot <- function(df,
@@ -302,7 +253,6 @@ build_descriptive_categorical_plot <- function(df,
                                                nrow_input = NULL,
                                                ncol_input = NULL,
                                                fill_colors = NULL,
-                                               show_value_labels = FALSE,
                                                base_size = 13,
                                                common_legend = FALSE,
                                                legend_position = NULL) {
@@ -390,9 +340,7 @@ build_descriptive_categorical_plot <- function(df,
           axis.ticks = element_line(color = "#9ca3af")
         )
 
-      p <- add_value_labels(p, count_df, show_value_labels, show_proportions, group_dodge, base_size)
-      p <- apply_value_scale(p, show_proportions, show_value_labels)
-      p
+      apply_value_scale(p, show_proportions)
     } else {
       count_df <- dplyr::count(var_data, .data[[var]], name = "count")
       if (nrow(count_df) == 0) return(NULL)
@@ -425,9 +373,7 @@ build_descriptive_categorical_plot <- function(df,
           axis.ticks = element_line(color = "#9ca3af")
         )
 
-      p <- add_value_labels(p, count_df, show_value_labels, show_proportions, base_size = base_size)
-      p <- apply_value_scale(p, show_proportions, show_value_labels)
-      p
+      apply_value_scale(p, show_proportions)
     }
   })
   

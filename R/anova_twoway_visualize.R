@@ -23,17 +23,6 @@ visualize_twoway_ui <- function(id) {
         "Pick the chart style you prefer for viewing group means and uncertainty."
       ),
       conditionalPanel(
-        condition = sprintf("input['%s'] === 'barplot_mean_se'", ns("plot_type")),
-        with_help_tooltip(
-          checkboxInput(
-            ns("show_bar_labels"),
-            "Show value labels on bars",
-            value = FALSE
-          ),
-          "Turn on labels to display the mean value on each bar."
-        )
-      ),
-      conditionalPanel(
         condition = sprintf("input['%s'] === 'lineplot_mean_se'", ns("plot_type")),
         fluidRow(
           column(
@@ -273,7 +262,6 @@ visualize_twoway_server <- function(id, filtered_data, model_info) {
         barplot_mean_se = plot_anova_barplot_meanse(
           data, info, layout_inputs,
           line_colors       = custom_colors(),
-          show_value_labels = input$show_bar_labels,
           base_size         = base_size(),
           posthoc_all       = info$posthoc,
           share_y_axis      = input$share_y_axis,
