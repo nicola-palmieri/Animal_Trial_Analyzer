@@ -26,10 +26,6 @@ visualize_descriptive_ui <- function(id) {
         ),
         "Choose the descriptive chart that best answers your question."
       ),
-      div(
-        class = "mb-3",
-        actionButton(ns("apply_plots"), "Apply changes", width = "100%")
-      ),
       uiOutput(ns("sub_controls"))
     ),
     mainPanel(
@@ -45,16 +41,12 @@ visualize_descriptive_ui <- function(id) {
 visualize_descriptive_server <- function(id, filtered_data, descriptive_summary) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
-
-    applied_type <- reactiveVal("categorical")
-
-    observeEvent(input$apply_plots, {
-      req(input$plot_type)
-      applied_type(input$plot_type)
-    }, ignoreInit = FALSE)
-
+    
     # Active plot type
-    active_type <- reactive(applied_type())
+    active_type <- reactive({
+      req(input$plot_type)
+      input$plot_type
+    })
     
     # Always mount all submodules once (outputs suspended when hidden)
     visualize_categorical_barplots_server("categorical", filtered_data, descriptive_summary,
