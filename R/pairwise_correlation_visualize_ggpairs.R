@@ -24,18 +24,13 @@ pairwise_correlation_visualize_ggpairs_ui <- function(id) {
         default = 11,
         help_text = "Adjust the base font size used for the correlation plot."
       ))
-    ),
-    hr(),
-    with_help_tooltip(
-      downloadButton(ns("download_plot"), "Download Plot", style = "width: 100%;"),
-      "Save the current correlation figure as an image file."
     )
   )
 }
 
 
 pairwise_correlation_visualize_ggpairs_server <- function(
-    id, filtered_data, correlation_info
+    id, filtered_data, correlation_info, apply_trigger = reactive(NULL)
 ) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
@@ -130,11 +125,11 @@ pairwise_correlation_visualize_ggpairs_server <- function(
     }
     
     # ---- Unified compute plot_info() -----------------------------------------
-    plot_info <- reactive({
+    plot_info <- eventReactive(apply_trigger(), {
       s <- state()
       dat <- s$data
       info <- s$info
-      
+
       validate(need(!is.null(dat) && nrow(dat) > 0, "No data available."))
       validate(need(!is.null(info), "Correlation info missing."))
       
@@ -160,7 +155,9 @@ pairwise_correlation_visualize_ggpairs_server <- function(
           layout = list(rows = defaults$rows, cols = defaults$cols),
           panels = 1L,
           warning = NULL,
-          defaults = defaults
+          defaults = defaults,
+          plot_w = s$plot_w,
+          plot_h = s$plot_h
         ))
       }
       
@@ -208,44 +205,11 @@ pairwise_correlation_visualize_ggpairs_server <- function(
         layout = list(rows = layout$nrow, cols = layout$ncol),
         panels = n_panels,
         warning = val$message,
-        defaults = defaults
+        defaults = defaults,
+        plot_w = s$plot_w,
+        plot_h = s$plot_h
       )
-    })
-    
-    # ---- Unified caching ------------------------------------------------------
-    cached_plot   <- reactiveVal(NULL)
-    cached_layout <- reactiveVal(NULL)
-    cached_key    <- reactiveVal(NULL)
-    
-    observe({
-      s <- state()
-      key <- paste(
-        digest::digest(s$data, algo = "xxhash64"),
-        s$group_var,
-        s$strata_order,
-        s$rows, s$cols,
-        s$colors,
-        s$base_size,
-        s$plot_w, s$plot_h,
-        sep = "_"
-      )
-
-      if (!identical(key, cached_key())) {
-        info <- plot_info()
-        if (!is.null(info$warning)) {
-          cached_plot(NULL)
-          cached_layout(NULL)
-          cached_key(key)
-          return()
-        }
-
-        if (!is.null(info$plot)) {
-          cached_plot(info$plot)
-          cached_layout(info$layout)
-          cached_key(key)
-        }
-      }
-    })
+    }, ignoreNULL = FALSE)
 
     observeEvent(plot_info(), {
       info <- plot_info()
@@ -254,42 +218,28 @@ pairwise_correlation_visualize_ggpairs_server <- function(
 
     # ---- Unified sizing -------------------------------------------------------
     plot_dimensions <- reactive({
-      lay <- cached_layout()
-      if (is.null(lay)) return(list(width = 800, height = 600))
-      
+      info <- plot_info()
+      lay <- info$layout
+      plot_w <- info$plot_w %||% 800
+      plot_h <- info$plot_h %||% 600
+
       list(
-        width  = max(200, state()$plot_w * lay$cols),
-        height = max(200, state()$plot_h * lay$rows)
+        width  = max(200, plot_w * (lay$cols %||% 1)),
+        height = max(200, plot_h * (lay$rows %||% 1))
       )
     })
-    
+
     # ---- Outputs --------------------------------------------------------------
     output$plot <- renderPlot({
-      p <- cached_plot()
+      info <- plot_info()
+      if (!is.null(info$warning)) return(NULL)
+      p <- info$plot
       validate(need(!is.null(p), "Plot not ready"))
       print(p)
     },
     width  = function() plot_dimensions()$width,
     height = function() plot_dimensions()$height,
     res = 96)
-    
-    output$download_plot <- downloadHandler(
-      filename = function() paste0("pairwise_correlation_ggpairs_", Sys.Date(), ".png"),
-      content = function(file) {
-        p <- cached_plot()
-        lay <- cached_layout()
-        validate(need(!is.null(p), "No plot"))
-        validate(need(!is.null(lay), "No layout"))
-        dims <- plot_dimensions()
-        ggplot2::ggsave(
-          file, p, dpi = 300,
-          width = dims$width / 96,
-          height = dims$height / 96,
-          units = "in",
-          limitsize = FALSE
-        )
-      }
-    )
 
     outputOptions(output, "plot", suspendWhenHidden = TRUE)
 
@@ -298,10 +248,14 @@ pairwise_correlation_visualize_ggpairs_server <- function(
         info <- plot_info()
         if (is.null(info)) NULL else info$warning
       }),
-      plot = reactive(cached_plot()),
-      cache_key = reactive(cached_key()),
+      plot = reactive({
+        info <- plot_info()
+        if (!is.null(info$warning)) return(NULL)
+        info$plot
+      }),
       width = reactive(plot_dimensions()$width),
-      height = reactive(plot_dimensions()$height)
+      height = reactive(plot_dimensions()$height),
+      dimensions = reactive(plot_dimensions())
     )
   })
 }

@@ -162,9 +162,12 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
         ))
       ),
       br(),
-      with_help_tooltip(
-        downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;"),
-        "Save the PCA figure as an image file."
+      fluidRow(
+        column(6, actionButton(ns("apply_plot"), "Apply changes", width = "100%")),
+        column(6, with_help_tooltip(
+          downloadButton(ns("download_plot"), "Download plot", style = "width: 100%;"),
+          "Save the PCA figure as an image file."
+        ))
       )
     ),
     mainPanel(
@@ -347,11 +350,13 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
       }
     }
 
-    plot_info <- reactive({
+    plot_info <- eventReactive(input$apply_plot, {
       req(input$plot_type)
       validate(need(input$plot_type == "biplot", "Unsupported plot type."))
 
       entry <- pca_entry()
+      plot_w <- ifelse(is.na(input$plot_width) || input$plot_width <= 0, 800, input$plot_width)
+      plot_h <- ifelse(is.na(input$plot_height) || input$plot_height <= 0, 600, input$plot_height)
 
       empty_result <- function(message) {
         defaults <- compute_default_grid(1L)
@@ -363,7 +368,9 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
           panels = 1L,
           warning = NULL,
           defaults = defaults,
-          facet_var = NULL
+          facet_var = NULL,
+          plot_width = plot_w,
+          plot_height = plot_h
         )
       }
 
@@ -515,40 +522,28 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
         panels = panel_count,
         warning = validation$message,
         defaults = defaults,
-        facet_var = facet_var
+        facet_var = facet_var,
+        plot_width = plot_w,
+        plot_height = plot_h
       )
-    })
+    }, ignoreNULL = FALSE)
 
     observeEvent(plot_info(), {
       info <- plot_info()
       apply_grid_defaults_if_empty(input, session, "facet_grid", info$defaults, n_items = info$panels)
     }, ignoreNULL = TRUE)
 
-    # ---- Unified sizing logic ----
-    size_val <- reactiveVal(list(w = 800, h = 600))
-    
-    observe({
+    plot_dimensions <- reactive({
       info <- plot_info()
-      req(info)
-
       layout <- info$layout
-      base_w <- suppressWarnings(as.numeric(input$plot_width))
-      base_h <- suppressWarnings(as.numeric(input$plot_height))
 
-      valid_size <- function(x, default) {
-        if (is.na(x) || x <= 0) default else x
-      }
+      plot_w <- info$plot_width %||% 800
+      plot_h <- info$plot_height %||% 600
 
-      subplot_w <- valid_size(base_w, 400)
-      subplot_h <- valid_size(base_h, 300)
+      ncol <- if (!is.null(layout$ncol)) max(1, layout$ncol) else 1
+      nrow <- if (!is.null(layout$nrow)) max(1, layout$nrow) else 1
 
-      if (is.null(layout)) {
-        size_val(list(w = subplot_w, h = subplot_h))
-      } else {
-        ncol <- if (!is.null(layout$ncol)) max(1, layout$ncol) else 1
-        nrow <- if (!is.null(layout$nrow)) max(1, layout$nrow) else 1
-        size_val(list(w = subplot_w * ncol, h = subplot_h * nrow))
-      }
+      list(w = plot_w * ncol, h = plot_h * nrow)
     })
     
     output$plot_warning <- renderUI({
@@ -560,62 +555,13 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
       }
     })
 
-    plot_cache_key <- reactive({
-      info <- plot_info()
-      entry <- pca_entry()
-
-      data_sig <- if (!is.null(entry$data)) {
-        digest::digest(entry$data, algo = "xxhash64")
-      } else {
-        NULL
-      }
-
-      model_sig <- if (!is.null(entry$model)) {
-        digest::digest(
-          list(
-            scores = entry$model$x[, 1:2, drop = FALSE],
-            rotation = entry$model$rotation[, 1:2, drop = FALSE],
-            center = entry$model$center,
-            scale = entry$model$scale
-          ),
-          algo = "xxhash64"
-        )
-      } else {
-        NULL
-      }
-
-      layout <- info$layout
-      dims <- size_val()
-
-      digest::digest(
-        list(
-          data = data_sig,
-          model = model_sig,
-          color = input$pca_color,
-          shape = input$pca_shape,
-          label = input$pca_label,
-          label_size = input$pca_label_size,
-          show_loadings = isTRUE(input$show_loadings),
-          loading_scale = input$loading_scale,
-          facet_var = info$facet_var,
-          facet_levels = info$facet_levels,
-          layout = layout,
-          width = dims$w,
-          height = dims$h,
-          base_size = base_size()
-        ),
-        algo = "xxhash64"
-      )
-    })
-
-    output$plot <- renderCachedPlot({
+    output$plot <- renderPlot({
       info <- plot_info()
       if (!is.null(info$warning) || is.null(info$plot)) return(NULL)
       info$plot
     },
-    cacheKeyExpr = plot_cache_key(),
-    width = function() size_val()$w,
-    height = function() size_val()$h,
+    width = function() plot_dimensions()$w,
+    height = function() plot_dimensions()$h,
     res = 96)
     
     output$download_plot <- downloadHandler(
@@ -632,7 +578,7 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
       content = function(file) {
         info <- plot_info()
         req(is.null(info$warning))
-        s <- size_val()
+        s <- plot_dimensions()
         ggsave(
           filename = file,
           plot = info$plot,
