@@ -1,6 +1,5 @@
-# ===============================================================
-# 🧠 Table Analyzer — Shared ANOVA Module Helpers
-# ===============================================================
+#### Table Analyzer — Shared ANOVA Module  ####
+#### Section: UI & Output Binding ####
 
 build_anova_layout_controls <- function(ns, input, info) {
   has_strata <- !is.null(info$strata) && !is.null(info$strata$var)
@@ -47,21 +46,184 @@ build_anova_layout_controls <- function(ns, input, info) {
 # Formula utilities
 # ---------------------------------------------------------------
 
-anova_protect_vars <- function(vars) {
-  if (is.null(vars) || length(vars) == 0) return(vars)
-
-  vals <- vapply(vars, function(v) {
-    if (is.null(v) || is.na(v) || !nzchar(v)) return("")
-    if (grepl("^`.*`$", v)) v else paste0("`", v, "`")
-  }, character(1))
-
-  vals[nzchar(vals)]
+render_anova_results <- function(ns, model_info, module_label = "ANOVA") {
+  if (is.null(model_info)) return(NULL)
+  
+  responses <- model_info$responses
+  strata_info <- model_info$strata
+  
+  # No stratification
+  if (is.null(strata_info)) {
+    tabs <- lapply(seq_along(responses), function(i) {
+      tabPanel(
+        title = responses[i],
+        tags$div(
+          verbatimTextOutput(ns(paste0("summary_", i)))
+        )
+      )
+    })
+    return(do.call(tabsetPanel, c(list(id = ns("results_tabs")), tabs)))
+  }
+  
+  # Stratified
+  strata_levels <- strata_info$levels
+  tabs <- lapply(seq_along(responses), function(i) {
+    response_name <- responses[i]
+    stratum_tabs <- lapply(seq_along(strata_levels), function(j) {
+      stratum_name <- strata_levels[j]
+      tabPanel(
+        title = stratum_name,
+        tags$div(
+          verbatimTextOutput(ns(paste0("summary_", i, "_", j)))
+        )
+      )
+    })
+    tabPanel(
+      title = response_name,
+      do.call(tabsetPanel, c(list(id = ns(paste0("strata_tabs_", i))), stratum_tabs))
+    )
+  })
+  do.call(tabsetPanel, c(list(id = ns("results_tabs")), tabs))
 }
 
+bind_anova_outputs <- function(ns, output, models_reactive) {
+  observeEvent(models_reactive(), {
+    model_info <- models_reactive()
+    if (is.null(model_info)) return()
+    
+    responses <- model_info$responses
+    model_list <- model_info$models
+    strata_info <- model_info$strata
+    factors <- unlist(model_info$factors, use.names = FALSE)
+    
+    # --- Non-stratified case ---
+    if (is.null(strata_info)) {
+      for (i in seq_along(responses)) {
+        local({
+          idx <- i
+          response_name <- responses[i]
+          model_entry <- model_list[[response_name]]
+          bind_single_model_outputs(
+            output,
+            summary_id = paste0("summary_", idx),
+            download_id = paste0("download_", idx),
+            model_entry = model_entry,
+            response_name = response_name,
+            factors = factors
+          )
+        })
+      }
+      return()
+    }
+    
+    # --- Stratified case ---
+    strata_levels <- strata_info$levels
+    for (i in seq_along(responses)) {
+      for (j in seq_along(strata_levels)) {
+        local({
+          idx <- i
+          stratum_idx <- j
+          response_name <- responses[i]
+          stratum_label <- strata_levels[j]
+          model_entry <- model_list[[stratum_label]][[response_name]]
+          bind_single_model_outputs(
+            output,
+            summary_id = paste0("summary_", idx, "_", stratum_idx),
+            download_id = paste0("download_", idx, "_", stratum_idx),
+            model_entry = model_entry,
+            response_name = response_name,
+            factors = factors,
+            stratum_label = stratum_label
+          )
+        })
+      }
+    }
+  })
+}
 
-# ===============================================================
-# 📊 Prepare stratified models for ANOVA (one-way / two-way)
-# ===============================================================
+# ---------------------------------------------------------------
+# Results export
+# ---------------------------------------------------------------
+
+bind_single_model_outputs <- function(output, summary_id, download_id,
+                                      model_entry, response_name, factors,
+                                      stratum_label = NULL) {
+  output[[summary_id]] <- renderPrint({
+    print_anova_summary_and_posthoc(model_entry, factors)
+  })
+
+  output[[download_id]] <- downloadHandler(
+    filename = function() {
+      base <- paste0("anova_results_", sanitize_name(response_name))
+      if (!is.null(stratum_label)) {
+        base <- paste0(base, "_stratum_", sanitize_name(stratum_label))
+      }
+      paste0(base, "_", Sys.Date(), ".docx")
+    },
+    content = function(file) {
+      if (is.null(model_entry) || !is.null(model_entry$error) || is.null(model_entry$model)) {
+        stop("Model not available for download due to fitting error.")
+      }
+      results <- prepare_anova_outputs(model_entry$model, factors)
+      if (!is.null(results$error)) {
+        stop(paste0("ANOVA results unavailable: ", results$error))
+      }
+      if (is.null(results$anova_table)) {
+        stop("ANOVA results are unavailable for export.")
+      }
+      write_anova_docx(file, results, model_entry$model, response_name, stratum_label)
+    }
+  )
+}
+
+print_anova_summary_and_posthoc <- function(model_entry, factors) {
+  if (is.null(model_entry) || (is.list(model_entry) && is.null(model_entry$model))) {
+    cat("Model is not available.\n")
+    return(invisible(NULL))
+  }
+
+  if (!is.null(model_entry$error)) {
+    cat(format_safe_error_message("Model fitting failed", model_entry$error), "\n", sep = "")
+    return(invisible(NULL))
+  }
+
+  model_obj <- model_entry$model
+  results <- prepare_anova_outputs(model_obj, factors)
+  if (!is.null(results$error)) {
+    cat(format_safe_error_message("ANOVA computation failed", results$error), "\n", sep = "")
+    return(invisible(NULL))
+  }
+  if (is.null(results$anova_object)) {
+    cat("ANOVA results are unavailable.\n")
+    return(invisible(NULL))
+  }
+  print(results$anova_object)
+
+  if (length(results$posthoc_details) == 0) {
+    cat("\nNo post-hoc Tukey comparisons were generated.\n")
+  } else {
+    for (factor_nm in names(results$posthoc_details)) {
+      details <- results$posthoc_details[[factor_nm]]
+      if (!is.null(details$error)) {
+        cat(
+          "\n",
+          format_safe_error_message(
+            paste("Post-hoc Tukey comparisons for", factor_nm, "failed"),
+            details$error
+          ),
+          "\n",
+          sep = ""
+        )
+      } else if (!is.null(details$table)) {
+        cat("\nPost-hoc Tukey comparisons for", factor_nm, ":\n")
+        print(details$table)
+      }
+    }
+  }
+  invisible(results)
+}
+
+#### Section: Model Fitting & Preparation ####
 
 prepare_stratified_anova <- function(
     df,
@@ -157,6 +319,121 @@ prepare_stratified_anova <- function(
   c(base_info, list(models = models, strata = list(var = stratify_var, levels = strata)))
 }
 
+compile_anova_results <- function(model_info) {
+  if (is.null(model_info) || is.null(model_info$models)) return(NULL)
+
+  factor_names <- unlist(model_info$factors)
+  factor_names <- factor_names[!is.na(factor_names) & nzchar(factor_names)]
+
+  build_effects <- function(outputs) {
+    if (is.null(outputs) || is.null(outputs$anova_table)) return(NULL)
+    effects <- data.frame(
+      Effect = outputs$anova_table$Effect,
+      significant = outputs$anova_significant,
+      stringsAsFactors = FALSE
+    )
+    if ("p.value" %in% names(outputs$anova_table)) {
+      effects$p.value <- outputs$anova_table$p.value
+    }
+    effects
+  }
+
+  if (is.null(model_info$strata)) {
+    summary_list <- list()
+    posthoc_list <- list()
+    effects_list <- list()
+    errors_list <- list()
+
+    for (resp in names(model_info$models)) {
+      entry <- model_info$models[[resp]]
+      entry_errors <- character(0)
+      if (!is.null(entry$model)) {
+        outputs <- prepare_anova_outputs(entry$model, factor_names)
+        if (!is.null(outputs$error)) {
+          entry_errors <- c(entry_errors, outputs$error)
+          summary_list[[resp]] <- NULL
+          posthoc_list[[resp]] <- NULL
+          effects_list[[resp]] <- NULL
+        } else {
+          summary_list[[resp]] <- outputs$anova_table
+          posthoc_list[[resp]] <- outputs$posthoc_table
+          effects_list[[resp]] <- build_effects(outputs)
+        }
+      } else {
+        summary_list[[resp]] <- NULL
+        posthoc_list[[resp]] <- NULL
+        effects_list[[resp]] <- NULL
+      }
+      if (!is.null(entry$error)) {
+        entry_errors <- c(entry_errors, entry$error)
+      }
+      if (length(entry_errors) > 0) {
+        errors_list[[resp]] <- paste(unique(entry_errors), collapse = "\n")
+      }
+    }
+
+    return(list(
+      summary = summary_list,
+      posthoc = posthoc_list,
+      effects = effects_list,
+      errors = errors_list
+    ))
+  }
+
+  summary_list <- list()
+  posthoc_list <- list()
+  effects_list <- list()
+  errors_list <- list()
+
+  for (stratum_name in names(model_info$models)) {
+    stratum_models <- model_info$models[[stratum_name]]
+    if (is.null(stratum_models)) next
+
+    for (resp in names(stratum_models)) {
+      entry <- stratum_models[[resp]]
+      outputs <- NULL
+      entry_error <- NULL
+      if (!is.null(entry$model)) {
+        outputs <- prepare_anova_outputs(entry$model, factor_names)
+        if (!is.null(outputs$error)) {
+          entry_error <- outputs$error
+          outputs <- NULL
+        }
+      }
+
+      if (is.null(summary_list[[resp]])) summary_list[[resp]] <- list()
+      if (is.null(posthoc_list[[resp]])) posthoc_list[[resp]] <- list()
+      if (is.null(effects_list[[resp]])) effects_list[[resp]] <- list()
+      if (is.null(errors_list[[resp]])) errors_list[[resp]] <- list()
+
+      summary_list[[resp]][[stratum_name]] <- if (!is.null(outputs)) outputs$anova_table else NULL
+      posthoc_list[[resp]][[stratum_name]] <- if (!is.null(outputs)) outputs$posthoc_table else NULL
+      effects_list[[resp]][[stratum_name]] <- if (!is.null(outputs)) build_effects(outputs) else NULL
+
+      if (!is.null(entry$error)) {
+        entry_error <- c(entry_error, entry$error)
+      }
+
+      if (!is.null(entry_error)) {
+        errors_list[[resp]][[stratum_name]] <- paste(unique(entry_error), collapse = "\n")
+      }
+    }
+  }
+
+
+  list(
+    summary = summary_list,
+    posthoc = posthoc_list,
+    effects = effects_list,
+    errors = errors_list
+  )
+}
+
+# ---------------------------------------------------------------
+# Output composition
+# ---------------------------------------------------------------
+
+#### Section: ANOVA Output Processing ####
 
 prepare_anova_outputs <- function(model_obj, factor_names) {
   old_contrasts <- options("contrasts")
@@ -306,296 +583,6 @@ prepare_anova_outputs <- function(model_obj, factor_names) {
 
 # ---------------------------------------------------------------
 # Collate tidy summaries from ANOVA models
-# ---------------------------------------------------------------
-
-compile_anova_results <- function(model_info) {
-  if (is.null(model_info) || is.null(model_info$models)) return(NULL)
-
-  factor_names <- unlist(model_info$factors)
-  factor_names <- factor_names[!is.na(factor_names) & nzchar(factor_names)]
-
-  build_effects <- function(outputs) {
-    if (is.null(outputs) || is.null(outputs$anova_table)) return(NULL)
-    effects <- data.frame(
-      Effect = outputs$anova_table$Effect,
-      significant = outputs$anova_significant,
-      stringsAsFactors = FALSE
-    )
-    if ("p.value" %in% names(outputs$anova_table)) {
-      effects$p.value <- outputs$anova_table$p.value
-    }
-    effects
-  }
-
-  if (is.null(model_info$strata)) {
-    summary_list <- list()
-    posthoc_list <- list()
-    effects_list <- list()
-    errors_list <- list()
-
-    for (resp in names(model_info$models)) {
-      entry <- model_info$models[[resp]]
-      entry_errors <- character(0)
-      if (!is.null(entry$model)) {
-        outputs <- prepare_anova_outputs(entry$model, factor_names)
-        if (!is.null(outputs$error)) {
-          entry_errors <- c(entry_errors, outputs$error)
-          summary_list[[resp]] <- NULL
-          posthoc_list[[resp]] <- NULL
-          effects_list[[resp]] <- NULL
-        } else {
-          summary_list[[resp]] <- outputs$anova_table
-          posthoc_list[[resp]] <- outputs$posthoc_table
-          effects_list[[resp]] <- build_effects(outputs)
-        }
-      } else {
-        summary_list[[resp]] <- NULL
-        posthoc_list[[resp]] <- NULL
-        effects_list[[resp]] <- NULL
-      }
-      if (!is.null(entry$error)) {
-        entry_errors <- c(entry_errors, entry$error)
-      }
-      if (length(entry_errors) > 0) {
-        errors_list[[resp]] <- paste(unique(entry_errors), collapse = "\n")
-      }
-    }
-
-    return(list(
-      summary = summary_list,
-      posthoc = posthoc_list,
-      effects = effects_list,
-      errors = errors_list
-    ))
-  }
-
-  summary_list <- list()
-  posthoc_list <- list()
-  effects_list <- list()
-  errors_list <- list()
-
-  for (stratum_name in names(model_info$models)) {
-    stratum_models <- model_info$models[[stratum_name]]
-    if (is.null(stratum_models)) next
-
-    for (resp in names(stratum_models)) {
-      entry <- stratum_models[[resp]]
-      outputs <- NULL
-      entry_error <- NULL
-      if (!is.null(entry$model)) {
-        outputs <- prepare_anova_outputs(entry$model, factor_names)
-        if (!is.null(outputs$error)) {
-          entry_error <- outputs$error
-          outputs <- NULL
-        }
-      }
-
-      if (is.null(summary_list[[resp]])) summary_list[[resp]] <- list()
-      if (is.null(posthoc_list[[resp]])) posthoc_list[[resp]] <- list()
-      if (is.null(effects_list[[resp]])) effects_list[[resp]] <- list()
-      if (is.null(errors_list[[resp]])) errors_list[[resp]] <- list()
-
-      summary_list[[resp]][[stratum_name]] <- if (!is.null(outputs)) outputs$anova_table else NULL
-      posthoc_list[[resp]][[stratum_name]] <- if (!is.null(outputs)) outputs$posthoc_table else NULL
-      effects_list[[resp]][[stratum_name]] <- if (!is.null(outputs)) build_effects(outputs) else NULL
-
-      if (!is.null(entry$error)) {
-        entry_error <- c(entry_error, entry$error)
-      }
-
-      if (!is.null(entry_error)) {
-        errors_list[[resp]][[stratum_name]] <- paste(unique(entry_error), collapse = "\n")
-      }
-    }
-  }
-
-
-  list(
-    summary = summary_list,
-    posthoc = posthoc_list,
-    effects = effects_list,
-    errors = errors_list
-  )
-}
-
-# ---------------------------------------------------------------
-# Output composition
-# ---------------------------------------------------------------
-print_anova_summary_and_posthoc <- function(model_entry, factors) {
-  if (is.null(model_entry) || (is.list(model_entry) && is.null(model_entry$model))) {
-    cat("Model is not available.\n")
-    return(invisible(NULL))
-  }
-
-  if (!is.null(model_entry$error)) {
-    cat(format_safe_error_message("Model fitting failed", model_entry$error), "\n", sep = "")
-    return(invisible(NULL))
-  }
-
-  model_obj <- model_entry$model
-  results <- prepare_anova_outputs(model_obj, factors)
-  if (!is.null(results$error)) {
-    cat(format_safe_error_message("ANOVA computation failed", results$error), "\n", sep = "")
-    return(invisible(NULL))
-  }
-  if (is.null(results$anova_object)) {
-    cat("ANOVA results are unavailable.\n")
-    return(invisible(NULL))
-  }
-  print(results$anova_object)
-
-  if (length(results$posthoc_details) == 0) {
-    cat("\nNo post-hoc Tukey comparisons were generated.\n")
-  } else {
-    for (factor_nm in names(results$posthoc_details)) {
-      details <- results$posthoc_details[[factor_nm]]
-      if (!is.null(details$error)) {
-        cat(
-          "\n",
-          format_safe_error_message(
-            paste("Post-hoc Tukey comparisons for", factor_nm, "failed"),
-            details$error
-          ),
-          "\n",
-          sep = ""
-        )
-      } else if (!is.null(details$table)) {
-        cat("\nPost-hoc Tukey comparisons for", factor_nm, ":\n")
-        print(details$table)
-      }
-    }
-  }
-  invisible(results)
-}
-
-bind_single_model_outputs <- function(output, summary_id, download_id,
-                                      model_entry, response_name, factors,
-                                      stratum_label = NULL) {
-  output[[summary_id]] <- renderPrint({
-    print_anova_summary_and_posthoc(model_entry, factors)
-  })
-
-  output[[download_id]] <- downloadHandler(
-    filename = function() {
-      base <- paste0("anova_results_", sanitize_name(response_name))
-      if (!is.null(stratum_label)) {
-        base <- paste0(base, "_stratum_", sanitize_name(stratum_label))
-      }
-      paste0(base, "_", Sys.Date(), ".docx")
-    },
-    content = function(file) {
-      if (is.null(model_entry) || !is.null(model_entry$error) || is.null(model_entry$model)) {
-        stop("Model not available for download due to fitting error.")
-      }
-      results <- prepare_anova_outputs(model_entry$model, factors)
-      if (!is.null(results$error)) {
-        stop(paste0("ANOVA results unavailable: ", results$error))
-      }
-      if (is.null(results$anova_table)) {
-        stop("ANOVA results are unavailable for export.")
-      }
-      write_anova_docx(file, results, model_entry$model, response_name, stratum_label)
-    }
-  )
-}
-
-render_anova_results <- function(ns, model_info, module_label = "ANOVA") {
-  if (is.null(model_info)) return(NULL)
-  
-  responses <- model_info$responses
-  strata_info <- model_info$strata
-  
-  # No stratification
-  if (is.null(strata_info)) {
-    tabs <- lapply(seq_along(responses), function(i) {
-      tabPanel(
-        title = responses[i],
-        tags$div(
-          verbatimTextOutput(ns(paste0("summary_", i)))
-        )
-      )
-    })
-    return(do.call(tabsetPanel, c(list(id = ns("results_tabs")), tabs)))
-  }
-  
-  # Stratified
-  strata_levels <- strata_info$levels
-  tabs <- lapply(seq_along(responses), function(i) {
-    response_name <- responses[i]
-    stratum_tabs <- lapply(seq_along(strata_levels), function(j) {
-      stratum_name <- strata_levels[j]
-      tabPanel(
-        title = stratum_name,
-        tags$div(
-          verbatimTextOutput(ns(paste0("summary_", i, "_", j)))
-        )
-      )
-    })
-    tabPanel(
-      title = response_name,
-      do.call(tabsetPanel, c(list(id = ns(paste0("strata_tabs_", i))), stratum_tabs))
-    )
-  })
-  do.call(tabsetPanel, c(list(id = ns("results_tabs")), tabs))
-}
-
-bind_anova_outputs <- function(ns, output, models_reactive) {
-  observeEvent(models_reactive(), {
-    model_info <- models_reactive()
-    if (is.null(model_info)) return()
-    
-    responses <- model_info$responses
-    model_list <- model_info$models
-    strata_info <- model_info$strata
-    factors <- unlist(model_info$factors, use.names = FALSE)
-    
-    # --- Non-stratified case ---
-    if (is.null(strata_info)) {
-      for (i in seq_along(responses)) {
-        local({
-          idx <- i
-          response_name <- responses[i]
-          model_entry <- model_list[[response_name]]
-          bind_single_model_outputs(
-            output,
-            summary_id = paste0("summary_", idx),
-            download_id = paste0("download_", idx),
-            model_entry = model_entry,
-            response_name = response_name,
-            factors = factors
-          )
-        })
-      }
-      return()
-    }
-    
-    # --- Stratified case ---
-    strata_levels <- strata_info$levels
-    for (i in seq_along(responses)) {
-      for (j in seq_along(strata_levels)) {
-        local({
-          idx <- i
-          stratum_idx <- j
-          response_name <- responses[i]
-          stratum_label <- strata_levels[j]
-          model_entry <- model_list[[stratum_label]][[response_name]]
-          bind_single_model_outputs(
-            output,
-            summary_id = paste0("summary_", idx, "_", stratum_idx),
-            download_id = paste0("download_", idx, "_", stratum_idx),
-            model_entry = model_entry,
-            response_name = response_name,
-            factors = factors,
-            stratum_label = stratum_label
-          )
-        })
-      }
-    }
-  })
-}
-
-# ---------------------------------------------------------------
-# Results export
 # ---------------------------------------------------------------
 
 download_all_anova_results <- function(models_info, file) {
@@ -787,14 +774,7 @@ write_anova_docx <- function(results, file) {
 # Plotting
 # ---------------------------------------------------------------
 
-parse_anova_layout_inputs <- function(layout_values) {
-  list(
-    strata_rows = suppressWarnings(as.numeric(layout_values$strata_rows)),
-    strata_cols = suppressWarnings(as.numeric(layout_values$strata_cols)),
-    resp_rows   = suppressWarnings(as.numeric(layout_values$resp_rows)),
-    resp_cols   = suppressWarnings(as.numeric(layout_values$resp_cols))
-  )
-}
+#### Section: Plot Context Initialization ####
 
 initialize_anova_plot_context <- function(data, info, layout_values) {
   factor1 <- info$factors$factor1
@@ -851,94 +831,13 @@ initialize_anova_plot_context <- function(data, info, layout_values) {
   )
 }
 
-anova_summarise_stats <- function(df_subset, resp_name, factor1, factor2) {
-  if (is.null(factor1) || !factor1 %in% names(df_subset)) {
-    return(tibble::tibble())
-  }
-
-  if (is.null(factor2) || !factor2 %in% names(df_subset)) {
-    df_subset |>
-      dplyr::group_by(.data[[factor1]]) |>
-      dplyr::summarise(
-        mean = mean(.data[[resp_name]], na.rm = TRUE),
-        se = sd(.data[[resp_name]], na.rm = TRUE) / sqrt(sum(!is.na(.data[[resp_name]]))),
-        .groups = "drop"
-      )
-  } else {
-    df_subset |>
-      dplyr::group_by(.data[[factor1]], .data[[factor2]]) |>
-      dplyr::summarise(
-        mean = mean(.data[[resp_name]], na.rm = TRUE),
-        se = sd(.data[[resp_name]], na.rm = TRUE) / sqrt(sum(!is.na(.data[[resp_name]]))),
-        .groups = "drop"
-      )
-  }
-}
-
-apply_anova_factor_levels <- function(stats_df, factor1, factor2, order1, order2) {
-  if (!is.null(factor1) && factor1 %in% names(stats_df)) {
-    if (!is.null(order1)) {
-      stats_df[[factor1]] <- factor(as.character(stats_df[[factor1]]), levels = order1)
-    } else {
-      stats_df[[factor1]] <- factor(as.character(stats_df[[factor1]]))
-    }
-  }
-
-  if (!is.null(factor2) && factor2 %in% names(stats_df)) {
-    levels2 <- if (!is.null(order2)) {
-      order2
-    } else {
-      unique(as.character(stats_df[[factor2]]))
-    }
-    stats_df[[factor2]] <- factor(as.character(stats_df[[factor2]]), levels = levels2)
-  }
-
-  stats_df
-}
-
-add_theme_to_plot <- function(plot_obj, theme_obj) {
-  if (inherits(plot_obj, "patchwork")) {
-    plot_obj & theme_obj
-  } else {
-    plot_obj + theme_obj
-  }
-}
-
-collect_guides_safe <- function(plot_obj) {
-  if (is.null(plot_obj) || !requireNamespace("patchwork", quietly = TRUE)) {
-    return(plot_obj)
-  }
-
-  is_patchwork <- inherits(plot_obj, "patchwork")
-  if (!is_patchwork) {
-    return(plot_obj)
-  }
-
-  exports <- tryCatch(getNamespaceExports("patchwork"), error = function(...) character())
-  collected <- if ("collect_guides" %in% exports) {
-    patchwork::collect_guides(plot_obj)
-  } else {
-    plot_obj + patchwork::plot_layout(guides = "collect")
-  }
-
-  collected + patchwork::plot_layout(guides = "collect")
-}
-
-apply_common_legend_layout <- function(plot_obj,
-                                       legend_position = NULL,
-                                       collect_guides = FALSE) {
-  if (is.null(plot_obj)) return(plot_obj)
-
-  updated <- plot_obj
-  if (collect_guides) {
-    updated <- collect_guides_safe(updated)
-  }
-
-  if (!is.null(legend_position)) {
-    updated <- add_theme_to_plot(updated, theme(legend.position = legend_position))
-  }
-
-  updated
+parse_anova_layout_inputs <- function(layout_values) {
+  list(
+    strata_rows = suppressWarnings(as.numeric(layout_values$strata_rows)),
+    strata_cols = suppressWarnings(as.numeric(layout_values$strata_cols)),
+    resp_rows   = suppressWarnings(as.numeric(layout_values$resp_rows)),
+    resp_cols   = suppressWarnings(as.numeric(layout_values$resp_cols))
+  )
 }
 
 finalize_anova_plot_result <- function(response_plots,
@@ -1037,6 +936,778 @@ finalize_anova_plot_result <- function(response_plots,
       strata = context$strata_defaults,
       responses = response_defaults
     )
+  )
+}
+
+apply_common_legend_layout <- function(plot_obj,
+                                       legend_position = NULL,
+                                       collect_guides = FALSE) {
+  if (is.null(plot_obj)) return(plot_obj)
+
+  updated <- plot_obj
+  if (collect_guides) {
+    updated <- collect_guides_safe(updated)
+  }
+
+  if (!is.null(legend_position)) {
+    updated <- add_theme_to_plot(updated, theme(legend.position = legend_position))
+  }
+
+  updated
+}
+
+collect_guides_safe <- function(plot_obj) {
+  if (is.null(plot_obj) || !requireNamespace("patchwork", quietly = TRUE)) {
+    return(plot_obj)
+  }
+
+  is_patchwork <- inherits(plot_obj, "patchwork")
+  if (!is_patchwork) {
+    return(plot_obj)
+  }
+
+  exports <- tryCatch(getNamespaceExports("patchwork"), error = function(...) character())
+  collected <- if ("collect_guides" %in% exports) {
+    patchwork::collect_guides(plot_obj)
+  } else {
+    plot_obj + patchwork::plot_layout(guides = "collect")
+  }
+
+  collected + patchwork::plot_layout(guides = "collect")
+}
+
+add_theme_to_plot <- function(plot_obj, theme_obj) {
+  if (inherits(plot_obj, "patchwork")) {
+    plot_obj & theme_obj
+  } else {
+    plot_obj + theme_obj
+  }
+}
+
+#### Section: Statistics Summarisation ####
+
+compute_lineplot_shared_limits <- function(context, data, factor1, factor2) {
+  combined <- NULL
+
+  for (resp in context$responses) {
+    if (context$has_strata && !is.null(context$strat_var) && context$strat_var %in% names(data)) {
+      for (stratum in context$strata_levels) {
+        subset_rows <- !is.na(data[[context$strat_var]]) & data[[context$strat_var]] == stratum
+        subset_data <- data[subset_rows, , drop = FALSE]
+        if (nrow(subset_data) == 0) next
+
+        stats_df <- anova_summarise_stats(subset_data, resp, factor1, factor2)
+        if (nrow(stats_df) == 0) next
+
+        stats_df <- apply_anova_factor_levels(stats_df, factor1, factor2, context$order1, context$order2)
+        y_values <- c(stats_df$mean - stats_df$se, stats_df$mean + stats_df$se)
+        combined <- update_numeric_range(combined, y_values)
+      }
+    } else {
+      stats_df <- anova_summarise_stats(data, resp, factor1, factor2)
+      if (nrow(stats_df) == 0) next
+      stats_df <- apply_anova_factor_levels(stats_df, factor1, factor2, context$order1, context$order2)
+      y_values <- c(stats_df$mean - stats_df$se, stats_df$mean + stats_df$se)
+      combined <- update_numeric_range(combined, y_values)
+    }
+  }
+
+  if (is.null(combined) || any(!is.finite(combined))) return(NULL)
+  combined
+}
+
+anova_summarise_stats <- function(df_subset, resp_name, factor1, factor2) {
+  if (is.null(factor1) || !factor1 %in% names(df_subset)) {
+    return(tibble::tibble())
+  }
+
+  if (is.null(factor2) || !factor2 %in% names(df_subset)) {
+    df_subset |>
+      dplyr::group_by(.data[[factor1]]) |>
+      dplyr::summarise(
+        mean = mean(.data[[resp_name]], na.rm = TRUE),
+        se = sd(.data[[resp_name]], na.rm = TRUE) / sqrt(sum(!is.na(.data[[resp_name]]))),
+        .groups = "drop"
+      )
+  } else {
+    df_subset |>
+      dplyr::group_by(.data[[factor1]], .data[[factor2]]) |>
+      dplyr::summarise(
+        mean = mean(.data[[resp_name]], na.rm = TRUE),
+        se = sd(.data[[resp_name]], na.rm = TRUE) / sqrt(sum(!is.na(.data[[resp_name]]))),
+        .groups = "drop"
+      )
+  }
+}
+
+apply_anova_factor_levels <- function(stats_df, factor1, factor2, order1, order2) {
+  if (!is.null(factor1) && factor1 %in% names(stats_df)) {
+    if (!is.null(order1)) {
+      stats_df[[factor1]] <- factor(as.character(stats_df[[factor1]]), levels = order1)
+    } else {
+      stats_df[[factor1]] <- factor(as.character(stats_df[[factor1]]))
+    }
+  }
+
+  if (!is.null(factor2) && factor2 %in% names(stats_df)) {
+    levels2 <- if (!is.null(order2)) {
+      order2
+    } else {
+      unique(as.character(stats_df[[factor2]]))
+    }
+    stats_df[[factor2]] <- factor(as.character(stats_df[[factor2]]), levels = levels2)
+  }
+
+  stats_df
+}
+
+#### Section: Barplot Construction ####
+
+plot_anova_barplot_meanse <- function(data,
+                                      info,
+                                      layout_values = list(),
+                                      line_colors = NULL,
+                                      show_value_labels = FALSE,
+                                      base_size = 14,
+                                      posthoc_all = NULL,
+                                      share_y_axis = FALSE,
+                                      common_legend = FALSE,
+                                      legend_position = NULL) {
+  context <- initialize_anova_plot_context(data, info, layout_values)
+  data <- context$data
+  factor1 <- context$factor1
+  factor2 <- context$factor2
+
+  allowed_positions <- c("bottom", "top", "left", "right")
+  legend_position_value <- if (!is.null(legend_position) && legend_position %in% allowed_positions) {
+    legend_position
+  } else {
+    "bottom"
+  }
+
+  if (is.null(factor1) || length(context$responses) == 0) {
+    return(NULL)
+  }
+
+  shared_y_limits <- if (isTRUE(share_y_axis)) {
+    compute_barplot_shared_limits(
+      context,
+      data,
+      factor1,
+      factor2,
+      posthoc_all,
+      show_value_labels
+    )
+  } else {
+    NULL
+  }
+
+  base_fill <- if (!is.null(line_colors) && length(line_colors) > 0) {
+    unname(line_colors)[1]
+  } else {
+    "#3E8FC4"
+  }
+  
+  response_plots <- list()
+  strata_panel_count <- context$initial_strata_panels
+  
+  for (resp in context$responses) {
+    posthoc_entry <- NULL
+    if (!is.null(posthoc_all) && !is.null(posthoc_all[[resp]])) {
+      posthoc_entry <- posthoc_all[[resp]]
+    }
+    
+    if (context$has_strata && !is.null(context$strat_var) && context$strat_var %in% names(data)) {
+      stratum_plots <- list()
+      
+      for (stratum in context$strata_levels) {
+        subset_rows <- !is.na(data[[context$strat_var]]) & data[[context$strat_var]] == stratum
+        subset_data <- data[subset_rows, , drop = FALSE]
+        if (nrow(subset_data) == 0) next
+        
+        stats_df <- anova_summarise_stats(subset_data, resp, factor1, factor2)
+        if (nrow(stats_df) == 0) next
+        
+        stats_df <- apply_anova_factor_levels(stats_df, factor1, factor2, context$order1, context$order2)
+        
+        stratum_posthoc <- NULL
+        if (!is.null(posthoc_entry) && !is.null(posthoc_entry[[stratum]])) {
+          stratum_posthoc <- posthoc_entry[[stratum]]
+        }
+        
+        stratum_plots[[stratum]] <- build_bar_plot_panel(
+          stats_df = stats_df,
+          title_text = stratum,
+          factor1 = factor1,
+          factor2 = factor2,
+          line_colors = line_colors,
+          base_fill = base_fill,
+          show_value_labels = show_value_labels,
+          base_size = base_size,
+          posthoc_entry = stratum_posthoc,
+          nested_posthoc = stratum_posthoc,
+          y_limits = shared_y_limits
+        )
+      }
+      
+      if (length(stratum_plots) > 0) {
+        strata_panel_count <- max(strata_panel_count, length(stratum_plots))
+        current_layout <- adjust_grid_layout(length(stratum_plots), context$strata_layout)
+        combined <- patchwork::wrap_plots(
+          plotlist = stratum_plots,
+          nrow = current_layout$nrow,
+          ncol = current_layout$ncol
+        )
+
+        title_plot <- ggplot() +
+          ta_plot_theme_void() +
+          ggtitle(resp) +
+          theme(plot.title = element_text(size = base_size, face = "bold", hjust = 0.5))
+
+        response_plots[[resp]] <- title_plot / combined + patchwork::plot_layout(heights = c(0.08, 1))
+      }
+    } else {
+      stats_df <- anova_summarise_stats(data, resp, factor1, factor2)
+      if (nrow(stats_df) == 0) next
+      
+      stats_df <- apply_anova_factor_levels(stats_df, factor1, factor2, context$order1, context$order2)
+      
+      response_plots[[resp]] <- build_bar_plot_panel(
+        stats_df = stats_df,
+        title_text = resp,
+        factor1 = factor1,
+        factor2 = factor2,
+        line_colors = line_colors,
+        base_fill = base_fill,
+        show_value_labels = show_value_labels,
+        base_size = base_size,
+        posthoc_entry = posthoc_entry,
+        nested_posthoc = posthoc_entry,
+        y_limits = shared_y_limits
+      )
+    }
+  }
+  
+  finalize_anova_plot_result(
+    response_plots = response_plots,
+    context = context,
+    strata_panel_count = strata_panel_count,
+    collect_guides = isTRUE(common_legend),
+    legend_position = if (isTRUE(common_legend)) legend_position_value else NULL
+  )
+}
+
+
+# ---------------------------------------------------------------
+# Low-level utilities
+# ---------------------------------------------------------------
+
+compute_barplot_shared_limits <- function(context,
+                                          data,
+                                          factor1,
+                                          factor2,
+                                          posthoc_all = NULL,
+                                          show_value_labels = FALSE) {
+  combined <- NULL
+
+  for (resp in context$responses) {
+    posthoc_entry <- NULL
+    if (!is.null(posthoc_all) && !is.null(posthoc_all[[resp]])) {
+      posthoc_entry <- posthoc_all[[resp]]
+    }
+
+    if (context$has_strata && !is.null(context$strat_var) && context$strat_var %in% names(data)) {
+      for (stratum in context$strata_levels) {
+        subset_rows <- !is.na(data[[context$strat_var]]) & data[[context$strat_var]] == stratum
+        subset_data <- data[subset_rows, , drop = FALSE]
+        if (nrow(subset_data) == 0) next
+
+        stats_df <- anova_summarise_stats(subset_data, resp, factor1, factor2)
+        if (nrow(stats_df) == 0) next
+        stats_df <- apply_anova_factor_levels(stats_df, factor1, factor2, context$order1, context$order2)
+
+        stratum_posthoc <- NULL
+        if (!is.null(posthoc_entry) && !is.null(posthoc_entry[[stratum]])) {
+          stratum_posthoc <- posthoc_entry[[stratum]]
+        }
+
+        rng <- compute_barplot_panel_range(
+          stats_df, factor1, factor2,
+          posthoc_entry = stratum_posthoc,
+          nested_posthoc = stratum_posthoc
+        )
+        combined <- update_numeric_range(combined, rng)
+      }
+    } else {
+      stats_df <- anova_summarise_stats(data, resp, factor1, factor2)
+      if (nrow(stats_df) == 0) next
+      stats_df <- apply_anova_factor_levels(stats_df, factor1, factor2, context$order1, context$order2)
+
+      rng <- compute_barplot_panel_range(
+        stats_df, factor1, factor2,
+        posthoc_entry = posthoc_entry,
+        nested_posthoc = posthoc_entry
+      )
+      combined <- update_numeric_range(combined, rng)
+    }
+  }
+
+  if (is.null(combined)) return(NULL)
+  upper_padding <- if (isTRUE(show_value_labels)) 0.18 else 0.12
+
+  limits <- expand_axis_limits(combined, lower_mult = 0.05, upper_mult = upper_padding)
+  ensure_barplot_zero_baseline(limits)
+}
+
+compute_barplot_panel_range <- function(stats_df,
+                                        factor1,
+                                        factor2,
+                                        posthoc_entry = NULL,
+                                        nested_posthoc = NULL) {
+  if (is.null(stats_df) || nrow(stats_df) == 0) return(NULL)
+  values <- c(stats_df$mean - stats_df$se, stats_df$mean + stats_df$se)
+  values <- values[is.finite(values)]
+  if (length(values) == 0) return(NULL)
+  rng <- range(values)
+  max_val <- rng[2]
+
+  if (is.null(factor2) || !factor2 %in% names(stats_df)) {
+    prep <- prepare_significance_annotations_data(stats_df, factor1, posthoc_entry)
+  } else {
+    prep <- prepare_nested_significance_annotations_data(stats_df, factor1, factor2, nested_posthoc)
+  }
+
+  if (!is.null(prep) && !is.null(prep$max_y) && is.finite(prep$max_y)) {
+    max_val <- max(max_val, prep$max_y)
+  }
+
+  c(rng[1], max_val)
+}
+
+build_bar_plot_panel <- function(stats_df,
+                                 title_text,
+                                 factor1,
+                                 factor2,
+                                 line_colors,
+                                 base_fill,
+                                 show_value_labels = FALSE,
+                                 base_size = 14,
+                                 posthoc_entry = NULL,
+                                 nested_posthoc = NULL,
+                                 y_limits = NULL) {
+
+  # Compute per-panel limits when not sharing axes so we can always anchor at zero
+  if (is.null(y_limits)) {
+    panel_range <- compute_barplot_panel_range(
+      stats_df,
+      factor1,
+      factor2,
+      posthoc_entry = posthoc_entry,
+      nested_posthoc = nested_posthoc
+    )
+
+    if (!is.null(panel_range)) {
+      y_limits <- expand_axis_limits(panel_range, lower_mult = 0, upper_mult = 0.12)
+      y_limits <- ensure_barplot_zero_baseline(y_limits)
+    }
+  }
+
+  if (is.null(factor2) || !factor2 %in% names(stats_df)) {
+    return(
+      build_single_factor_barplot(
+        stats_df,
+        title_text,
+        factor1,
+        base_fill,
+        show_value_labels,
+        base_size,
+        posthoc_entry,
+        y_limits = y_limits
+      )
+    )
+  }
+
+  build_two_factor_barplot(
+    stats_df,
+    title_text,
+    factor1,
+    factor2,
+    line_colors,
+    base_fill,
+    show_value_labels,
+    base_size,
+    nested_posthoc,
+    y_limits = y_limits
+  )
+}
+
+# ===============================================================
+# 🔹 Helper: Single-factor barplot (one-way ANOVA)
+# ===============================================================
+
+build_single_factor_barplot <- function(stats_df,
+                                        title_text,
+                                        factor1,
+                                        base_fill,
+                                        show_value_labels,
+                                        base_size,
+                                        posthoc_entry,
+                                        y_limits = NULL) {
+  format_numeric_labels <- scales::label_number(accuracy = 0.01, trim = TRUE)
+
+  plot_obj <- ggplot(stats_df, aes(x = !!sym(factor1), y = mean)) +
+    geom_col(fill = base_fill, width = 0.6, alpha = 0.8) +
+    geom_errorbar(
+      aes(ymin = mean - se, ymax = mean + se),
+      width = 0.15,
+      color = "gray40",
+      linewidth = 0.5
+    ) +
+    ta_plot_theme(base_size = base_size) +
+    labs(x = factor1, y = "Mean ± SE", title = title_text) +
+    theme(
+      plot.title = element_text(size = base_size, face = "bold", hjust = 0.5),
+      axis.title.x = element_text(margin = margin(t = 6)),
+      axis.title.y = element_text(margin = margin(r = 6)),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      axis.line = element_line(color = "#9ca3af"),
+      axis.ticks = element_line(color = "#9ca3af")
+    )
+
+  expand_scale <- is.null(y_limits)
+
+  if (isTRUE(show_value_labels)) {
+    plot_obj <- add_bar_value_labels(
+      plot_obj, stats_df, factor1, format_numeric_labels, base_size,
+      expand_scale = expand_scale
+    )
+  }
+
+  if (!is.null(posthoc_entry)) {
+    plot_obj <- add_significance_annotations(
+      plot_obj, stats_df, factor1, posthoc_entry,
+      allow_scale_expansion = expand_scale
+    )
+  }
+
+  if (!is.null(y_limits) && all(is.finite(y_limits))) {
+    plot_obj <- plot_obj + scale_y_continuous(limits = y_limits, expand = expansion(mult = c(0, 0)))
+  }
+
+  plot_obj
+}
+
+# ===============================================================
+# 🔹 Helper: Two-factor grouped barplot (two-way ANOVA)
+# ===============================================================
+
+add_bar_value_labels <- function(plot_obj,
+                                stats_df,
+                                factor1,
+                                format_numeric_labels,
+                                base_size,
+                                expand_scale = TRUE) {
+  label_df <- stats_df |>
+    dplyr::mutate(
+      .se = dplyr::coalesce(se, 0),
+      label_text = format_numeric_labels(mean),
+      label_y = ifelse(mean >= 0, mean + .se, mean - .se),
+      label_vjust = ifelse(mean >= 0, -0.4, 1.2)
+    )
+
+  plot_obj <- plot_obj +
+    geom_text(
+      data = label_df,
+      aes(x = !!sym(factor1), y = label_y, label = label_text, vjust = label_vjust),
+      color = "gray20",
+      size = compute_label_text_size(base_size),
+      fontface = "bold",
+      inherit.aes = FALSE
+    )
+
+  if (isTRUE(expand_scale)) {
+    plot_obj <- plot_obj + scale_y_continuous(expand = expansion(mult = c(0.05, 0.12)))
+  }
+
+  plot_obj
+}
+
+# ===============================================================
+# 🔹 Helper: Add value labels to grouped (two-factor) barplots
+# ===============================================================
+
+build_two_factor_barplot <- function(stats_df,
+                                     title_text,
+                                     factor1,
+                                     factor2,
+                                     line_colors,
+                                     base_fill,
+                                     show_value_labels,
+                                     base_size,
+                                     nested_posthoc = NULL,
+                                     y_limits = NULL) {
+
+  format_numeric_labels <- scales::label_number(accuracy = 0.01, trim = TRUE)
+  
+  group_levels <- if (is.factor(stats_df[[factor2]])) {
+    levels(stats_df[[factor2]])
+  } else {
+    unique(as.character(stats_df[[factor2]]))
+  }
+  group_levels <- group_levels[!is.na(group_levels)]
+  palette <- resolve_palette_for_levels(group_levels, custom = line_colors)
+  dodge <- position_dodge(width = 0.7)
+  
+  plot_obj <- ggplot(stats_df, aes(x = !!sym(factor1), y = mean, fill = !!sym(factor2))) +
+    geom_col(position = dodge, width = 0.6, alpha = 0.85) +
+    geom_errorbar(
+      aes(ymin = mean - se, ymax = mean + se),
+      position = dodge,
+      width = 0.2,
+      color = "gray40",
+      linewidth = 0.5
+    ) +
+    ta_plot_theme(base_size = base_size) +
+    labs(x = factor1, y = "Mean ± SE", fill = factor2, title = title_text) +
+    theme(
+      plot.title = element_text(size = base_size, face = "bold", hjust = 0.5),
+      axis.title.x = element_text(margin = margin(t = 6)),
+      axis.title.y = element_text(margin = margin(r = 6)),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      axis.line = element_line(color = "#9ca3af"),
+      axis.ticks = element_line(color = "#9ca3af")
+    ) +
+    scale_fill_manual(values = palette)
+
+  expand_scale <- is.null(y_limits)
+
+  if (isTRUE(show_value_labels)) {
+    plot_obj <- add_grouped_bar_value_labels(
+      plot_obj, stats_df, factor1, factor2,
+      format_numeric_labels, dodge, base_size,
+      expand_scale = expand_scale
+    )
+  }
+
+  if (!is.null(nested_posthoc)) {
+    plot_obj <- add_nested_significance_annotations(
+      plot_obj, stats_df, factor1, factor2, nested_posthoc,
+      allow_scale_expansion = expand_scale
+    )
+  }
+
+  if (!is.null(y_limits) && all(is.finite(y_limits))) {
+    plot_obj <- plot_obj + scale_y_continuous(limits = y_limits, expand = expansion(mult = c(0, 0)))
+  }
+
+  plot_obj
+}
+
+# ===============================================================
+# 🔹 Helper: Add value labels to single-factor barplots
+# ===============================================================
+
+add_grouped_bar_value_labels <- function(plot_obj,
+                                         stats_df,
+                                         factor1,
+                                         factor2,
+                                         format_numeric_labels,
+                                         dodge,
+                                         base_size,
+                                         expand_scale = TRUE) {
+  label_df <- stats_df |>
+    dplyr::mutate(
+      .se = dplyr::coalesce(se, 0),
+      label_text = format_numeric_labels(mean),
+      label_y = ifelse(mean >= 0, mean + .se, mean - .se),
+      label_vjust = ifelse(mean >= 0, -0.4, 1.2)
+    )
+
+  plot_obj <- plot_obj +
+    geom_text(
+      data = label_df,
+      aes(
+        x = !!sym(factor1),
+        y = label_y,
+        label = label_text,
+        vjust = label_vjust,
+        fill = NULL,
+        group = !!sym(factor2)
+      ),
+      position = dodge,
+      color = "gray20",
+      size = compute_label_text_size(base_size),
+      fontface = "bold",
+      inherit.aes = FALSE
+    )
+
+  if (isTRUE(expand_scale)) {
+    plot_obj <- plot_obj + scale_y_continuous(expand = expansion(mult = c(0.05, 0.12)))
+  }
+
+  plot_obj
+}
+
+# ===============================================================
+# 🔹 Helper: Significance annotation preparation & drawing
+# ===============================================================
+
+#### Section: Lineplot Construction ####
+
+plot_anova_lineplot_meanse <- function(data,
+                                       info,
+                                       layout_values,
+                                       line_colors = NULL,
+                                       base_size = 14,
+                                       show_lines = FALSE,
+                                       show_jitter = FALSE,
+                                       use_dodge = FALSE,
+                                       share_y_axis = FALSE,
+                                       common_legend = FALSE,
+                                       legend_position = NULL) {
+  context <- initialize_anova_plot_context(data, info, layout_values)
+  data <- context$data
+  factor1 <- context$factor1
+  factor2 <- context$factor2
+
+  allowed_positions <- c("bottom", "top", "left", "right")
+  legend_position_value <- if (!is.null(legend_position) && legend_position %in% allowed_positions) {
+    legend_position
+  } else {
+    "bottom"
+  }
+
+  shared_y_limits <- if (isTRUE(share_y_axis)) {
+    compute_lineplot_shared_limits(context, data, factor1, factor2)
+  } else {
+    NULL
+  }
+
+  response_plots <- list()
+  strata_panel_count <- context$initial_strata_panels
+
+  for (resp in context$responses) {
+    if (context$has_strata && !is.null(context$strat_var) && context$strat_var %in% names(data)) {
+      stratum_stats <- list()
+      y_values <- c()
+
+      for (stratum in context$strata_levels) {
+        subset_rows <- !is.na(data[[context$strat_var]]) & data[[context$strat_var]] == stratum
+        subset_data <- data[subset_rows, , drop = FALSE]
+        if (nrow(subset_data) == 0) {
+          next
+        }
+
+        stats_df <- anova_summarise_stats(subset_data, resp, factor1, factor2)
+        if (nrow(stats_df) == 0) {
+          next
+        }
+
+        stats_df <- apply_anova_factor_levels(stats_df, factor1, factor2, context$order1, context$order2)
+        y_values <- c(y_values, stats_df$mean - stats_df$se, stats_df$mean + stats_df$se)
+        stratum_stats[[stratum]] <- list(
+          stats = stats_df,
+          raw = prepare_lineplot_raw_data(subset_data, resp, factor1, factor2)
+        )
+      }
+
+      if (length(stratum_stats) == 0) {
+        next
+      }
+
+      y_limits <- range(y_values, na.rm = TRUE)
+      if (!all(is.finite(y_limits))) {
+        y_limits <- NULL
+      }
+      y_limits_to_use <- if (!is.null(shared_y_limits)) shared_y_limits else y_limits
+
+      strata_panel_count <- max(strata_panel_count, length(stratum_stats))
+
+      strata_plot_list <- lapply(names(stratum_stats), function(stratum_name) {
+        entry <- stratum_stats[[stratum_name]]
+        build_line_plot_panel(
+          stats_df = entry$stats,
+          title_text = stratum_name,
+          y_limits = y_limits_to_use,
+          factor1 = factor1,
+          factor2 = factor2,
+          line_colors = line_colors,
+          base_size = base_size,
+          raw_data = entry$raw,
+          response_var = resp,
+          show_lines = show_lines,
+          show_jitter = show_jitter,
+          use_dodge = use_dodge
+        )
+      })
+
+      current_layout <- adjust_grid_layout(length(stratum_stats), context$strata_layout)
+
+      combined <- patchwork::wrap_plots(
+        plotlist = strata_plot_list,
+        nrow = current_layout$nrow,
+        ncol = current_layout$ncol
+      )
+
+      if (isTRUE(common_legend)) {
+        combined <- collect_guides_safe(combined)
+      }
+
+      title_plot <- ggplot() +
+        ta_plot_theme_void() +
+        ggtitle(resp) +
+        theme(
+          plot.title = element_text(
+            size = base_size,
+            face = "bold",
+            hjust = 0.5
+          ),
+          plot.margin = margin(t = 0, r = 0, b = 6, l = 0)
+        )
+
+      response_plots[[resp]] <- title_plot / combined + plot_layout(heights = c(0.08, 1))
+    } else {
+      stats_df <- anova_summarise_stats(data, resp, factor1, factor2)
+      if (nrow(stats_df) == 0) {
+        next
+      }
+
+      stats_df <- apply_anova_factor_levels(stats_df, factor1, factor2, context$order1, context$order2)
+      y_values <- c(stats_df$mean - stats_df$se, stats_df$mean + stats_df$se)
+      y_limits <- range(y_values, na.rm = TRUE)
+      if (!all(is.finite(y_limits))) {
+        y_limits <- NULL
+      }
+
+      y_limits_to_use <- if (!is.null(shared_y_limits)) shared_y_limits else y_limits
+
+      response_plots[[resp]] <- build_line_plot_panel(
+        stats_df = stats_df,
+        title_text = resp,
+        y_limits = y_limits_to_use,
+        factor1 = factor1,
+        factor2 = factor2,
+        line_colors = line_colors,
+        base_size = base_size,
+        raw_data = prepare_lineplot_raw_data(data, resp, factor1, factor2),
+        response_var = resp,
+        show_lines = show_lines,
+        show_jitter = show_jitter,
+        use_dodge = use_dodge
+      )
+    }
+  }
+
+  finalize_anova_plot_result(
+    response_plots = response_plots,
+    context = context,
+    strata_panel_count = strata_panel_count,
+    collect_guides = isTRUE(common_legend),
+    legend_position = if (isTRUE(common_legend)) legend_position_value else NULL
   )
 }
 
@@ -1211,490 +1882,8 @@ prepare_lineplot_raw_data <- function(df, response_var, factor1, factor2 = NULL)
   raw_subset
 }
 
-update_numeric_range <- function(current_range, values) {
-  values <- values[is.finite(values)]
-  if (length(values) == 0) return(current_range)
-  new_range <- range(values)
-  if (any(!is.finite(new_range))) return(current_range)
-  if (is.null(current_range)) {
-    new_range
-  } else {
-    c(min(current_range[1], new_range[1]), max(current_range[2], new_range[2]))
-  }
-}
+#### Section: Significance Annotation System ####
 
-expand_axis_limits <- function(range_vals, lower_mult = 0.05, upper_mult = 0.12) {
-  if (is.null(range_vals) || length(range_vals) != 2 || any(!is.finite(range_vals))) return(range_vals)
-  span <- diff(range_vals)
-  if (!is.finite(span) || span == 0) {
-    span <- max(1, abs(range_vals[2]))
-  }
-  c(range_vals[1] - span * lower_mult, range_vals[2] + span * upper_mult)
-}
-
-ensure_barplot_zero_baseline <- function(range_vals) {
-  if (is.null(range_vals) || length(range_vals) != 2 || any(!is.finite(range_vals))) {
-    return(range_vals)
-  }
-
-  lower <- range_vals[1]
-  if (is.na(lower)) return(range_vals)
-
-  # Keep barplots anchored at zero to avoid negative baselines when no annotations
-  range_vals[1] <- 0
-  range_vals
-}
-
-compute_lineplot_shared_limits <- function(context, data, factor1, factor2) {
-  combined <- NULL
-
-  for (resp in context$responses) {
-    if (context$has_strata && !is.null(context$strat_var) && context$strat_var %in% names(data)) {
-      for (stratum in context$strata_levels) {
-        subset_rows <- !is.na(data[[context$strat_var]]) & data[[context$strat_var]] == stratum
-        subset_data <- data[subset_rows, , drop = FALSE]
-        if (nrow(subset_data) == 0) next
-
-        stats_df <- anova_summarise_stats(subset_data, resp, factor1, factor2)
-        if (nrow(stats_df) == 0) next
-
-        stats_df <- apply_anova_factor_levels(stats_df, factor1, factor2, context$order1, context$order2)
-        y_values <- c(stats_df$mean - stats_df$se, stats_df$mean + stats_df$se)
-        combined <- update_numeric_range(combined, y_values)
-      }
-    } else {
-      stats_df <- anova_summarise_stats(data, resp, factor1, factor2)
-      if (nrow(stats_df) == 0) next
-      stats_df <- apply_anova_factor_levels(stats_df, factor1, factor2, context$order1, context$order2)
-      y_values <- c(stats_df$mean - stats_df$se, stats_df$mean + stats_df$se)
-      combined <- update_numeric_range(combined, y_values)
-    }
-  }
-
-  if (is.null(combined) || any(!is.finite(combined))) return(NULL)
-  combined
-}
-
-plot_anova_lineplot_meanse <- function(data,
-                                       info,
-                                       layout_values,
-                                       line_colors = NULL,
-                                       base_size = 14,
-                                       show_lines = FALSE,
-                                       show_jitter = FALSE,
-                                       use_dodge = FALSE,
-                                       share_y_axis = FALSE,
-                                       common_legend = FALSE,
-                                       legend_position = NULL) {
-  context <- initialize_anova_plot_context(data, info, layout_values)
-  data <- context$data
-  factor1 <- context$factor1
-  factor2 <- context$factor2
-
-  allowed_positions <- c("bottom", "top", "left", "right")
-  legend_position_value <- if (!is.null(legend_position) && legend_position %in% allowed_positions) {
-    legend_position
-  } else {
-    "bottom"
-  }
-
-  shared_y_limits <- if (isTRUE(share_y_axis)) {
-    compute_lineplot_shared_limits(context, data, factor1, factor2)
-  } else {
-    NULL
-  }
-
-  response_plots <- list()
-  strata_panel_count <- context$initial_strata_panels
-
-  for (resp in context$responses) {
-    if (context$has_strata && !is.null(context$strat_var) && context$strat_var %in% names(data)) {
-      stratum_stats <- list()
-      y_values <- c()
-
-      for (stratum in context$strata_levels) {
-        subset_rows <- !is.na(data[[context$strat_var]]) & data[[context$strat_var]] == stratum
-        subset_data <- data[subset_rows, , drop = FALSE]
-        if (nrow(subset_data) == 0) {
-          next
-        }
-
-        stats_df <- anova_summarise_stats(subset_data, resp, factor1, factor2)
-        if (nrow(stats_df) == 0) {
-          next
-        }
-
-        stats_df <- apply_anova_factor_levels(stats_df, factor1, factor2, context$order1, context$order2)
-        y_values <- c(y_values, stats_df$mean - stats_df$se, stats_df$mean + stats_df$se)
-        stratum_stats[[stratum]] <- list(
-          stats = stats_df,
-          raw = prepare_lineplot_raw_data(subset_data, resp, factor1, factor2)
-        )
-      }
-
-      if (length(stratum_stats) == 0) {
-        next
-      }
-
-      y_limits <- range(y_values, na.rm = TRUE)
-      if (!all(is.finite(y_limits))) {
-        y_limits <- NULL
-      }
-      y_limits_to_use <- if (!is.null(shared_y_limits)) shared_y_limits else y_limits
-
-      strata_panel_count <- max(strata_panel_count, length(stratum_stats))
-
-      strata_plot_list <- lapply(names(stratum_stats), function(stratum_name) {
-        entry <- stratum_stats[[stratum_name]]
-        build_line_plot_panel(
-          stats_df = entry$stats,
-          title_text = stratum_name,
-          y_limits = y_limits_to_use,
-          factor1 = factor1,
-          factor2 = factor2,
-          line_colors = line_colors,
-          base_size = base_size,
-          raw_data = entry$raw,
-          response_var = resp,
-          show_lines = show_lines,
-          show_jitter = show_jitter,
-          use_dodge = use_dodge
-        )
-      })
-
-      current_layout <- adjust_grid_layout(length(stratum_stats), context$strata_layout)
-
-      combined <- patchwork::wrap_plots(
-        plotlist = strata_plot_list,
-        nrow = current_layout$nrow,
-        ncol = current_layout$ncol
-      )
-
-      if (isTRUE(common_legend)) {
-        combined <- collect_guides_safe(combined)
-      }
-
-      title_plot <- ggplot() +
-        ta_plot_theme_void() +
-        ggtitle(resp) +
-        theme(
-          plot.title = element_text(
-            size = base_size,
-            face = "bold",
-            hjust = 0.5
-          ),
-          plot.margin = margin(t = 0, r = 0, b = 6, l = 0)
-        )
-
-      response_plots[[resp]] <- title_plot / combined + plot_layout(heights = c(0.08, 1))
-    } else {
-      stats_df <- anova_summarise_stats(data, resp, factor1, factor2)
-      if (nrow(stats_df) == 0) {
-        next
-      }
-
-      stats_df <- apply_anova_factor_levels(stats_df, factor1, factor2, context$order1, context$order2)
-      y_values <- c(stats_df$mean - stats_df$se, stats_df$mean + stats_df$se)
-      y_limits <- range(y_values, na.rm = TRUE)
-      if (!all(is.finite(y_limits))) {
-        y_limits <- NULL
-      }
-
-      y_limits_to_use <- if (!is.null(shared_y_limits)) shared_y_limits else y_limits
-
-      response_plots[[resp]] <- build_line_plot_panel(
-        stats_df = stats_df,
-        title_text = resp,
-        y_limits = y_limits_to_use,
-        factor1 = factor1,
-        factor2 = factor2,
-        line_colors = line_colors,
-        base_size = base_size,
-        raw_data = prepare_lineplot_raw_data(data, resp, factor1, factor2),
-        response_var = resp,
-        show_lines = show_lines,
-        show_jitter = show_jitter,
-        use_dodge = use_dodge
-      )
-    }
-  }
-
-  finalize_anova_plot_result(
-    response_plots = response_plots,
-    context = context,
-    strata_panel_count = strata_panel_count,
-    collect_guides = isTRUE(common_legend),
-    legend_position = if (isTRUE(common_legend)) legend_position_value else NULL
-  )
-}
-
-build_bar_plot_panel <- function(stats_df,
-                                 title_text,
-                                 factor1,
-                                 factor2,
-                                 line_colors,
-                                 base_fill,
-                                 show_value_labels = FALSE,
-                                 base_size = 14,
-                                 posthoc_entry = NULL,
-                                 nested_posthoc = NULL,
-                                 y_limits = NULL) {
-
-  # Compute per-panel limits when not sharing axes so we can always anchor at zero
-  if (is.null(y_limits)) {
-    panel_range <- compute_barplot_panel_range(
-      stats_df,
-      factor1,
-      factor2,
-      posthoc_entry = posthoc_entry,
-      nested_posthoc = nested_posthoc
-    )
-
-    if (!is.null(panel_range)) {
-      y_limits <- expand_axis_limits(panel_range, lower_mult = 0, upper_mult = 0.12)
-      y_limits <- ensure_barplot_zero_baseline(y_limits)
-    }
-  }
-
-  if (is.null(factor2) || !factor2 %in% names(stats_df)) {
-    return(
-      build_single_factor_barplot(
-        stats_df,
-        title_text,
-        factor1,
-        base_fill,
-        show_value_labels,
-        base_size,
-        posthoc_entry,
-        y_limits = y_limits
-      )
-    )
-  }
-
-  build_two_factor_barplot(
-    stats_df,
-    title_text,
-    factor1,
-    factor2,
-    line_colors,
-    base_fill,
-    show_value_labels,
-    base_size,
-    nested_posthoc,
-    y_limits = y_limits
-  )
-}
-
-# ===============================================================
-# 🔹 Helper: Single-factor barplot (one-way ANOVA)
-# ===============================================================
-build_single_factor_barplot <- function(stats_df,
-                                        title_text,
-                                        factor1,
-                                        base_fill,
-                                        show_value_labels,
-                                        base_size,
-                                        posthoc_entry,
-                                        y_limits = NULL) {
-  format_numeric_labels <- scales::label_number(accuracy = 0.01, trim = TRUE)
-
-  plot_obj <- ggplot(stats_df, aes(x = !!sym(factor1), y = mean)) +
-    geom_col(fill = base_fill, width = 0.6, alpha = 0.8) +
-    geom_errorbar(
-      aes(ymin = mean - se, ymax = mean + se),
-      width = 0.15,
-      color = "gray40",
-      linewidth = 0.5
-    ) +
-    ta_plot_theme(base_size = base_size) +
-    labs(x = factor1, y = "Mean ± SE", title = title_text) +
-    theme(
-      plot.title = element_text(size = base_size, face = "bold", hjust = 0.5),
-      axis.title.x = element_text(margin = margin(t = 6)),
-      axis.title.y = element_text(margin = margin(r = 6)),
-      panel.grid.major = element_blank(),
-      panel.grid.minor = element_blank(),
-      axis.text.x = element_text(angle = 45, hjust = 1),
-      axis.line = element_line(color = "#9ca3af"),
-      axis.ticks = element_line(color = "#9ca3af")
-    )
-
-  expand_scale <- is.null(y_limits)
-
-  if (isTRUE(show_value_labels)) {
-    plot_obj <- add_bar_value_labels(
-      plot_obj, stats_df, factor1, format_numeric_labels, base_size,
-      expand_scale = expand_scale
-    )
-  }
-
-  if (!is.null(posthoc_entry)) {
-    plot_obj <- add_significance_annotations(
-      plot_obj, stats_df, factor1, posthoc_entry,
-      allow_scale_expansion = expand_scale
-    )
-  }
-
-  if (!is.null(y_limits) && all(is.finite(y_limits))) {
-    plot_obj <- plot_obj + scale_y_continuous(limits = y_limits, expand = expansion(mult = c(0, 0)))
-  }
-
-  plot_obj
-}
-
-# ===============================================================
-# 🔹 Helper: Two-factor grouped barplot (two-way ANOVA)
-# ===============================================================
-build_two_factor_barplot <- function(stats_df,
-                                     title_text,
-                                     factor1,
-                                     factor2,
-                                     line_colors,
-                                     base_fill,
-                                     show_value_labels,
-                                     base_size,
-                                     nested_posthoc = NULL,
-                                     y_limits = NULL) {
-
-  format_numeric_labels <- scales::label_number(accuracy = 0.01, trim = TRUE)
-  
-  group_levels <- if (is.factor(stats_df[[factor2]])) {
-    levels(stats_df[[factor2]])
-  } else {
-    unique(as.character(stats_df[[factor2]]))
-  }
-  group_levels <- group_levels[!is.na(group_levels)]
-  palette <- resolve_palette_for_levels(group_levels, custom = line_colors)
-  dodge <- position_dodge(width = 0.7)
-  
-  plot_obj <- ggplot(stats_df, aes(x = !!sym(factor1), y = mean, fill = !!sym(factor2))) +
-    geom_col(position = dodge, width = 0.6, alpha = 0.85) +
-    geom_errorbar(
-      aes(ymin = mean - se, ymax = mean + se),
-      position = dodge,
-      width = 0.2,
-      color = "gray40",
-      linewidth = 0.5
-    ) +
-    ta_plot_theme(base_size = base_size) +
-    labs(x = factor1, y = "Mean ± SE", fill = factor2, title = title_text) +
-    theme(
-      plot.title = element_text(size = base_size, face = "bold", hjust = 0.5),
-      axis.title.x = element_text(margin = margin(t = 6)),
-      axis.title.y = element_text(margin = margin(r = 6)),
-      panel.grid.major = element_blank(),
-      panel.grid.minor = element_blank(),
-      axis.text.x = element_text(angle = 45, hjust = 1),
-      axis.line = element_line(color = "#9ca3af"),
-      axis.ticks = element_line(color = "#9ca3af")
-    ) +
-    scale_fill_manual(values = palette)
-
-  expand_scale <- is.null(y_limits)
-
-  if (isTRUE(show_value_labels)) {
-    plot_obj <- add_grouped_bar_value_labels(
-      plot_obj, stats_df, factor1, factor2,
-      format_numeric_labels, dodge, base_size,
-      expand_scale = expand_scale
-    )
-  }
-
-  if (!is.null(nested_posthoc)) {
-    plot_obj <- add_nested_significance_annotations(
-      plot_obj, stats_df, factor1, factor2, nested_posthoc,
-      allow_scale_expansion = expand_scale
-    )
-  }
-
-  if (!is.null(y_limits) && all(is.finite(y_limits))) {
-    plot_obj <- plot_obj + scale_y_continuous(limits = y_limits, expand = expansion(mult = c(0, 0)))
-  }
-
-  plot_obj
-}
-
-# ===============================================================
-# 🔹 Helper: Add value labels to single-factor barplots
-# ===============================================================
-add_bar_value_labels <- function(plot_obj,
-                                stats_df,
-                                factor1,
-                                format_numeric_labels,
-                                base_size,
-                                expand_scale = TRUE) {
-  label_df <- stats_df |>
-    dplyr::mutate(
-      .se = dplyr::coalesce(se, 0),
-      label_text = format_numeric_labels(mean),
-      label_y = ifelse(mean >= 0, mean + .se, mean - .se),
-      label_vjust = ifelse(mean >= 0, -0.4, 1.2)
-    )
-
-  plot_obj <- plot_obj +
-    geom_text(
-      data = label_df,
-      aes(x = !!sym(factor1), y = label_y, label = label_text, vjust = label_vjust),
-      color = "gray20",
-      size = compute_label_text_size(base_size),
-      fontface = "bold",
-      inherit.aes = FALSE
-    )
-
-  if (isTRUE(expand_scale)) {
-    plot_obj <- plot_obj + scale_y_continuous(expand = expansion(mult = c(0.05, 0.12)))
-  }
-
-  plot_obj
-}
-
-# ===============================================================
-# 🔹 Helper: Add value labels to grouped (two-factor) barplots
-# ===============================================================
-add_grouped_bar_value_labels <- function(plot_obj,
-                                         stats_df,
-                                         factor1,
-                                         factor2,
-                                         format_numeric_labels,
-                                         dodge,
-                                         base_size,
-                                         expand_scale = TRUE) {
-  label_df <- stats_df |>
-    dplyr::mutate(
-      .se = dplyr::coalesce(se, 0),
-      label_text = format_numeric_labels(mean),
-      label_y = ifelse(mean >= 0, mean + .se, mean - .se),
-      label_vjust = ifelse(mean >= 0, -0.4, 1.2)
-    )
-
-  plot_obj <- plot_obj +
-    geom_text(
-      data = label_df,
-      aes(
-        x = !!sym(factor1),
-        y = label_y,
-        label = label_text,
-        vjust = label_vjust,
-        fill = NULL,
-        group = !!sym(factor2)
-      ),
-      position = dodge,
-      color = "gray20",
-      size = compute_label_text_size(base_size),
-      fontface = "bold",
-      inherit.aes = FALSE
-    )
-
-  if (isTRUE(expand_scale)) {
-    plot_obj <- plot_obj + scale_y_continuous(expand = expansion(mult = c(0.05, 0.12)))
-  }
-
-  plot_obj
-}
-
-# ===============================================================
-# 🔹 Helper: Significance annotation preparation & drawing
-# ===============================================================
 prepare_significance_annotations_data <- function(stats_df, factor1, posthoc_entry) {
   if (is.null(posthoc_entry) || !is.data.frame(posthoc_entry)) return(NULL)
 
@@ -1763,7 +1952,6 @@ add_significance_annotations <- function(plot_obj,
 
   plot_obj
 }
-
 
 prepare_nested_significance_annotations_data <- function(stats_df,
                                                          factor1,
@@ -1894,226 +2082,42 @@ add_nested_significance_annotations <- function(plot_obj,
   plot_obj
 }
 
-compute_barplot_panel_range <- function(stats_df,
-                                        factor1,
-                                        factor2,
-                                        posthoc_entry = NULL,
-                                        nested_posthoc = NULL) {
-  if (is.null(stats_df) || nrow(stats_df) == 0) return(NULL)
-  values <- c(stats_df$mean - stats_df$se, stats_df$mean + stats_df$se)
+#### Section: Utility Helpers ####
+
+update_numeric_range <- function(current_range, values) {
   values <- values[is.finite(values)]
-  if (length(values) == 0) return(NULL)
-  rng <- range(values)
-  max_val <- rng[2]
-
-  if (is.null(factor2) || !factor2 %in% names(stats_df)) {
-    prep <- prepare_significance_annotations_data(stats_df, factor1, posthoc_entry)
+  if (length(values) == 0) return(current_range)
+  new_range <- range(values)
+  if (any(!is.finite(new_range))) return(current_range)
+  if (is.null(current_range)) {
+    new_range
   } else {
-    prep <- prepare_nested_significance_annotations_data(stats_df, factor1, factor2, nested_posthoc)
+    c(min(current_range[1], new_range[1]), max(current_range[2], new_range[2]))
   }
-
-  if (!is.null(prep) && !is.null(prep$max_y) && is.finite(prep$max_y)) {
-    max_val <- max(max_val, prep$max_y)
-  }
-
-  c(rng[1], max_val)
 }
 
-compute_barplot_shared_limits <- function(context,
-                                          data,
-                                          factor1,
-                                          factor2,
-                                          posthoc_all = NULL,
-                                          show_value_labels = FALSE) {
-  combined <- NULL
-
-  for (resp in context$responses) {
-    posthoc_entry <- NULL
-    if (!is.null(posthoc_all) && !is.null(posthoc_all[[resp]])) {
-      posthoc_entry <- posthoc_all[[resp]]
-    }
-
-    if (context$has_strata && !is.null(context$strat_var) && context$strat_var %in% names(data)) {
-      for (stratum in context$strata_levels) {
-        subset_rows <- !is.na(data[[context$strat_var]]) & data[[context$strat_var]] == stratum
-        subset_data <- data[subset_rows, , drop = FALSE]
-        if (nrow(subset_data) == 0) next
-
-        stats_df <- anova_summarise_stats(subset_data, resp, factor1, factor2)
-        if (nrow(stats_df) == 0) next
-        stats_df <- apply_anova_factor_levels(stats_df, factor1, factor2, context$order1, context$order2)
-
-        stratum_posthoc <- NULL
-        if (!is.null(posthoc_entry) && !is.null(posthoc_entry[[stratum]])) {
-          stratum_posthoc <- posthoc_entry[[stratum]]
-        }
-
-        rng <- compute_barplot_panel_range(
-          stats_df, factor1, factor2,
-          posthoc_entry = stratum_posthoc,
-          nested_posthoc = stratum_posthoc
-        )
-        combined <- update_numeric_range(combined, rng)
-      }
-    } else {
-      stats_df <- anova_summarise_stats(data, resp, factor1, factor2)
-      if (nrow(stats_df) == 0) next
-      stats_df <- apply_anova_factor_levels(stats_df, factor1, factor2, context$order1, context$order2)
-
-      rng <- compute_barplot_panel_range(
-        stats_df, factor1, factor2,
-        posthoc_entry = posthoc_entry,
-        nested_posthoc = posthoc_entry
-      )
-      combined <- update_numeric_range(combined, rng)
-    }
+expand_axis_limits <- function(range_vals, lower_mult = 0.05, upper_mult = 0.12) {
+  if (is.null(range_vals) || length(range_vals) != 2 || any(!is.finite(range_vals))) return(range_vals)
+  span <- diff(range_vals)
+  if (!is.finite(span) || span == 0) {
+    span <- max(1, abs(range_vals[2]))
   }
-
-  if (is.null(combined)) return(NULL)
-  upper_padding <- if (isTRUE(show_value_labels)) 0.18 else 0.12
-
-  limits <- expand_axis_limits(combined, lower_mult = 0.05, upper_mult = upper_padding)
-  ensure_barplot_zero_baseline(limits)
+  c(range_vals[1] - span * lower_mult, range_vals[2] + span * upper_mult)
 }
 
-plot_anova_barplot_meanse <- function(data,
-                                      info,
-                                      layout_values = list(),
-                                      line_colors = NULL,
-                                      show_value_labels = FALSE,
-                                      base_size = 14,
-                                      posthoc_all = NULL,
-                                      share_y_axis = FALSE,
-                                      common_legend = FALSE,
-                                      legend_position = NULL) {
-  context <- initialize_anova_plot_context(data, info, layout_values)
-  data <- context$data
-  factor1 <- context$factor1
-  factor2 <- context$factor2
-
-  allowed_positions <- c("bottom", "top", "left", "right")
-  legend_position_value <- if (!is.null(legend_position) && legend_position %in% allowed_positions) {
-    legend_position
-  } else {
-    "bottom"
+ensure_barplot_zero_baseline <- function(range_vals) {
+  if (is.null(range_vals) || length(range_vals) != 2 || any(!is.finite(range_vals))) {
+    return(range_vals)
   }
 
-  if (is.null(factor1) || length(context$responses) == 0) {
-    return(NULL)
-  }
+  lower <- range_vals[1]
+  if (is.na(lower)) return(range_vals)
 
-  shared_y_limits <- if (isTRUE(share_y_axis)) {
-    compute_barplot_shared_limits(
-      context,
-      data,
-      factor1,
-      factor2,
-      posthoc_all,
-      show_value_labels
-    )
-  } else {
-    NULL
-  }
-
-  base_fill <- if (!is.null(line_colors) && length(line_colors) > 0) {
-    unname(line_colors)[1]
-  } else {
-    "#3E8FC4"
-  }
-  
-  response_plots <- list()
-  strata_panel_count <- context$initial_strata_panels
-  
-  for (resp in context$responses) {
-    posthoc_entry <- NULL
-    if (!is.null(posthoc_all) && !is.null(posthoc_all[[resp]])) {
-      posthoc_entry <- posthoc_all[[resp]]
-    }
-    
-    if (context$has_strata && !is.null(context$strat_var) && context$strat_var %in% names(data)) {
-      stratum_plots <- list()
-      
-      for (stratum in context$strata_levels) {
-        subset_rows <- !is.na(data[[context$strat_var]]) & data[[context$strat_var]] == stratum
-        subset_data <- data[subset_rows, , drop = FALSE]
-        if (nrow(subset_data) == 0) next
-        
-        stats_df <- anova_summarise_stats(subset_data, resp, factor1, factor2)
-        if (nrow(stats_df) == 0) next
-        
-        stats_df <- apply_anova_factor_levels(stats_df, factor1, factor2, context$order1, context$order2)
-        
-        stratum_posthoc <- NULL
-        if (!is.null(posthoc_entry) && !is.null(posthoc_entry[[stratum]])) {
-          stratum_posthoc <- posthoc_entry[[stratum]]
-        }
-        
-        stratum_plots[[stratum]] <- build_bar_plot_panel(
-          stats_df = stats_df,
-          title_text = stratum,
-          factor1 = factor1,
-          factor2 = factor2,
-          line_colors = line_colors,
-          base_fill = base_fill,
-          show_value_labels = show_value_labels,
-          base_size = base_size,
-          posthoc_entry = stratum_posthoc,
-          nested_posthoc = stratum_posthoc,
-          y_limits = shared_y_limits
-        )
-      }
-      
-      if (length(stratum_plots) > 0) {
-        strata_panel_count <- max(strata_panel_count, length(stratum_plots))
-        current_layout <- adjust_grid_layout(length(stratum_plots), context$strata_layout)
-        combined <- patchwork::wrap_plots(
-          plotlist = stratum_plots,
-          nrow = current_layout$nrow,
-          ncol = current_layout$ncol
-        )
-
-        title_plot <- ggplot() +
-          ta_plot_theme_void() +
-          ggtitle(resp) +
-          theme(plot.title = element_text(size = base_size, face = "bold", hjust = 0.5))
-
-        response_plots[[resp]] <- title_plot / combined + patchwork::plot_layout(heights = c(0.08, 1))
-      }
-    } else {
-      stats_df <- anova_summarise_stats(data, resp, factor1, factor2)
-      if (nrow(stats_df) == 0) next
-      
-      stats_df <- apply_anova_factor_levels(stats_df, factor1, factor2, context$order1, context$order2)
-      
-      response_plots[[resp]] <- build_bar_plot_panel(
-        stats_df = stats_df,
-        title_text = resp,
-        factor1 = factor1,
-        factor2 = factor2,
-        line_colors = line_colors,
-        base_fill = base_fill,
-        show_value_labels = show_value_labels,
-        base_size = base_size,
-        posthoc_entry = posthoc_entry,
-        nested_posthoc = posthoc_entry,
-        y_limits = shared_y_limits
-      )
-    }
-  }
-  
-  finalize_anova_plot_result(
-    response_plots = response_plots,
-    context = context,
-    strata_panel_count = strata_panel_count,
-    collect_guides = isTRUE(common_legend),
-    legend_position = if (isTRUE(common_legend)) legend_position_value else NULL
-  )
+  # Keep barplots anchored at zero to avoid negative baselines when no annotations
+  range_vals[1] <- 0
+  range_vals
 }
 
-
-# ---------------------------------------------------------------
-# Low-level utilities
-# ---------------------------------------------------------------
 sanitize_name <- function(name) {
   safe <- gsub("[^A-Za-z0-9]+", "_", name)
   safe <- gsub("_+", "_", safe)
@@ -2122,3 +2126,13 @@ sanitize_name <- function(name) {
   safe
 }
 
+anova_protect_vars <- function(vars) {
+  if (is.null(vars) || length(vars) == 0) return(vars)
+
+  vals <- vapply(vars, function(v) {
+    if (is.null(v) || is.na(v) || !nzchar(v)) return("")
+    if (grepl("^`.*`$", v)) v else paste0("`", v, "`")
+  }, character(1))
+
+  vals[nzchar(vals)]
+}
