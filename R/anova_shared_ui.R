@@ -172,6 +172,14 @@ bind_single_model_outputs <- function(output, summary_id, download_id,
   )
 }
 
+sanitize_name <- function(name) {
+  safe <- gsub("[^A-Za-z0-9]+", "_", name)
+  safe <- gsub("_+", "_", safe)
+  safe <- gsub("^_|_$", "", safe)
+  if (!nzchar(safe)) safe <- "unnamed"
+  safe
+}
+
 print_anova_summary_and_posthoc <- function(model_entry, factors) {
   if (is.null(model_entry) || (is.list(model_entry) && is.null(model_entry$model))) {
     cat("Model is not available.\n")

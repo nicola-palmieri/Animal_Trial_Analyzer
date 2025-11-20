@@ -184,6 +184,22 @@ compute_lineplot_shared_limits <- function(context, data, factor1, factor2) {
 }
 
 
+prepare_lineplot_raw_data <- function(df, response_var, factor1, factor2 = NULL) {
+  if (is.null(df) || is.null(response_var) || is.null(factor1)) return(NULL)
+  if (!response_var %in% names(df) || !factor1 %in% names(df)) return(NULL)
+  
+  cols <- c(factor1, factor2, response_var)
+  cols <- cols[!vapply(cols, is.null, FUN.VALUE = logical(1), USE.NAMES = FALSE)]
+  cols <- unique(cols)
+  cols <- cols[cols %in% names(df)]
+  if (!response_var %in% cols || !factor1 %in% cols) return(NULL)
+  
+  raw_subset <- df[, cols, drop = FALSE]
+  raw_subset <- raw_subset[!is.na(raw_subset[[response_var]]), , drop = FALSE]
+  if (nrow(raw_subset) == 0) return(NULL)
+  raw_subset
+}
+
 
 build_line_plot_panel <- function(stats_df,
                                   title_text,
@@ -340,21 +356,6 @@ build_line_plot_panel <- function(stats_df,
     )
 }
 
-prepare_lineplot_raw_data <- function(df, response_var, factor1, factor2 = NULL) {
-  if (is.null(df) || is.null(response_var) || is.null(factor1)) return(NULL)
-  if (!response_var %in% names(df) || !factor1 %in% names(df)) return(NULL)
-
-  cols <- c(factor1, factor2, response_var)
-  cols <- cols[!vapply(cols, is.null, FUN.VALUE = logical(1), USE.NAMES = FALSE)]
-  cols <- unique(cols)
-  cols <- cols[cols %in% names(df)]
-  if (!response_var %in% cols || !factor1 %in% cols) return(NULL)
-
-  raw_subset <- df[, cols, drop = FALSE]
-  raw_subset <- raw_subset[!is.na(raw_subset[[response_var]]), , drop = FALSE]
-  if (nrow(raw_subset) == 0) return(NULL)
-  raw_subset
-}
 
 
 

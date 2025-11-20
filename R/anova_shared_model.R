@@ -23,15 +23,7 @@ prepare_stratified_anova <- function(
     }
   }
 
-  set_factor_levels <- function(data, var, levels = NULL, default_factor = FALSE) {
-    if (is.null(var) || !var %in% names(data)) return(data)
-    if (!is.null(levels)) {
-      data[[var]] <- factor(as.character(data[[var]]), levels = levels)
-    } else if (default_factor) {
-      data[[var]] <- as.factor(as.character(data[[var]]))
-    }
-    data
-  }
+  
 
   df <- df |>
     set_factor_levels(factor1_var, factor1_order) |>
@@ -62,17 +54,6 @@ prepare_stratified_anova <- function(
   build_formula <- function(resp) stats::as.formula(paste(anova_protect_vars(resp), "~", rhs))
   safe_fit <- purrr::safely(function(fml, data) stats::aov(fml, data = data))
 
-  fit_models_for_data <- function(data) {
-    lapply(responses, function(resp) {
-      fit_result <- safe_fit(build_formula(resp), data)
-      list(
-        model = fit_result$result,
-        error = if (!is.null(fit_result$error)) conditionMessage(fit_result$error) else NULL
-      )
-    }) |>
-      stats::setNames(responses)
-  }
-
   base_info <- list(
     type = model,
     responses = responses,
@@ -82,36 +63,47 @@ prepare_stratified_anova <- function(
   )
 
   if (is.null(strata)) {
-    return(c(base_info, list(models = fit_models_for_data(df), strata = NULL)))
+    return(c(base_info, list(models = fit_models_for_data(df, responses, build_formula, safe_fit), strata = NULL)))
   }
 
   models <- lapply(strata, function(s) {
     subset_rows <- df[[stratify_var]] == s & !is.na(df[[stratify_var]])
-    fit_models_for_data(df[subset_rows, , drop = FALSE])
+    fit_models_for_data(df[subset_rows, , drop=FALSE], responses, build_formula, safe_fit)
   })
   names(models) <- strata
 
   c(base_info, list(models = models, strata = list(var = stratify_var, levels = strata)))
 }
 
+
+set_factor_levels <- function(data, var, levels = NULL, default_factor = FALSE) {
+  if (is.null(var) || !var %in% names(data)) return(data)
+  if (!is.null(levels)) {
+    data[[var]] <- factor(as.character(data[[var]]), levels = levels)
+  } else if (default_factor) {
+    data[[var]] <- as.factor(as.character(data[[var]]))
+  }
+  data
+}
+
+
+fit_models_for_data <- function(data, responses, build_formula, safe_fit) {
+  lapply(responses, function(resp) {
+    fit_result <- safe_fit(build_formula(resp), data)
+    list(
+      model = fit_result$result,
+      error = if (!is.null(fit_result$error)) conditionMessage(fit_result$error) else NULL
+    )
+  }) |>
+    stats::setNames(responses)
+}
+
+
 compile_anova_results <- function(model_info) {
   if (is.null(model_info) || is.null(model_info$models)) return(NULL)
 
   factor_names <- unlist(model_info$factors)
   factor_names <- factor_names[!is.na(factor_names) & nzchar(factor_names)]
-
-  build_effects <- function(outputs) {
-    if (is.null(outputs) || is.null(outputs$anova_table)) return(NULL)
-    effects <- data.frame(
-      Effect = outputs$anova_table$Effect,
-      significant = outputs$anova_significant,
-      stringsAsFactors = FALSE
-    )
-    if ("p.value" %in% names(outputs$anova_table)) {
-      effects$p.value <- outputs$anova_table$p.value
-    }
-    effects
-  }
 
   if (is.null(model_info$strata)) {
     summary_list <- list()
@@ -204,7 +196,16 @@ compile_anova_results <- function(model_info) {
   )
 }
 
-#### Output composition ####
 
-#### Section: ANOVA Output Processing ####
-
+build_effects <- function(outputs) {
+  if (is.null(outputs) || is.null(outputs$anova_table)) return(NULL)
+  effects <- data.frame(
+    Effect = outputs$anova_table$Effect,
+    significant = outputs$anova_significant,
+    stringsAsFactors = FALSE
+  )
+  if ("p.value" %in% names(outputs$anova_table)) {
+    effects$p.value <- outputs$anova_table$p.value
+  }
+  effects
+}

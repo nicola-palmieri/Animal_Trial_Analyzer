@@ -64,103 +64,16 @@ parse_anova_layout_inputs <- function(layout_values) {
   )
 }
 
-finalize_anova_plot_result <- function(response_plots,
-                                       context,
-                                       strata_panel_count,
-                                       collect_guides = FALSE,
-                                       legend_position = NULL) {
-  if (length(response_plots) == 0) {
-    return(NULL)
-  }
-
-  has_strata <- context$has_strata
-  strata_layout <- context$strata_layout
-
-  if (has_strata && strata_panel_count == 0L) {
-    strata_panel_count <- context$n_expected_strata
-  }
-
-  if (has_strata) {
-    strata_layout <- adjust_grid_layout(max(1L, strata_panel_count), strata_layout)
-  }
-
-  response_defaults <- compute_default_grid(length(response_plots))
-  response_layout <- basic_grid_layout(
-    rows = context$layout_input$resp_rows,
-    cols = context$layout_input$resp_cols,
-    default_rows = response_defaults$rows,
-    default_cols = response_defaults$cols
-  )
-  response_layout <- adjust_grid_layout(length(response_plots), response_layout)
-
-  strata_validation <- if (has_strata) {
-    validate_grid(max(1L, strata_panel_count), strata_layout$nrow, strata_layout$ncol)
+update_numeric_range <- function(current_range, values) {
+  values <- values[is.finite(values)]
+  if (length(values) == 0) return(current_range)
+  new_range <- range(values)
+  if (any(!is.finite(new_range))) return(current_range)
+  if (is.null(current_range)) {
+    new_range
   } else {
-    list(valid = TRUE, message = NULL)
+    c(min(current_range[1], new_range[1]), max(current_range[2], new_range[2]))
   }
-
-  response_validation <- validate_grid(
-    length(response_plots),
-    response_layout$nrow,
-    response_layout$ncol
-  )
-
-  warnings <- c()
-  if (has_strata && !strata_validation$valid && !is.null(strata_validation$message)) {
-    warnings <- c(warnings, strata_validation$message)
-  }
-  if (!response_validation$valid && !is.null(response_validation$message)) {
-    warnings <- c(warnings, response_validation$message)
-  }
-  warning_text <- if (length(warnings) > 0) paste(warnings, collapse = "<br/>") else NULL
-
-  panel_counts <- list(
-    strata = if (has_strata) max(1L, strata_panel_count) else 1L,
-    responses = length(response_plots)
-  )
-
-  final_plot <- NULL
-  if (is.null(warning_text)) {
-    if (length(response_plots) == 1) {
-      final_plot <- response_plots[[1]]
-      if (collect_guides && !is.null(legend_position)) {
-        final_plot <- final_plot & theme(legend.position = legend_position)
-      }
-    } else {
-      final_plot <- patchwork::wrap_plots(
-        plotlist = response_plots,
-        nrow = response_layout$nrow,
-        ncol = response_layout$ncol
-      )
-    }
-    if (collect_guides || !is.null(legend_position)) {
-      final_plot <- apply_common_legend_layout(
-        final_plot,
-        legend_position = legend_position,
-        collect_guides = collect_guides
-      )
-    }
-  }
-
-  list(
-    plot = final_plot,
-    layout = list(
-      strata = list(
-        rows = if (has_strata) strata_layout$nrow else 1L,
-        cols = if (has_strata) strata_layout$ncol else 1L
-      ),
-      responses = list(
-        rows = response_layout$nrow,
-        cols = response_layout$ncol
-      )
-    ),
-    warning = warning_text,
-    panel_counts = panel_counts,
-    defaults = list(
-      strata = context$strata_defaults,
-      responses = response_defaults
-    )
-  )
 }
 
 apply_common_legend_layout <- function(plot_obj,
@@ -209,3 +122,101 @@ add_theme_to_plot <- function(plot_obj, theme_obj) {
 }
 
 
+finalize_anova_plot_result <- function(response_plots,
+                                       context,
+                                       strata_panel_count,
+                                       collect_guides = FALSE,
+                                       legend_position = NULL) {
+  if (length(response_plots) == 0) {
+    return(NULL)
+  }
+  
+  has_strata <- context$has_strata
+  strata_layout <- context$strata_layout
+  
+  if (has_strata && strata_panel_count == 0L) {
+    strata_panel_count <- context$n_expected_strata
+  }
+  
+  if (has_strata) {
+    strata_layout <- adjust_grid_layout(max(1L, strata_panel_count), strata_layout)
+  }
+  
+  response_defaults <- compute_default_grid(length(response_plots))
+  response_layout <- basic_grid_layout(
+    rows = context$layout_input$resp_rows,
+    cols = context$layout_input$resp_cols,
+    default_rows = response_defaults$rows,
+    default_cols = response_defaults$cols
+  )
+  response_layout <- adjust_grid_layout(length(response_plots), response_layout)
+  
+  strata_validation <- if (has_strata) {
+    validate_grid(max(1L, strata_panel_count), strata_layout$nrow, strata_layout$ncol)
+  } else {
+    list(valid = TRUE, message = NULL)
+  }
+  
+  response_validation <- validate_grid(
+    length(response_plots),
+    response_layout$nrow,
+    response_layout$ncol
+  )
+  
+  warnings <- c()
+  if (has_strata && !strata_validation$valid && !is.null(strata_validation$message)) {
+    warnings <- c(warnings, strata_validation$message)
+  }
+  if (!response_validation$valid && !is.null(response_validation$message)) {
+    warnings <- c(warnings, response_validation$message)
+  }
+  warning_text <- if (length(warnings) > 0) paste(warnings, collapse = "<br/>") else NULL
+  
+  panel_counts <- list(
+    strata = if (has_strata) max(1L, strata_panel_count) else 1L,
+    responses = length(response_plots)
+  )
+  
+  final_plot <- NULL
+  if (is.null(warning_text)) {
+    if (length(response_plots) == 1) {
+      final_plot <- response_plots[[1]]
+      if (collect_guides && !is.null(legend_position)) {
+        final_plot <- final_plot & theme(legend.position = legend_position)
+      }
+    } else {
+      final_plot <- patchwork::wrap_plots(
+        plotlist = response_plots,
+        nrow = response_layout$nrow,
+        ncol = response_layout$ncol
+      )
+    }
+    if (collect_guides || !is.null(legend_position)) {
+      final_plot <- apply_common_legend_layout(
+        final_plot,
+        legend_position = legend_position,
+        collect_guides = collect_guides
+      )
+    }
+  }
+  
+  list(
+    plot = final_plot,
+    layout = list(
+      strata = list(
+        rows = if (has_strata) strata_layout$nrow else 1L,
+        cols = if (has_strata) strata_layout$ncol else 1L
+      ),
+      responses = list(
+        rows = response_layout$nrow,
+        cols = response_layout$ncol
+      )
+    ),
+    warning = warning_text,
+    panel_counts = panel_counts,
+    defaults = list(
+      strata = context$strata_defaults,
+      responses = response_defaults
+    )
+  )
+}

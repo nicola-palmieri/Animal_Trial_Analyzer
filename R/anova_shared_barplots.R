@@ -216,6 +216,31 @@ compute_barplot_panel_range <- function(stats_df,
   c(rng[1], max_val)
 }
 
+
+expand_axis_limits <- function(range_vals, lower_mult = 0.05, upper_mult = 0.12) {
+  if (is.null(range_vals) || length(range_vals) != 2 || any(!is.finite(range_vals))) return(range_vals)
+  span <- diff(range_vals)
+  if (!is.finite(span) || span == 0) {
+    span <- max(1, abs(range_vals[2]))
+  }
+  c(range_vals[1] - span * lower_mult, range_vals[2] + span * upper_mult)
+}
+
+
+ensure_barplot_zero_baseline <- function(range_vals) {
+  if (is.null(range_vals) || length(range_vals) != 2 || any(!is.finite(range_vals))) {
+    return(range_vals)
+  }
+  
+  lower <- range_vals[1]
+  if (is.na(lower)) return(range_vals)
+  
+  # Keep barplots anchored at zero to avoid negative baselines when no annotations
+  range_vals[1] <- 0
+  range_vals
+}
+
+
 build_bar_plot_panel <- function(stats_df,
                                  title_text,
                                  factor1,
