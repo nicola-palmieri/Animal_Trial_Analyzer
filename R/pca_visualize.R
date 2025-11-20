@@ -59,21 +59,11 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
         "Pick how the PCA results should be displayed."
       ),
       with_help_tooltip(
-        selectInput(
-          ns("pca_color"),
-          label = "Color points by",
-          choices = all_choices,
-          selected = "None"
-        ),
+        uiOutput(ns("pca_color_ui")),
         "Colour the samples using a grouping variable to spot patterns. Variables with more than 10 categories are not allowed."
       ),
       with_help_tooltip(
-        selectInput(
-          ns("pca_shape"),
-          label = "Shape points by",
-          choices = all_choices,
-          selected = "None"
-        ),
+        uiOutput(ns("pca_shape_ui")),
         "Change the point shapes using a grouping variable for extra contrast. Variables with more than 10 categories are not allowed."
       ),
       with_help_tooltip(
@@ -267,6 +257,69 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
       default = 14
     )
 
+    max_levels <- if (exists("MAX_STRATIFICATION_LEVELS")) MAX_STRATIFICATION_LEVELS else 10L
+
+    level_check <- function(var) {
+      if (is.null(var) || identical(var, "None") || !nzchar(var)) {
+        return(list(levels = NULL, valid = TRUE, message = NULL))
+      }
+
+      data <- color_data()
+      if (is.null(data) || !is.data.frame(data) || !var %in% names(data)) {
+        return(list(levels = NULL, valid = TRUE, message = NULL))
+      }
+
+      column <- data[[var]]
+      values <- if (is.factor(column)) {
+        levels(base::droplevels(column))
+      } else {
+        unique(as.character(column[!is.na(column)]))
+      }
+
+      values <- values[!is.na(values) & nzchar(values)]
+      n_levels <- length(values)
+
+      list(
+        levels = values,
+        valid = n_levels <= max_levels,
+        message = if (n_levels > max_levels) sprintf("'%s' has too many levels (%d > %d).", var, n_levels, max_levels) else NULL
+      )
+    }
+
+    output$pca_color_ui <- renderUI({
+      choices <- available_choices_all()
+      pool <- unname(choices)
+      selected <- if (!is.null(input$pca_color) && input$pca_color %in% pool) input$pca_color else "None"
+      check <- level_check(selected)
+
+      tagList(
+        selectInput(
+          ns("pca_color"),
+          label = "Color points by",
+          choices = choices,
+          selected = selected
+        ),
+        if (!is.null(check$message)) div(class = "text-danger small", check$message)
+      )
+    })
+
+    output$pca_shape_ui <- renderUI({
+      choices <- available_choices_all()
+      pool <- unname(choices)
+      selected <- if (!is.null(input$pca_shape) && input$pca_shape %in% pool) input$pca_shape else "None"
+      check <- level_check(selected)
+
+      tagList(
+        selectInput(
+          ns("pca_shape"),
+          label = "Shape points by",
+          choices = choices,
+          selected = selected
+        ),
+        if (!is.null(check$message)) div(class = "text-danger small", check$message)
+      )
+    })
+
     facet_grid_inputs <- plot_grid_server("facet_grid")
 
     observeEvent(available_choices_all(), {
@@ -278,8 +331,6 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
         updateSelectInput(session, id, choices = choices, selected = selected)
       }
 
-      update_input("pca_color", input$pca_color, all_choices)
-      update_input("pca_shape", input$pca_shape, all_choices)
       update_input("pca_label", input$pca_label, all_choices)
       update_input("facet_var", input$facet_var, all_choices)
     }, ignoreNULL = FALSE)
@@ -435,8 +486,11 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
         list(`No data` = integer())
       }
 
-      color_levels <- validate_levels(color_var)
-      validate_levels(shape_var)
+      color_check <- level_check(color_var)
+      shape_check <- level_check(shape_var)
+
+      validate(need(color_check$valid, color_check$message))
+      validate(need(shape_check$valid, shape_check$message))
 
       scores <- as.data.frame(entry$model$x[, 1:2, drop = FALSE])
       names(scores)[1:2] <- c("PC1", "PC2")
