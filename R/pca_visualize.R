@@ -42,7 +42,6 @@
 visualize_pca_ui <- function(id, filtered_data = NULL) {
   ns <- NS(id)
   all_choices <- .pca_aesthetic_choices(filtered_data)
-  limited_choices <- .pca_aesthetic_choices(filtered_data, max_levels = 16L)
 
   sidebarLayout(
     sidebarPanel(
@@ -63,19 +62,19 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
         selectInput(
           ns("pca_color"),
           label = "Color points by",
-          choices = limited_choices,
+          choices = all_choices,
           selected = "None"
         ),
-        "Colour the samples using a grouping variable to spot patterns. Only variables with 16 or fewer categories are available."
+        "Colour the samples using a grouping variable to spot patterns. Variables with more than 10 categories are not allowed."
       ),
       with_help_tooltip(
         selectInput(
           ns("pca_shape"),
           label = "Shape points by",
-          choices = limited_choices,
+          choices = all_choices,
           selected = "None"
         ),
-        "Change the point shapes using a grouping variable for extra contrast. Only variables with 16 or fewer categories are available."
+        "Change the point shapes using a grouping variable for extra contrast. Variables with more than 10 categories are not allowed."
       ),
       with_help_tooltip(
         selectInput(
@@ -87,6 +86,17 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
         "Add text labels from a column to identify each sample."
       ),
       with_help_tooltip(
+        numericInput(
+          ns("pca_label_size"),
+          label = "Label size",
+          value = 2,
+          min = 0.5,
+          max = 6,
+          step = 0.5
+        ),
+        "Control how large the text labels assigned to points appear on the plot."
+      ),
+      with_help_tooltip(
         selectInput(
           ns("facet_var"),
           label = "Facet by variable",
@@ -96,17 +106,6 @@ visualize_pca_ui <- function(id, filtered_data = NULL) {
         "Split the plot into small multiples based on a grouping variable."
       ),
       uiOutput(ns("layout_controls")),
-      with_help_tooltip(
-        numericInput(
-          ns("pca_label_size"),
-          label = "Label size",
-          value = 2,
-          min = 0.5,
-          max = 6,
-          step = 0.5
-        ),
-        "Control how large the point labels appear on the plot."
-      ),
       with_help_tooltip(
         checkboxInput(
           ns("show_loadings"),
@@ -216,7 +215,6 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
     })
 
     available_choices_all <- reactive(.pca_aesthetic_choices(color_data()))
-    available_choices_limited <- reactive(.pca_aesthetic_choices(color_data(), max_levels = 16L))
 
     valid_column <- function(var) {
       if (is.null(var) || identical(var, "None") || !nzchar(var)) {
@@ -271,8 +269,7 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
 
     facet_grid_inputs <- plot_grid_server("facet_grid")
 
-    observeEvent(list(available_choices_all(), available_choices_limited()), {
-      limited <- available_choices_limited()
+    observeEvent(available_choices_all(), {
       all_choices <- available_choices_all()
 
       update_input <- function(id, current, choices) {
@@ -281,8 +278,8 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
         updateSelectInput(session, id, choices = choices, selected = selected)
       }
 
-      update_input("pca_color", input$pca_color, limited)
-      update_input("pca_shape", input$pca_shape, limited)
+      update_input("pca_color", input$pca_color, all_choices)
+      update_input("pca_shape", input$pca_shape, all_choices)
       update_input("pca_label", input$pca_label, all_choices)
       update_input("facet_var", input$facet_var, all_choices)
     }, ignoreNULL = FALSE)
@@ -389,14 +386,38 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
         return(empty_result("PCA data unavailable."))
       }
 
-      limited_pool <- unname(available_choices_limited())
       all_pool <- unname(available_choices_all())
-      color_var <- validate_choice(input$pca_color, limited_pool)
-      shape_var <- validate_choice(input$pca_shape, limited_pool)
+      color_var <- validate_choice(input$pca_color, all_pool)
+      shape_var <- validate_choice(input$pca_shape, all_pool)
       label_var <- validate_choice(input$pca_label, all_pool)
       label_size <- ifelse(is.null(input$pca_label_size) || is.na(input$pca_label_size), 2, input$pca_label_size)
       show_loadings <- isTRUE(input$show_loadings)
       loading_scale <- ifelse(is.null(input$loading_scale) || is.na(input$loading_scale), 1.2, input$loading_scale)
+
+      max_levels <- if (exists("MAX_STRATIFICATION_LEVELS")) MAX_STRATIFICATION_LEVELS else 10L
+
+      validate_levels <- function(var) {
+        if (is.null(var) || !var %in% names(data)) {
+          return(NULL)
+        }
+
+        column <- data[[var]]
+        values <- if (is.factor(column)) {
+          levels(base::droplevels(column))
+        } else {
+          unique(as.character(column[!is.na(column)]))
+        }
+
+        values <- values[!is.na(values) & nzchar(values)]
+        n_levels <- length(values)
+
+        validate(need(
+          n_levels <= max_levels,
+          sprintf("'%s' has too many levels (%d > %d).", var, n_levels, max_levels)
+        ))
+
+        values
+      }
 
       facet_info <- facet_selection()
       facet_var <- facet_info$var
@@ -414,24 +435,8 @@ visualize_pca_server <- function(id, filtered_data, model_fit) {
         list(`No data` = integer())
       }
 
-      color_levels <- NULL
-      if (!is.null(color_var) && color_var %in% names(data)) {
-        color_column <- data[[color_var]]
-        color_levels <- if (is.factor(color_column)) {
-          levels(base::droplevels(color_column))
-        } else {
-          unique(as.character(color_column[!is.na(color_column)]))
-        }
-        color_levels <- color_levels[!is.na(color_levels) & nzchar(color_levels)]
-        if (length(color_levels) > 16) {
-          message <- sprintf(
-            "Cannot colour points by '%s' because it has %d categories. Choose a variable with 16 or fewer categories.",
-            color_var,
-            length(color_levels)
-          )
-          return(empty_result(message))
-        }
-      }
+      color_levels <- validate_levels(color_var)
+      validate_levels(shape_var)
 
       scores <- as.data.frame(entry$model$x[, 1:2, drop = FALSE])
       names(scores)[1:2] <- c("PC1", "PC2")
