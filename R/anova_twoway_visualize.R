@@ -73,6 +73,7 @@ visualize_twoway_ui <- function(id) {
               default = 13,
               help_text = "Adjust the base font size used for the ANOVA plots."
             ),
+            br(),
             uiOutput(ns("common_legend_controls"))
           )
         )

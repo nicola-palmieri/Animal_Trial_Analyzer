@@ -31,6 +31,7 @@ visualize_categorical_barplots_ui <- function(id) {
           default = 13,
           help_text = "Adjust the base font size used for barplot text elements."
         ),
+        br(),
         uiOutput(ns("common_legend_controls"))
       ))
     ),

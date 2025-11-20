@@ -42,6 +42,7 @@ visualize_numeric_boxplots_ui <- function(id) {
           default = 13,
           help_text = "Adjust the base font size used for boxplot text."
         ),
+        br(),
         uiOutput(ns("common_legend_controls"))
       ))
     ),

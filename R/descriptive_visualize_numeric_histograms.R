@@ -30,6 +30,7 @@ visualize_numeric_histograms_ui <- function(id) {
           default = 13,
           help_text = "Adjust the base font size used for histogram labels."
         ),
+        br(),
         uiOutput(ns("common_legend_controls"))
       ))
     ),
